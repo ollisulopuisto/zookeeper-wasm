@@ -9,7 +9,7 @@ setup:
 
 assets:
 	@echo "Downloading assets using uv..."
-	uv run scripts/download_assets.py
+	cd scripts && uv run download_assets.py
 
 test:
 	@echo "Running Rust tests..."

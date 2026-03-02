@@ -5,6 +5,7 @@
 
 use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams, Sound};
 use macroquad::prelude::*;
+use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
 
 /// The standard grid width for the game board.
@@ -71,7 +72,7 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<u32> {
-        let mut scores = vec![];
+        let mut scores: Vec<u32> = vec![];
         for i in 0..MAX_HIGH_SCORES {
             if let Some(score) = storage::load::<u32>(&format!("score_{}", i)) {
                 scores.push(score);
