@@ -1,0 +1,38 @@
+VERSION=26.3.3.3
+
+.PHONY: setup assets test lint build serve
+
+setup:
+	@echo "Setting up Rust and Python (uv) environments..."
+	rustup target add wasm32-unknown-unknown
+	cd scripts && uv sync
+
+assets:
+	@echo "Downloading assets using uv..."
+	uv run scripts/download_assets.py
+
+test:
+	@echo "Running Rust tests..."
+	cargo test
+	@echo "Running Python tests using uv/pytest..."
+	cd scripts && uv run pytest
+
+lint:
+	@echo "Linting Python code using uv/ruff..."
+	cd scripts && uv run ruff check .
+	@echo "Linting Rust code..."
+	cargo clippy -- -D warnings
+
+build: assets
+	@echo "Building WASM for version $(VERSION)..."
+	cargo build --target wasm32-unknown-unknown --release
+	@mkdir -p docs
+	cp target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm docs/
+	cp index.html docs/
+	@if [ ! -f docs/mq_js_bundle.js ]; then 
+		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js docs/; 
+	fi
+
+serve: build
+	@echo "Serving locally at http://localhost:8000"
+	python3 -m http.server -d docs
