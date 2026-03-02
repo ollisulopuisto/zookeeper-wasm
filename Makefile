@@ -1,4 +1,4 @@
-VERSION=26.3.3.11
+VERSION=26.3.3.12
 
 .PHONY: setup assets test lint build serve
 
@@ -29,8 +29,8 @@ build: assets
 	@mkdir -p docs
 	cp target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm docs/
 	cp index.html docs/
-	@if [ ! -f docs/mq_js_bundle.js ]; then 
-		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js docs/; 
+	@if [ ! -f docs/mq_js_bundle.js ]; then \
+		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js docs/; \
 	fi
 
 serve: build
