@@ -239,7 +239,7 @@ async fn main() {
         let offset_x = (sw - board_size) / 2.0;
         let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
 
-        let settings = storage::get_mut::<Settings>();
+        let mut settings = storage::get_mut::<Settings>();
 
         if board.state != GameState::GameOver && board.state != GameState::WaitingToStart {
             board.time_left -= get_frame_time();
