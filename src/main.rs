@@ -1,7 +1,7 @@
 //! Zookeeper WASM: A 60 FPS Match-3 Clone in Rust
 //!
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
-//! It handles the 8x8 game board, animal matching logic, animations, and high scores.
+//! It handles the 8x8 game board, animal matching logic, animations, high scores, and persistent settings.
 
 use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
@@ -24,9 +24,16 @@ struct Leaderboard {
     scores: Vec<u32>,
 }
 
+/// Persistent user settings.
+struct Settings {
+    muted: bool,
+}
+
 /// Represents the current state of the game loop and any active animations.
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum GameState {
+    /// Waiting for initial tap to start (essential for iOS audio context).
+    WaitingToStart,
     /// The game is waiting for player input.
     Idle,
     /// Two tiles are in the process of being swapped.
@@ -65,7 +72,7 @@ impl Board {
     fn new() -> Self {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
-            state: GameState::Idle,
+            state: GameState::WaitingToStart,
             score: 0,
             time_left: 60.0,
             selected: None,
@@ -196,12 +203,9 @@ fn window_conf() -> Conf {
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
-    // Initialize high score storage if not already present
-    // Macroquad's experimental storage is type-indexed.
+    // Initialize high score and settings storage
     storage::store(Leaderboard { scores: vec![0; MAX_HIGH_SCORES] });
-    // Note: On WASM, storage::store at startup will overwrite, 
-    // but on platforms with file persistence it might behave differently.
-    // However, since we are targeting WASM for mobile browsers, this is fine.
+    storage::store(Settings { muted: false });
 
     let textures = [
         Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None),
@@ -235,19 +239,38 @@ async fn main() {
         let offset_x = (sw - board_size) / 2.0;
         let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
 
-        if board.state != GameState::GameOver {
+        let settings = storage::get_mut::<Settings>();
+
+        if board.state != GameState::GameOver && board.state != GameState::WaitingToStart {
             board.time_left -= get_frame_time();
             if board.time_left <= 0.0 {
                 board.state = GameState::GameOver;
                 board.update_leaderboard();
-                play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
+                if !settings.muted {
+                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
+                }
             }
         }
 
+        // Mute button logic & drawing
+        let mute_size = sh * 0.05;
+        let mute_x = sw - mute_size - 10.0;
+        let mute_y = 10.0;
+        let (mx, my) = mouse_position();
+        let over_mute = mx >= mute_x && mx <= mute_x + mute_size && my >= mute_y && my <= mute_y + mute_size;
+
+        if is_mouse_button_pressed(MouseButton::Left) && over_mute {
+            settings.muted = !settings.muted;
+        }
+
         match board.state {
+            GameState::WaitingToStart => {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
+                    board.state = GameState::Idle;
+                }
+            }
             GameState::Idle => {
-                if is_mouse_button_pressed(MouseButton::Left) {
-                    let (mx, my) = mouse_position();
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
                         let cx = ((mx - offset_x) / cell_size) as usize;
                         let cy = ((my - offset_y) / cell_size) as usize;
@@ -260,7 +283,9 @@ async fn main() {
                                 let revert = matches.is_empty();
                                 board.swap(cx, cy, sx, sy);
                                 board.state = GameState::Swapping { x1: sx, y1: sy, x2: cx, y2: cy, timer: 0.0, revert };
-                                play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
+                                if !settings.muted {
+                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
+                                }
                             }
                             board.selected = None;
                         } else {
@@ -283,7 +308,9 @@ async fn main() {
                         let mut match_arr = [(0, 0); COLS * ROWS];
                         for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
-                        play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                        if !settings.muted {
+                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                        }
                     }
                 } else {
                     board.state = GameState::Swapping { x1, y1, x2, y2, timer, revert };
@@ -303,14 +330,18 @@ async fn main() {
                 if timer >= ANIM_DURATION / 2.0 {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
-                        play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
+                        if !settings.muted {
+                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
+                        }
                     } else {
                         let matches = board.find_matches();
                         if !matches.is_empty() {
                             let mut match_arr = [(0, 0); COLS * ROWS];
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
-                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                            if !settings.muted {
+                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                            }
                         } else {
                             board.state = GameState::Idle;
                         }
@@ -320,8 +351,9 @@ async fn main() {
                 }
             }
             GameState::GameOver => {
-                if is_mouse_button_pressed(MouseButton::Left) {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
                     board = Board::new();
+                    board.state = GameState::Idle; // Skip waiting to start on restart
                 }
             }
         }
@@ -361,9 +393,7 @@ async fn main() {
                             }
                         }
                     }
-                    GameState::Falling { timer: _ } => {
-                        // We could add a bounce effect here if we tracked which tiles moved.
-                    }
+                    GameState::Falling { timer: _ } => {}
                     _ => {}
                 }
 
@@ -388,6 +418,19 @@ async fn main() {
         let font_size = sh * 0.05;
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
+
+        // Draw Mute Toggle
+        draw_rectangle(mute_x, mute_y, mute_size, mute_size, if over_mute { GRAY } else { Color::new(0.3, 0.3, 0.3, 1.0) });
+        let mute_text = if settings.muted { "🔇" } else { "🔊" };
+        let mw = measure_text(mute_text, None, (mute_size * 0.8) as _, 1.0).width;
+        draw_text(mute_text, mute_x + mute_size / 2.0 - mw / 2.0, mute_y + mute_size * 0.8, mute_size * 0.8, WHITE);
+
+        if board.state == GameState::WaitingToStart {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+            let start_text = "TAP TO START";
+            let tw = measure_text(start_text, None, font_size as _, 1.0).width;
+            draw_text(start_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size, WHITE);
+        }
 
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
