@@ -3,7 +3,7 @@
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
 //! It handles the 8x8 game board, animal matching logic, animations, and high scores.
 
-use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams, Sound};
+use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
@@ -18,6 +18,11 @@ const TILE_TYPES: u8 = 7;
 const ANIM_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
+
+/// Leaderboard data stored in global storage.
+struct Leaderboard {
+    scores: Vec<u32>,
+}
 
 /// Represents the current state of the game loop and any active animations.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -72,19 +77,18 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<u32> {
-        let mut scores: Vec<u32> = vec![];
-        for i in 0..MAX_HIGH_SCORES {
-            if let Some(score) = storage::load::<u32>(&format!("score_{}", i)) {
-                scores.push(score);
-            }
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.scores.clone()
+        } else {
+            let initial = vec![0; MAX_HIGH_SCORES];
+            storage::store(Leaderboard { scores: initial.clone() });
+            initial
         }
-        scores.sort_by(|a, b| b.cmp(a));
-        scores
     }
 
     fn save_high_scores(&self) {
-        for (i, score) in self.high_scores.iter().enumerate() {
-            storage::store(&format!("score_{}", i), score);
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.scores = self.high_scores.clone();
         }
     }
 
@@ -356,7 +360,7 @@ async fn main() {
                             }
                         }
                     }
-                    GameState::Falling { timer } => {
+                    GameState::Falling { timer: _ } => {
                         // We could add a bounce effect here if we tracked which tiles moved.
                     }
                     _ => {}
