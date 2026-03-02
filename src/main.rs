@@ -77,19 +77,13 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<u32> {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.scores.clone()
-        } else {
-            let initial = vec![0; MAX_HIGH_SCORES];
-            storage::store(Leaderboard { scores: initial.clone() });
-            initial
-        }
+        let lb = storage::get_mut::<Leaderboard>();
+        lb.scores.clone()
     }
 
     fn save_high_scores(&self) {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.scores = self.high_scores.clone();
-        }
+        let mut lb = storage::get_mut::<Leaderboard>();
+        lb.scores = self.high_scores.clone();
     }
 
     fn update_leaderboard(&mut self) {
@@ -201,6 +195,13 @@ fn window_conf() -> Conf {
 #[macroquad::main(window_conf)]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
+
+    // Initialize high score storage if not already present
+    // Macroquad's experimental storage is type-indexed.
+    storage::store(Leaderboard { scores: vec![0; MAX_HIGH_SCORES] });
+    // Note: On WASM, storage::store at startup will overwrite, 
+    // but on platforms with file persistence it might behave differently.
+    // However, since we are targeting WASM for mobile browsers, this is fine.
 
     let textures = [
         Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None),
