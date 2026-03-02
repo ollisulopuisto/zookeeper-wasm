@@ -217,9 +217,14 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None),
     ];
 
+    let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../assets/1f507.png"), None);
+    let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../assets/1f50a.png"), None);
+
     for t in &textures {
         t.set_filter(FilterMode::Linear);
     }
+    tex_mute_on.set_filter(FilterMode::Linear);
+    tex_mute_off.set_filter(FilterMode::Linear);
 
     // Load sounds from embedded bytes
     let snd_swap = load_sound_from_bytes(include_bytes!("../assets/swap.wav")).await.unwrap();
@@ -419,11 +424,28 @@ async fn main() {
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
 
-        // Draw Mute Toggle
-        draw_rectangle(mute_x, mute_y, mute_size, mute_size, if over_mute { GRAY } else { Color::new(0.3, 0.3, 0.3, 1.0) });
-        let mute_text = if settings.muted { "🔇" } else { "🔊" };
-        let mw = measure_text(mute_text, None, (mute_size * 0.8) as _, 1.0).width;
-        draw_text(mute_text, mute_x + mute_size / 2.0 - mw / 2.0, mute_y + mute_size * 0.8, mute_size * 0.8, WHITE);
+        // Draw Mute Toggle (using textures for Safari compatibility)
+        let pad = 10.0;
+        let mute_size = sh * 0.06; // Slightly larger for touch
+        let mute_x = sw - mute_size - pad;
+        let mute_y = pad;
+        let (mx, my) = mouse_position();
+        let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + mute_size + pad;
+
+        if is_mouse_button_pressed(MouseButton::Left) && over_mute {
+            settings.muted = !settings.muted;
+        }
+
+        draw_texture_ex(
+            if settings.muted { &tex_mute_on } else { &tex_mute_off },
+            mute_x,
+            mute_y,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(mute_size, mute_size)),
+                ..Default::default()
+            },
+        );
 
         if board.state == GameState::WaitingToStart {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
