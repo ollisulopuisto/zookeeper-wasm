@@ -6,7 +6,7 @@ const ROWS: usize = 8;
 const TILE_TYPES: u8 = 7;
 const ANIM_DURATION: f32 = 0.2;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum GameState {
     Idle,
     Swapping { x1: usize, y1: usize, x2: usize, y2: usize, timer: f32, revert: bool },
@@ -55,18 +55,18 @@ impl Board {
 
         // Horizontal
         let mut h_count = 1;
-        let mut cx = x;
-        while cx > 0 && self.grid[y][cx - 1] == tile { h_count += 1; cx -= 1; }
-        cx = x;
-        while cx < COLS - 1 && self.grid[y][cx + 1] == tile { h_count += 1; cx += 1; }
+        let mut cx = x as i32 - 1;
+        while cx >= 0 && self.grid[y][cx as usize] == tile { h_count += 1; cx -= 1; }
+        cx = x as i32 + 1;
+        while cx < COLS as i32 && self.grid[y][cx as usize] == tile { h_count += 1; cx += 1; }
         if h_count >= 3 { return true; }
 
         // Vertical
         let mut v_count = 1;
-        let mut cy = y;
-        while cy > 0 && self.grid[cy - 1][x] == tile { v_count += 1; cy -= 1; }
-        cy = y;
-        while cy < ROWS - 1 && self.grid[cy + 1][x] == tile { v_count += 1; cy += 1; }
+        let mut cy = y as i32 - 1;
+        while cy >= 0 && self.grid[cy as usize][x] == tile { v_count += 1; cy -= 1; }
+        cy = y as i32 + 1;
+        while cy < ROWS as i32 && self.grid[cy as usize][x] == tile { v_count += 1; cy += 1; }
         if v_count >= 3 { return true; }
 
         false
@@ -143,7 +143,6 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None),
     ];
     
-    // Set nearest neighbor for pixel art / crisp look if needed, but we can leave default
     for t in &textures {
         t.set_filter(FilterMode::Linear);
     }
@@ -181,7 +180,8 @@ async fn main() {
                             let dy = (cy as i32 - sy as i32).abs();
                             if dx + dy == 1 {
                                 board.swap(sx, sy, cx, cy);
-                                let revert = board.find_matches().is_empty();
+                                let matches = board.find_matches();
+                                let revert = matches.is_empty();
                                 board.swap(cx, cy, sx, sy); // Swap back for animation
                                 board.state = GameState::Swapping { x1: sx, y1: sy, x2: cx, y2: cy, timer: 0.0, revert };
                             }
@@ -230,10 +230,8 @@ async fn main() {
             }
         }
 
-        // Draw board background
         draw_rectangle(offset_x, offset_y, board_size, board_size, Color::new(0.2, 0.2, 0.2, 1.0));
 
-        // Draw selection highlight
         if let Some((sx, sy)) = board.selected {
             draw_rectangle(
                 offset_x + sx as f32 * cell_size,
@@ -244,7 +242,6 @@ async fn main() {
             );
         }
 
-        // Draw tiles
         for y in 0..ROWS {
             for x in 0..COLS {
                 let mut draw_x = offset_x + x as f32 * cell_size;
@@ -252,10 +249,8 @@ async fn main() {
                 
                 let tile = board.grid[y][x];
 
-                // Handle Swapping Animation
                 if let GameState::Swapping { x1, y1, x2, y2, timer, revert } = board.state {
                     let progress = timer / ANIM_DURATION;
-                    // If revert is true, we go to swap target then back
                     let t = if revert { (progress * std::f32::consts::PI).sin() } else { progress };
                     
                     if x == x1 && y == y1 {
@@ -265,18 +260,6 @@ async fn main() {
                         draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
                         draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
                     }
-                }
-                
-                // Handle Falling Animation (simple visual slide)
-                if let GameState::Falling { timer } = board.state {
-                    let progress = timer / (ANIM_DURATION / 2.0);
-                    // For tiles that just fell, animate them sliding down visually if they are not at the top?
-                    // Actual gravity logic in apply_gravity changes the logical board.
-                    // To do it correctly visually, we just let them appear as they drop, maybe slight y offset.
-                    // The simplest is to render with a small slide, but since the logic shifts immediately,
-                    // we can just offset all tiles that have empty space below them?
-                    // For a basic clone, popping into place is often okay, but let's slide down slightly.
-                    // This is complex to do perfectly without tracking individual tile drop history, so we skip complex fall anims for a pure 60FPS fast feel.
                 }
 
                 if let Some(t_idx) = tile {
@@ -294,7 +277,6 @@ async fn main() {
             }
         }
 
-        // UI
         let font_size = sh * 0.05;
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
@@ -309,5 +291,54 @@ async fn main() {
         }
 
         next_frame().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_board_initialization() {
+        let board = Board::new();
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                assert!(board.grid[y][x].is_some(), "Every cell should be filled");
+            }
+        }
+    }
+
+    #[test]
+    fn test_initial_board_has_no_matches() {
+        let board = Board::new();
+        assert!(board.find_matches().is_empty(), "Initial board should not have matches");
+    }
+
+    #[test]
+    fn test_match_detection_horizontal() {
+        let mut board = Board {
+            grid: [[Some(10); COLS]; ROWS],
+            state: GameState::Idle,
+            score: 0,
+            time_left: 60.0,
+            selected: None,
+        };
+        // Set unique types
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                board.grid[y][x] = Some(((y * COLS + x) % 10 + 10) as u8);
+            }
+        }
+        
+        // Create horizontal match
+        board.grid[0][0] = Some(1);
+        board.grid[0][1] = Some(1);
+        board.grid[0][2] = Some(1);
+        
+        let matches = board.find_matches();
+        assert!(!matches.is_empty(), "Matches should be found");
+        assert!(matches.contains(&(0, 0)));
+        assert!(matches.contains(&(1, 0)));
+        assert!(matches.contains(&(2, 0)));
     }
 }
