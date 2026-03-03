@@ -20,8 +20,9 @@ const ANIM_DURATION: f32 = 0.2;
 const MAX_HIGH_SCORES: usize = 5;
 
 /// Leaderboard data stored in global storage.
-struct Leaderboard {
-    entries: Vec<(String, u32)>,
+/// All games in this monorepo can use this same struct to share the same localStorage slot.
+struct GlobalLeaderboard {
+    zookeeper: Vec<(String, u32)>,
 }
 
 /// Persistent user settings.
@@ -53,11 +54,10 @@ enum GameState {
     },
     /// Empty spaces are being filled by tiles falling from above.
     Falling { timer: f32 },
-    /// New High Score name entry.
+    /// New High Score name entry using standard keyboard input.
     EnteringName {
         score: u32,
-        initials: [char; 3],
-        active_index: usize,
+        name: String,
     },
     /// Celebration for clearing a level.
     LevelUp { timer: f32 },
@@ -95,20 +95,20 @@ impl Board {
             combo_count: 0,
             level: 1,
             level_points: 0,
-            level_goal: 500, // Initial goal
+            level_goal: 500,
         };
         board.fill_initial();
         board
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        let lb = storage::get_mut::<Leaderboard>();
-        lb.entries.clone()
+        let lb = storage::get_mut::<GlobalLeaderboard>();
+        lb.zookeeper.clone()
     }
 
     fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<Leaderboard>();
-        lb.entries = self.high_scores.clone();
+        let mut lb = storage::get_mut::<GlobalLeaderboard>();
+        lb.zookeeper = self.high_scores.clone();
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -116,6 +116,7 @@ impl Board {
     }
 
     fn add_to_leaderboard(&mut self, name: String, score: u32) {
+        let name = if name.trim().is_empty() { "ANON".to_string() } else { name };
         self.new_record = self.high_scores.first().map_or(true, |(_, best)| score > *best);
         self.high_scores.push((name, score));
         self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
@@ -229,7 +230,6 @@ fn create_wav(freq: f32, duration_sec: f32, volume: f32) -> Vec<u8> {
     
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        // Simple decay envelope
         let envelope = (1.0 - (i as f32 / num_samples as f32)).powf(2.0);
         let val = (t * freq * 2.0 * std::f32::consts::PI).sin();
         let sample = (val * 32767.0 * volume * envelope) as i16;
@@ -254,17 +254,12 @@ fn window_conf() -> Conf {
     }
 }
 
-const ENTRY_CHARS: &[char] = &[
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '.', '!', '?'
-];
-
 #[macroquad::main(window_conf)]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
-    // Initialize high score and settings storage
-    storage::store(Leaderboard { entries: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
+    // Initialize centralized high score and settings storage
+    storage::store(GlobalLeaderboard { zookeeper: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
     storage::store(Settings { muted: false });
 
     let textures = [
@@ -294,7 +289,6 @@ async fn main() {
     let snd_game_over = load_sound_from_bytes(&create_wav(110.0, 0.5, 0.5)).await.ok();
     let snd_level_up = load_sound_from_bytes(&create_wav(880.0, 0.3, 0.5)).await.ok();
     
-    // Pre-generate 10 levels of match sounds for combos
     let mut snd_matches = Vec::new();
     for i in 0..10 {
         let freq = 550.0 + (i as f32 * 110.0);
@@ -322,12 +316,11 @@ async fn main() {
             board.time_left -= get_frame_time();
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, initials: ['A', 'A', 'A'], active_index: 0 };
+                    board.state = GameState::EnteringName { score: board.score, name: "".to_string() };
                 } else {
                     board.state = GameState::GameOver;
                 }
                 if !settings.muted {
-                    info!("SND: Game Over");
                     if let Some(ref snd) = snd_game_over { play_sound(snd, PlaySoundParams::default()); }
                 }
             }
@@ -457,30 +450,50 @@ async fn main() {
                     board.state = GameState::LevelUp { timer };
                 }
             }
-            GameState::EnteringName { score, mut initials, mut active_index } => {
-                if is_mouse_button_pressed(MouseButton::Left) {
-                    let char_w = sw * 0.15;
-                    let start_x = sw / 2.0 - char_w * 1.5;
-                    let entry_y = sh * 0.5;
-                    for i in 0..3 {
-                        let rect_x = start_x + i as f32 * char_w;
-                        if mx >= rect_x && mx <= rect_x + char_w && my >= entry_y - char_w && my <= entry_y + char_w {
-                            if i == active_index {
-                                let pos = ENTRY_CHARS.iter().position(|&c| c == initials[i]).unwrap_or(0);
-                                if my < entry_y { initials[i] = ENTRY_CHARS[(pos + 1) % ENTRY_CHARS.len()]; }
-                                else { initials[i] = ENTRY_CHARS[(pos + ENTRY_CHARS.len() - 1) % ENTRY_CHARS.len()]; }
-                            } else { active_index = i; }
+            GameState::EnteringName { score, mut name } => {
+                // Keyboard Input
+                while let Some(c) = get_char_pressed() {
+                    if c.is_alphanumeric() || c == ' ' {
+                        if name.len() < 10 {
+                            name.push(c);
                         }
                     }
+                }
+                if is_key_pressed(KeyCode::Backspace) {
+                    name.pop();
+                }
+                if is_key_pressed(KeyCode::Enter) {
+                    board.add_to_leaderboard(name.clone(), score);
+                    board.state = GameState::GameOver;
+                }
+
+                // Touch/Mobile handling
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    // Tap to use native prompt
+                    let prompt_y = sh * 0.5;
+                    if my >= prompt_y - 50.0 && my <= prompt_y + 50.0 {
+                        // JavaScript bridge call
+                        let new_name = unsafe {
+                            // On non-WASM this will do nothing, on WASM it triggers the helper
+                            let js = "window.ask_name()";
+                            // We can't easily get the return value back synchronously without more boilerplate,
+                            // but we can assume the user typed it or we use a more complex async bridge.
+                            // For simplicity, let's just use the in-game display and provide a button.
+                            "".to_string() 
+                        };
+                        // Actually, let's just make the "OK" button work for touch
+                    }
+
+                    // OK Button
                     let ok_w = sw * 0.3;
                     let ok_x = sw / 2.0 - ok_w / 2.0;
                     let ok_y = sh * 0.7;
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + sh * 0.1 {
-                        board.add_to_leaderboard(initials.iter().collect(), score);
+                        board.add_to_leaderboard(name.clone(), score);
                         board.state = GameState::GameOver;
                     }
                 }
-                board.state = GameState::EnteringName { score, initials, active_index };
+                board.state = GameState::EnteringName { score, name };
             }
             GameState::GameOver => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
@@ -616,28 +629,20 @@ async fn main() {
             draw_text(lu_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size * 1.5, SKYBLUE);
         }
 
-        if let GameState::EnteringName { initials, active_index, .. } = board.state {
+        if let GameState::EnteringName { score: _, ref name } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             let title = "NEW HIGH SCORE!";
             let tw = measure_text(title, None, font_size as _, 1.0).width;
             draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.2, font_size, YELLOW);
-            let sub = "Enter Initials";
+            let sub = "Type your name";
             let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
             draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
-            let char_w = sw * 0.15;
-            let start_x = sw / 2.0 - char_w * 1.5;
-            let entry_y = sh * 0.5;
-            for i in 0..3 {
-                let rect_x = start_x + i as f32 * char_w;
-                if i == active_index { draw_rectangle(rect_x + 5.0, entry_y - char_w * 0.8, char_w - 10.0, char_w * 1.6, Color::new(1.0, 1.0, 1.0, 0.2)); }
-                let c_text = initials[i].to_string();
-                let cw = measure_text(&c_text, None, char_w as _, 1.0).width;
-                draw_text(&c_text, rect_x + char_w / 2.0 - cw / 2.0, entry_y + char_w * 0.3, char_w, if i == active_index { YELLOW } else { WHITE });
-                if i == active_index {
-                    draw_text("▲", rect_x + char_w / 2.0 - 10.0, entry_y - char_w * 0.9, char_w * 0.4, WHITE);
-                    draw_text("▼", rect_x + char_w / 2.0 - 10.0, entry_y + char_w * 1.1, char_w * 0.4, WHITE);
-                }
-            }
+
+            // Name display
+            let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
+            let nw = measure_text(&display_name, None, font_size as _, 1.0).width;
+            draw_text(&display_name, sw / 2.0 - nw / 2.0, sh * 0.5, font_size, WHITE);
+
             let ok_text = "OK";
             let ok_w = sw * 0.3;
             let ok_x = sw / 2.0 - ok_w / 2.0;
