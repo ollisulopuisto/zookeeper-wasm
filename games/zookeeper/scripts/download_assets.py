@@ -11,30 +11,33 @@ EMOJIS = {
     "frog": "1f438"
 }
 
-# Public domain sounds from Wikimedia Commons or similar open sources
+# Reliable open-source sounds
 SOUNDS = {
-    "swap": "https://upload.wikimedia.org/wikipedia/commons/0/05/Beep-07.wav",
-    "match": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Beep-09.wav",
-    "fall": "https://upload.wikimedia.org/wikipedia/commons/2/21/Beep-02.wav",
-    "game_over": "https://upload.wikimedia.org/wikipedia/commons/e/e5/Beep-04.wav"
+    "swap": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
+    "match": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
+    "fall": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
+    "game_over": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav"
 }
 
 def download_assets():
     os.makedirs("../assets", exist_ok=True)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     for name, code in EMOJIS.items():
         url = f"https://abs.twimg.com/emoji/v2/72x72/{code}.png"
         path = f"../assets/{code}.png"
-        if not os.path.exists(path):
+        if not os.path.exists(path) or os.path.getsize(path) < 500:
             print(f"Downloading emoji: {name}...")
-            r = requests.get(url)
+            r = requests.get(url, headers=headers)
             with open(path, "wb") as f:
                 f.write(r.content)
     
     for name, url in SOUNDS.items():
         path = f"../assets/{name}.wav"
-        if not os.path.exists(path):
+        if not os.path.exists(path) or os.path.getsize(path) < 5000:
             print(f"Downloading sound: {name}...")
-            r = requests.get(url)
+            r = requests.get(url, headers=headers)
             with open(path, "wb") as f:
                 f.write(r.content)
 

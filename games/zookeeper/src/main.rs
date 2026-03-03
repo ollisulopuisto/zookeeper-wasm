@@ -248,11 +248,11 @@ async fn main() {
     tex_pause.set_filter(FilterMode::Linear);
     tex_play.set_filter(FilterMode::Linear);
 
-    // Load sounds from embedded bytes
-    let snd_swap = load_sound_from_bytes(include_bytes!("../assets/swap.wav")).await.unwrap();
-    let snd_match = load_sound_from_bytes(include_bytes!("../assets/match.wav")).await.unwrap();
-    let snd_fall = load_sound_from_bytes(include_bytes!("../assets/fall.wav")).await.unwrap();
-    let snd_game_over = load_sound_from_bytes(include_bytes!("../assets/game_over.wav")).await.unwrap();
+    // Load sounds from embedded bytes with safety
+    let snd_swap = load_sound_from_bytes(include_bytes!("../assets/swap.wav")).await.ok();
+    let snd_match = load_sound_from_bytes(include_bytes!("../assets/match.wav")).await.ok();
+    let snd_fall = load_sound_from_bytes(include_bytes!("../assets/fall.wav")).await.ok();
+    let snd_game_over = load_sound_from_bytes(include_bytes!("../assets/game_over.wav")).await.ok();
 
     let mut board = Board::new();
 
@@ -285,8 +285,11 @@ async fn main() {
                 }
                 if !settings.muted {
                     info!("SND: Game Over");
-                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
+                    if let Some(ref snd) = snd_game_over {
+                        play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
+                    }
                 }
+
             }
         }
 
@@ -327,7 +330,9 @@ async fn main() {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if !settings.muted {
                         info!("SND: iOS Audio Context Unlock");
-                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01 });
+                        if let Some(ref snd) = snd_swap {
+                            play_sound(snd, PlaySoundParams { looped: false, volume: 0.01 });
+                        }
                     }
                     board.state = GameState::Idle;
                 }
@@ -352,7 +357,9 @@ async fn main() {
                                 }
                                 if !settings.muted {
                                     info!("SND: Swap");
-                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
+                                    if let Some(ref snd) = snd_swap {
+                                        play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
+                                    }
                                 }
                             }
                             board.selected = None;
@@ -378,7 +385,9 @@ async fn main() {
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                         if !settings.muted {
                             info!("SND: Match (Combo {})", board.combo_count);
-                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                            if let Some(ref snd) = snd_match {
+                                play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
+                            }
                         }
                     }
                 } else {
@@ -401,7 +410,9 @@ async fn main() {
                         board.state = GameState::Falling { timer: 0.0 };
                         if !settings.muted {
                             info!("SND: Fall");
-                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
+                            if let Some(ref snd) = snd_fall {
+                                play_sound(snd, PlaySoundParams { looped: false, volume: 0.3 });
+                            }
                         }
                     } else {
                         let matches = board.find_matches();
@@ -412,7 +423,9 @@ async fn main() {
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                             if !settings.muted {
                                 info!("SND: Match Cascade (Combo {})", board.combo_count);
-                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                                if let Some(ref snd) = snd_match {
+                                    play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
+                                }
                             }
                         } else {
                             board.state = GameState::Idle;
