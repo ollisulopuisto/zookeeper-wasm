@@ -1,7 +1,7 @@
 //! Zookeeper WASM: A 60 FPS Match-3 Clone in Rust
 //!
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
-//! It handles the 8x8 game board, animal matching logic, animations, high scores, and persistent settings.
+//! It handles the 8x8 game board, animal matching logic, animations, high scores, persistent settings, and combo systems.
 
 use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
@@ -68,6 +68,7 @@ struct Board {
     selected: Option<(usize, usize)>,
     high_scores: Vec<u32>,
     new_record: bool,
+    combo_count: u32,
 }
 
 impl Board {
@@ -80,6 +81,7 @@ impl Board {
             selected: None,
             high_scores: Self::load_high_scores(),
             new_record: false,
+            combo_count: 0,
         };
         board.fill_initial();
         board
@@ -154,7 +156,8 @@ impl Board {
 
     fn clear_matches(&mut self) {
         let matches = self.find_matches();
-        self.score += matches.len() as u32 * 10;
+        // Award points with combo multiplier
+        self.score += matches.len() as u32 * 10 * self.combo_count;
         self.time_left = (self.time_left + matches.len() as f32 * 0.5).min(60.0);
         for &(x, y) in &matches {
             self.grid[y][x] = None;
@@ -261,7 +264,7 @@ async fn main() {
                 board.state = GameState::GameOver;
                 board.update_leaderboard();
                 if !settings.muted {
-                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
+                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0, pitch: 1.0 });
                 }
             }
         }
@@ -301,14 +304,14 @@ async fn main() {
         match board.state.clone() {
             GameState::WaitingToStart => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
-                    // Robust iOS audio context unlock: play a short burst of silence/sound
                     if !settings.muted {
-                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01 });
+                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01, pitch: 1.0 });
                     }
                     board.state = GameState::Idle;
                 }
             }
             GameState::Idle => {
+                board.combo_count = 0;
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
                         let cx = ((mx - offset_x) / cell_size) as usize;
@@ -322,8 +325,11 @@ async fn main() {
                                 let revert = matches.is_empty();
                                 board.swap(cx, cy, sx, sy);
                                 board.state = GameState::Swapping { x1: sx, y1: sy, x2: cx, y2: cy, timer: 0.0, revert };
+                                if !revert {
+                                    board.combo_count = 1;
+                                }
                                 if !settings.muted {
-                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
+                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0, pitch: 1.0 });
                                 }
                             }
                             board.selected = None;
@@ -348,7 +354,8 @@ async fn main() {
                         for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                         if !settings.muted {
-                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                            let pitch = 1.0 + (board.combo_count as f32 - 1.0) * 0.15;
+                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0, pitch: pitch.min(2.5) });
                         }
                     }
                 } else {
@@ -370,16 +377,18 @@ async fn main() {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
                         if !settings.muted {
-                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
+                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3, pitch: 1.0 });
                         }
                     } else {
                         let matches = board.find_matches();
                         if !matches.is_empty() {
+                            board.combo_count += 1;
                             let mut match_arr = [(0, 0); COLS * ROWS];
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                             if !settings.muted {
-                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
+                                let pitch = 1.0 + (board.combo_count as f32 - 1.0) * 0.15;
+                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0, pitch: pitch.min(2.5) });
                             }
                         } else {
                             board.state = GameState::Idle;
@@ -405,16 +414,24 @@ async fn main() {
         }
 
         // --- Rendering ---
-        draw_rectangle(offset_x, offset_y, board_size, board_size, Color::new(0.2, 0.2, 0.2, 1.0));
+        let mut shake_x = 0.0;
+        let mut shake_y = 0.0;
+        if board.combo_count > 1 && matches!(board.state, GameState::Clearing { .. }) {
+            let intensity = (board.combo_count as f32 - 1.0) * 2.0;
+            shake_x = qrand::gen_range(-intensity, intensity);
+            shake_y = qrand::gen_range(-intensity, intensity);
+        }
+
+        draw_rectangle(offset_x + shake_x, offset_y + shake_y, board_size, board_size, Color::new(0.2, 0.2, 0.2, 1.0));
 
         if let Some((sx, sy)) = board.selected {
-            draw_rectangle(offset_x + sx as f32 * cell_size, offset_y + sy as f32 * cell_size, cell_size, cell_size, Color::new(1.0, 1.0, 1.0, 0.3));
+            draw_rectangle(offset_x + sx as f32 * cell_size + shake_x, offset_y + sy as f32 * cell_size + shake_y, cell_size, cell_size, Color::new(1.0, 1.0, 1.0, 0.3));
         }
 
         for y in 0..ROWS {
             for x in 0..COLS {
-                let mut draw_x = offset_x + x as f32 * cell_size;
-                let mut draw_y = offset_y + y as f32 * cell_size;
+                let mut draw_x = offset_x + x as f32 * cell_size + shake_x;
+                let mut draw_y = offset_y + y as f32 * cell_size + shake_y;
                 let mut scale = 1.0;
                 let mut alpha = 1.0;
 
@@ -434,8 +451,13 @@ async fn main() {
                         for i in 0..match_count {
                             if matches[i].0 == x && matches[i].1 == y {
                                 let t = timer / ANIM_DURATION;
-                                scale = 1.0 + (t * 0.5);
+                                scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
                                 alpha = 1.0 - t;
+                                // Add "frantic" vibration to clearing tiles
+                                if board.combo_count > 1 {
+                                    draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                    draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                }
                             }
                         }
                     }
@@ -463,6 +485,13 @@ async fn main() {
         let font_size = sh * 0.05;
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
+
+        // Draw Combo Text
+        if board.combo_count > 1 {
+            let combo_text = format!("COMBO X{}", board.combo_count);
+            let tw = measure_text(&combo_text, None, (font_size * 1.2) as _, 1.0).width;
+            draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
+        }
 
         // Draw Mute Toggle
         draw_texture_ex(

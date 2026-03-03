@@ -1,38 +1,41 @@
-VERSION=26.3.3.18
+GAMES := $(patsubst games/%/,%,$(dir $(wildcard games/*/Makefile)))
 
-.PHONY: setup assets test lint build serve
+.PHONY: all setup build test lint $(GAMES)
+
+all: build
 
 setup:
-	@echo "Setting up Rust and Python (uv) environments..."
-	rustup target add wasm32-unknown-unknown
-	cd scripts && uv sync
+	@for game in $(GAMES); do \
+		echo "Setting up $$game..."; \
+		$(MAKE) -C games/$$game setup; \
+	done
 
-assets:
-	@echo "Downloading assets using uv..."
-	cd scripts && uv run download_assets.py
+build:
+	@mkdir -p docs
+	cp index.html docs/
+	@for game in $(GAMES); do \
+		echo "Building $$game..."; \
+		$(MAKE) -C games/$$game build; \
+		mkdir -p docs/$$game; \
+		cp -r games/$$game/dist/* docs/$$game/; \
+	done
 
 test:
-	@echo "Running Rust tests..."
-	cargo test
-	@echo "Running Python tests using uv/pytest..."
-	cd scripts && uv run pytest
+	cargo test --workspace
+	@for game in $(GAMES); do \
+		if [ -f games/$$game/Makefile ]; then \
+			$(MAKE) -C games/$$game test; \
+		fi; \
+	done
 
 lint:
-	@echo "Linting Python code using uv/ruff..."
-	cd scripts && uv run ruff check .
-	@echo "Linting Rust code..."
-	cargo clippy -- -D warnings
+	@for game in $(GAMES); do \
+		$(MAKE) -C games/$$game lint; \
+	done
 
-build: assets
-	@echo "Building WASM for version $(VERSION)..."
-	cargo build --target wasm32-unknown-unknown --release
-	@mkdir -p docs
-	cp target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm docs/
-	cp index.html docs/
-	@if [ ! -f docs/mq_js_bundle.js ]; then \
-		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js docs/; \
-	fi
-
-serve: build
-	@echo "Serving locally at http://localhost:8000"
-	python3 -m http.server -d docs
+clean:
+	cargo clean
+	@for game in $(GAMES); do \
+		rm -rf games/$$game/dist; \
+	done
+	rm -rf docs

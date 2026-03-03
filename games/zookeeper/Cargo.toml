@@ -1,0 +1,8 @@
+[package]
+name = "zookeeper_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+macroquad = "0.4"
+quad-rand = "0.2"
