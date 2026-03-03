@@ -21,7 +21,7 @@ const MAX_HIGH_SCORES: usize = 5;
 
 /// Leaderboard data stored in global storage.
 struct Leaderboard {
-    scores: Vec<u32>,
+    entries: Vec<(String, u32)>,
 }
 
 /// Persistent user settings.
@@ -53,6 +53,12 @@ enum GameState {
     },
     /// Empty spaces are being filled by tiles falling from above.
     Falling { timer: f32 },
+    /// New High Score name entry.
+    EnteringName {
+        score: u32,
+        initials: [char; 3],
+        active_index: usize,
+    },
     /// The timer has reached zero.
     GameOver,
     /// The game is manually paused.
@@ -66,7 +72,7 @@ struct Board {
     score: u32,
     time_left: f32,
     selected: Option<(usize, usize)>,
-    high_scores: Vec<u32>,
+    high_scores: Vec<(String, u32)>,
     new_record: bool,
     combo_count: u32,
 }
@@ -87,24 +93,32 @@ impl Board {
         board
     }
 
-    fn load_high_scores() -> Vec<u32> {
-        let lb = storage::get_mut::<Leaderboard>();
-        lb.scores.clone()
+    fn load_high_scores() -> Vec<(String, u32)> {
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries.clone()
+        } else {
+            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
+            storage::store(Leaderboard { entries: initial.clone() });
+            initial
+        }
     }
 
     fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<Leaderboard>();
-        lb.scores = self.high_scores.clone();
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries = self.high_scores.clone();
+        }
     }
 
-    fn update_leaderboard(&mut self) {
-        if self.high_scores.iter().any(|&s| self.score > s) || self.high_scores.len() < MAX_HIGH_SCORES {
-            self.new_record = self.high_scores.first().map_or(true, |&best| self.score > best);
-            self.high_scores.push(self.score);
-            self.high_scores.sort_by(|a, b| b.cmp(a));
-            self.high_scores.truncate(MAX_HIGH_SCORES);
-            self.save_high_scores();
-        }
+    fn qualifies_for_leaderboard(&self) -> bool {
+        self.high_scores.iter().any(|(_, s)| self.score > *s) || self.high_scores.len() < MAX_HIGH_SCORES
+    }
+
+    fn add_to_leaderboard(&mut self, name: String, score: u32) {
+        self.new_record = self.high_scores.first().map_or(true, |(_, best)| score > *best);
+        self.high_scores.push((name, score));
+        self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
+        self.high_scores.truncate(MAX_HIGH_SCORES);
+        self.save_high_scores();
     }
 
     fn fill_initial(&mut self) {
@@ -204,12 +218,17 @@ fn window_conf() -> Conf {
     }
 }
 
+const ENTRY_CHARS: &[char] = &[
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '.', '!', '?'
+];
+
 #[macroquad::main(window_conf)]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
     // Initialize high score and settings storage
-    storage::store(Leaderboard { scores: vec![0; MAX_HIGH_SCORES] });
+    storage::store(Leaderboard { entries: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
     storage::store(Settings { muted: false });
 
     let textures = [
@@ -256,13 +275,20 @@ async fn main() {
         let mut settings = storage::get_mut::<Settings>();
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. });
         
         if is_playing {
             board.time_left -= get_frame_time();
             if board.time_left <= 0.0 {
-                board.state = GameState::GameOver;
-                board.update_leaderboard();
+                if board.qualifies_for_leaderboard() {
+                    board.state = GameState::EnteringName {
+                        score: board.score,
+                        initials: ['A', 'A', 'A'],
+                        active_index: 0,
+                    };
+                } else {
+                    board.state = GameState::GameOver;
+                }
                 if !settings.muted {
                     info!("SND: Game Over");
                     play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
@@ -293,7 +319,7 @@ async fn main() {
                     GameState::Paused { previous_state } => {
                         board.state = *previous_state;
                     }
-                    GameState::GameOver | GameState::WaitingToStart => {}
+                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } => {}
                     other => {
                         board.state = GameState::Paused { previous_state: Box::new(other) };
                     }
@@ -402,6 +428,42 @@ async fn main() {
                     board.state = GameState::Falling { timer };
                 }
             }
+            GameState::EnteringName { score, mut initials, mut active_index } => {
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    let char_w = sw * 0.15;
+                    let start_x = sw / 2.0 - char_w * 1.5;
+                    let entry_y = sh * 0.5;
+
+                    for i in 0..3 {
+                        let rect_x = start_x + i as f32 * char_w;
+                        if mx >= rect_x && mx <= rect_x + char_w && my >= entry_y - char_w && my <= entry_y + char_w {
+                            if i == active_index {
+                                // Cycle character
+                                let current_char = initials[i];
+                                let pos = ENTRY_CHARS.iter().position(|&c| c == current_char).unwrap_or(0);
+                                if my < entry_y {
+                                    initials[i] = ENTRY_CHARS[(pos + 1) % ENTRY_CHARS.len()];
+                                } else {
+                                    initials[i] = ENTRY_CHARS[(pos + ENTRY_CHARS.len() - 1) % ENTRY_CHARS.len()];
+                                }
+                            } else {
+                                active_index = i;
+                            }
+                        }
+                    }
+
+                    // OK Button
+                    let ok_w = sw * 0.3;
+                    let ok_x = sw / 2.0 - ok_w / 2.0;
+                    let ok_y = sh * 0.7;
+                    if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + sh * 0.1 {
+                        let name: String = initials.iter().collect();
+                        board.add_to_leaderboard(name, score);
+                        board.state = GameState::GameOver;
+                    }
+                }
+                board.state = GameState::EnteringName { score, initials, active_index };
+            }
             GameState::GameOver => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     board = Board::new();
@@ -501,7 +563,7 @@ async fn main() {
             DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
-        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver) {
+        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
             draw_texture_ex(
                 if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause },
                 pause_x, pause_y, WHITE,
@@ -527,13 +589,53 @@ async fn main() {
             draw_text(r_text, sw / 2.0 - rtw / 2.0, sh * 0.5, font_size * 0.6, GRAY);
         }
 
+        if let GameState::EnteringName { initials, active_index, .. } = board.state {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
+            let title = "NEW HIGH SCORE!";
+            let tw = measure_text(title, None, font_size as _, 1.0).width;
+            draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.2, font_size, YELLOW);
+
+            let sub = "Enter Initials";
+            let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
+            draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
+
+            let char_w = sw * 0.15;
+            let start_x = sw / 2.0 - char_w * 1.5;
+            let entry_y = sh * 0.5;
+
+            for i in 0..3 {
+                let rect_x = start_x + i as f32 * char_w;
+                if i == active_index {
+                    draw_rectangle(rect_x + 5.0, entry_y - char_w * 0.8, char_w - 10.0, char_w * 1.6, Color::new(1.0, 1.0, 1.0, 0.2));
+                }
+                let c_text = initials[i].to_string();
+                let cw = measure_text(&c_text, None, char_w as _, 1.0).width;
+                draw_text(&c_text, rect_x + char_w / 2.0 - cw / 2.0, entry_y + char_w * 0.3, char_w, if i == active_index { YELLOW } else { WHITE });
+                
+                // Draw indicators
+                if i == active_index {
+                    draw_text("▲", rect_x + char_w / 2.0 - 10.0, entry_y - char_w * 0.9, char_w * 0.4, WHITE);
+                    draw_text("▼", rect_x + char_w / 2.0 - 10.0, entry_y + char_w * 1.1, char_w * 0.4, WHITE);
+                }
+            }
+
+            let ok_text = "OK";
+            let ok_w = sw * 0.3;
+            let ok_x = sw / 2.0 - ok_w / 2.0;
+            let ok_y = sh * 0.7;
+            draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
+            let otw = measure_text(ok_text, None, font_size as _, 1.0).width;
+            draw_text(ok_text, sw / 2.0 - otw / 2.0, ok_y + sh * 0.07, font_size, WHITE);
+        }
+
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.2, font_size, RED);
-            if board.new_record { draw_text("NEW HIGH SCORE!", sw / 2.0 - measure_text("NEW HIGH SCORE!", None, (font_size * 0.8) as _, 1.0).width / 2.0, sh * 0.28, font_size * 0.8, YELLOW); }
-            draw_text("TOP SCORES:", sw * 0.3, sh * 0.4, font_size * 0.7, WHITE);
-            for (i, score) in board.high_scores.iter().enumerate() {
-                draw_text(&format!("{}. {}", i + 1, score), sw * 0.35, sh * 0.45 + (i as f32 * font_size * 0.8), font_size * 0.6, if *score == board.score && board.score > 0 { YELLOW } else { GRAY });
+            draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
+            
+            draw_text("TOP SCORES:", sw * 0.2, sh * 0.3, font_size * 0.7, WHITE);
+            for (i, (name, score)) in board.high_scores.iter().enumerate() {
+                let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
+                draw_text(&format!("{}. {}  {}", i + 1, name, score), sw * 0.25, sh * 0.38 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
             }
             draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
         }

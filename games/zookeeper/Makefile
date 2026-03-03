@@ -1,4 +1,4 @@
-VERSION=26.3.3.23
+VERSION=26.3.3.24
 
 
 .PHONY: setup assets test lint build serve
