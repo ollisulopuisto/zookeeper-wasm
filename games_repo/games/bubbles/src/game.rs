@@ -28,6 +28,8 @@ pub struct Player {
     pub dead: bool,
     pub score: u32,
     pub id: usize, // 0 for Bub, 1 for Bob
+    pub anim_timer: f32,
+    pub blow_timer: f32,
 }
 
 impl Player {
@@ -42,6 +44,8 @@ impl Player {
             dead: false,
             score: 0,
             id,
+            anim_timer: 0.0,
+            blow_timer: 0.0,
         }
     }
 
@@ -58,6 +62,7 @@ pub struct Enemy {
     pub trapped: bool,
     pub trap_timer: f32,
     pub dead: bool,
+    pub anim_timer: f32,
 }
 
 impl Enemy {
@@ -69,6 +74,7 @@ impl Enemy {
             trapped: false,
             trap_timer: 0.0,
             dead: false,
+            anim_timer: 0.0,
         }
     }
 
@@ -142,16 +148,30 @@ impl Game {
                 let p = &mut self.players[i];
                 
                 // Horizontal movement with inertia
+                let mut moving = false;
                 if input.left {
                     p.vel.x -= ACCEL;
                     p.dir = Direction::Left;
+                    moving = true;
                 } else if input.right {
                     p.vel.x += ACCEL;
                     p.dir = Direction::Right;
+                    moving = true;
                 } else {
                     p.vel.x *= FRICTION;
                 }
                 
+                // Animation update
+                if moving && p.grounded {
+                    p.anim_timer += 0.15;
+                } else {
+                    p.anim_timer = 0.0;
+                }
+                
+                if p.blow_timer > 0.0 {
+                    p.blow_timer -= 0.016;
+                }
+
                 // Cap speed
                 p.vel.x = p.vel.x.clamp(-MAX_SPEED, MAX_SPEED);
 
@@ -179,7 +199,8 @@ impl Game {
 
             // Blowing bubbles
             if input.bubble {
-                let p = &self.players[i];
+                let p = &mut self.players[i];
+                p.blow_timer = 0.2;
                 let bx = if p.dir == Direction::Right { p.pos.x + 16.0 } else { p.pos.x - 16.0 };
                 self.bubbles.push(Bubble {
                     pos: vec2(bx, p.pos.y),
@@ -228,6 +249,7 @@ impl Game {
         for i in 0..self.enemies.len() {
             {
                 let e = &mut self.enemies[i];
+                e.anim_timer += 0.1;
                 if e.trapped {
                     e.pos.y -= 0.5;
                     e.trap_timer -= 0.016;
@@ -391,7 +413,8 @@ impl Game {
 
         // Draw Bubbles
         for b in &self.bubbles {
-            let tex = if b.trapped_enemy { &gfx.zen_chan } else { &gfx.bubble };
+            let frame_idx = (get_time() * 4.0) as usize % 2;
+            let tex = if b.trapped_enemy { &gfx.zen_chan[frame_idx] } else { &gfx.bubble };
             draw_texture_ex(tex, vx + b.pos.x * scale, vy + b.pos.y * scale, WHITE, DrawTextureParams {
                 dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                 ..Default::default()
@@ -407,8 +430,10 @@ impl Game {
         // Draw Enemies
         for e in &self.enemies {
             if !e.trapped {
-                draw_texture_ex(&gfx.zen_chan, vx + e.pos.x * scale, vy + e.pos.y * scale, WHITE, DrawTextureParams {
+                let frame_idx = (e.anim_timer as usize) % 2;
+                draw_texture_ex(&gfx.zen_chan[frame_idx], vx + e.pos.x * scale, vy + e.pos.y * scale, WHITE, DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                    flip_x: e.vel.x < 0.0,
                     ..Default::default()
                 });
             }
@@ -425,7 +450,16 @@ impl Game {
         // Draw Players
         for p in &self.players {
             if !p.dead {
-                let tex = if p.id == 0 { &gfx.bub } else { &gfx.bob };
+                let tex = if p.id == 0 {
+                    if p.blow_timer > 0.0 { &gfx.bub_blow }
+                    else if p.anim_timer > 0.0 { &gfx.bub_walk[(p.anim_timer as usize) % 2] }
+                    else { &gfx.bub_idle }
+                } else {
+                    if p.blow_timer > 0.0 { &gfx.bob_blow }
+                    else if p.anim_timer > 0.0 { &gfx.bob_walk[(p.anim_timer as usize) % 2] }
+                    else { &gfx.bob_idle }
+                };
+                
                 draw_texture_ex(tex, vx + p.pos.x * scale, vy + p.pos.y * scale, WHITE, DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                     flip_x: p.dir == Direction::Left,
