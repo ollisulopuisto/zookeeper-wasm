@@ -68,9 +68,6 @@
     </style>
 </head>
 <body>
-    <audio id="silent-audio" preload="auto">
-        <source src="data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAA" type="audio/wav">
-    </audio>
     <canvas id="glcanvas" tabindex='1'></canvas>
     <div id="start-overlay">
         <h1>JETPAC</h1>
@@ -94,12 +91,6 @@
             if (Context) {
                 const ctx = new Context();
                 ctx.resume();
-            }
-
-            // Silent audio prime
-            const silentAudio = document.getElementById('silent-audio');
-            if (silentAudio) {
-                silentAudio.play().catch(() => {});
             }
 
             document.getElementById('start-overlay').style.display = 'none';
