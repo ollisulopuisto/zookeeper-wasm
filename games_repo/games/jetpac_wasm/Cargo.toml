@@ -1,6 +1,6 @@
 [package]
 name = "jetpac_wasm"
-version = "26.3.31021"
+version = "26.3.31030"
 edition = "2021"
 
 [dependencies]
