@@ -14,6 +14,7 @@ build:
 	@mkdir -p docs/assets
 	cp index.html docs/
 	cp assets/icon.png docs/assets/icon.png
+	cp assets/1f680.png docs/assets/1f680.png
 	@for game in $(GAMES); do \
 		echo "Building $$game..."; \
 		$(MAKE) -C games/$$game build; \
