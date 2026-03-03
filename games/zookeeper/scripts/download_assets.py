@@ -8,15 +8,11 @@ EMOJIS = {
     "elephant": "1f418",
     "giraffe": "1f992",
     "panda": "1f43c",
-    "frog": "1f438"
-}
-
-# Reliable open-source sounds
-SOUNDS = {
-    "swap": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
-    "match": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
-    "fall": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav",
-    "game_over": "https://github.com/not-fl3/miniquad/raw/master/examples/audio/beep.wav"
+    "frog": "1f438",
+    "speaker_on": "1f50a",
+    "speaker_off": "1f507",
+    "pause": "23f8",
+    "play": "25b6"
 }
 
 def download_assets():
@@ -29,14 +25,6 @@ def download_assets():
         path = f"../assets/{code}.png"
         if not os.path.exists(path) or os.path.getsize(path) < 500:
             print(f"Downloading emoji: {name}...")
-            r = requests.get(url, headers=headers)
-            with open(path, "wb") as f:
-                f.write(r.content)
-    
-    for name, url in SOUNDS.items():
-        path = f"../assets/{name}.wav"
-        if not os.path.exists(path) or os.path.getsize(path) < 5000:
-            print(f"Downloading sound: {name}...")
             r = requests.get(url, headers=headers)
             with open(path, "wb") as f:
                 f.write(r.content)

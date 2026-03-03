@@ -3,7 +3,7 @@
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
 //! It handles the 8x8 game board, animal matching logic, animations, high scores, persistent settings, and combo systems.
 
-use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
+use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams, Sound};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
@@ -94,13 +94,19 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        let lb = storage::get_mut::<Leaderboard>();
-        lb.entries.clone()
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries.clone()
+        } else {
+            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
+            storage::store(Leaderboard { entries: initial.clone() });
+            initial
+        }
     }
 
     fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<Leaderboard>();
-        lb.entries = self.high_scores.clone();
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries = self.high_scores.clone();
+        }
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -196,6 +202,39 @@ impl Board {
     }
 }
 
+/// Minimal WAV generator for blips and blops
+fn create_wav(freq: f32, duration_sec: f32, volume: f32) -> Vec<u8> {
+    let sample_rate = 44100u32;
+    let num_samples = (duration_sec * sample_rate as f32) as usize;
+    let data_size = num_samples * 2;
+    let file_size = 36 + data_size;
+    
+    let mut wav = Vec::with_capacity(44 + data_size);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(file_size as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // Mono
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(data_size as u32).to_le_bytes());
+    
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        // Simple decay envelope
+        let envelope = (1.0 - (i as f32 / num_samples as f32)).powf(2.0);
+        let val = (t * freq * 2.0 * std::f32::consts::PI).sin();
+        let sample = (val * 32767.0 * volume * envelope) as i16;
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+    wav
+}
+
 /// A simple easing function for smoother movement.
 fn cubic_out(t: f32) -> f32 {
     let f = t - 1.0;
@@ -240,19 +279,23 @@ async fn main() {
     let tex_pause = Texture2D::from_file_with_format(include_bytes!("../assets/23f8.png"), None);
     let tex_play = Texture2D::from_file_with_format(include_bytes!("../assets/25b6.png"), None);
 
-    for t in &textures {
-        t.set_filter(FilterMode::Linear);
-    }
+    for t in &textures { t.set_filter(FilterMode::Linear); }
     tex_mute_on.set_filter(FilterMode::Linear);
     tex_mute_off.set_filter(FilterMode::Linear);
     tex_pause.set_filter(FilterMode::Linear);
     tex_play.set_filter(FilterMode::Linear);
 
-    // Load sounds from embedded bytes with safety
-    let snd_swap = load_sound_from_bytes(include_bytes!("../assets/swap.wav")).await.ok();
-    let snd_match = load_sound_from_bytes(include_bytes!("../assets/match.wav")).await.ok();
-    let snd_fall = load_sound_from_bytes(include_bytes!("../assets/fall.wav")).await.ok();
-    let snd_game_over = load_sound_from_bytes(include_bytes!("../assets/game_over.wav")).await.ok();
+    // Generate software sounds
+    let snd_swap = load_sound_from_bytes(&create_wav(440.0, 0.1, 0.5)).await.ok();
+    let snd_fall = load_sound_from_bytes(&create_wav(220.0, 0.05, 0.3)).await.ok();
+    let snd_game_over = load_sound_from_bytes(&create_wav(110.0, 0.5, 0.5)).await.ok();
+    
+    // Pre-generate 10 levels of match sounds for combos
+    let mut snd_matches = Vec::new();
+    for i in 0..10 {
+        let freq = 550.0 + (i as f32 * 110.0);
+        snd_matches.push(load_sound_from_bytes(&create_wav(freq, 0.15, 0.5)).await.ok());
+    }
 
     let mut board = Board::new();
 
@@ -275,21 +318,14 @@ async fn main() {
             board.time_left -= get_frame_time();
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName {
-                        score: board.score,
-                        initials: ['A', 'A', 'A'],
-                        active_index: 0,
-                    };
+                    board.state = GameState::EnteringName { score: board.score, initials: ['A', 'A', 'A'], active_index: 0 };
                 } else {
                     board.state = GameState::GameOver;
                 }
                 if !settings.muted {
                     info!("SND: Game Over");
-                    if let Some(ref snd) = snd_game_over {
-                        play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
-                    }
+                    if let Some(ref snd) = snd_game_over { play_sound(snd, PlaySoundParams::default()); }
                 }
-
             }
         }
 
@@ -297,13 +333,9 @@ async fn main() {
         let pad = 10.0;
         let btn_size = sh * 0.06;
         let (mx, my) = mouse_position();
-
-        // Mute button
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
-
-        // Pause button
         let pause_x = mute_x - btn_size - pad;
         let pause_y = pad;
         let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
@@ -313,13 +345,9 @@ async fn main() {
                 settings.muted = !settings.muted;
             } else if over_pause || is_key_pressed(KeyCode::Space) {
                 match board.state.clone() {
-                    GameState::Paused { previous_state } => {
-                        board.state = *previous_state;
-                    }
+                    GameState::Paused { previous_state } => board.state = *previous_state,
                     GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } => {}
-                    other => {
-                        board.state = GameState::Paused { previous_state: Box::new(other) };
-                    }
+                    other => board.state = GameState::Paused { previous_state: Box::new(other) },
                 }
             }
         }
@@ -329,10 +357,7 @@ async fn main() {
             GameState::WaitingToStart => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if !settings.muted {
-                        info!("SND: iOS Audio Context Unlock");
-                        if let Some(ref snd) = snd_swap {
-                            play_sound(snd, PlaySoundParams { looped: false, volume: 0.01 });
-                        }
+                        if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams { volume: 0.01, ..Default::default() }); }
                     }
                     board.state = GameState::Idle;
                 }
@@ -348,60 +373,41 @@ async fn main() {
                             let dy = (cy as i32 - sy as i32).abs();
                             if dx + dy == 1 {
                                 board.swap(sx, sy, cx, cy);
-                                let matches = board.find_matches();
-                                let revert = matches.is_empty();
+                                let revert = board.find_matches().is_empty();
                                 board.swap(cx, cy, sx, sy);
                                 board.state = GameState::Swapping { x1: sx, y1: sy, x2: cx, y2: cy, timer: 0.0, revert };
-                                if !revert {
-                                    board.combo_count = 1;
-                                }
+                                if !revert { board.combo_count = 1; }
                                 if !settings.muted {
-                                    info!("SND: Swap");
-                                    if let Some(ref snd) = snd_swap {
-                                        play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
-                                    }
+                                    if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
                                 }
                             }
                             board.selected = None;
                         } else {
                             board.selected = Some((cx, cy));
                         }
-                    } else {
-                        board.selected = None;
-                    }
+                    } else { board.selected = None; }
                 }
             }
             GameState::Swapping { x1, y1, x2, y2, mut timer, revert } => {
                 timer += get_frame_time();
                 if timer >= ANIM_DURATION {
                     board.swap(x1, y1, x2, y2);
-                    if revert {
-                        board.swap(x1, y1, x2, y2);
-                        board.state = GameState::Idle;
-                    } else {
+                    if revert { board.swap(x1, y1, x2, y2); board.state = GameState::Idle; }
+                    else {
                         let matches = board.find_matches();
                         let mut match_arr = [(0, 0); COLS * ROWS];
                         for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                         if !settings.muted {
-                            info!("SND: Match (Combo {})", board.combo_count);
-                            if let Some(ref snd) = snd_match {
-                                play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
-                            }
+                            if let Some(Some(ref snd)) = snd_matches.get(0) { play_sound(snd, PlaySoundParams::default()); }
                         }
                     }
-                } else {
-                    board.state = GameState::Swapping { x1, y1, x2, y2, timer, revert };
-                }
+                } else { board.state = GameState::Swapping { x1, y1, x2, y2, timer, revert }; }
             }
             GameState::Clearing { mut timer, matches, match_count } => {
                 timer += get_frame_time();
-                if timer >= ANIM_DURATION {
-                    board.clear_matches();
-                    board.state = GameState::Falling { timer: 0.0 };
-                } else {
-                    board.state = GameState::Clearing { timer, matches, match_count };
-                }
+                if timer >= ANIM_DURATION { board.clear_matches(); board.state = GameState::Falling { timer: 0.0 }; }
+                else { board.state = GameState::Clearing { timer, matches, match_count }; }
             }
             GameState::Falling { mut timer } => {
                 timer += get_frame_time();
@@ -409,10 +415,7 @@ async fn main() {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
                         if !settings.muted {
-                            info!("SND: Fall");
-                            if let Some(ref snd) = snd_fall {
-                                play_sound(snd, PlaySoundParams { looped: false, volume: 0.3 });
-                            }
+                            if let Some(ref snd) = snd_fall { play_sound(snd, PlaySoundParams { volume: 0.3, ..Default::default() }); }
                         }
                     } else {
                         let matches = board.find_matches();
@@ -422,50 +425,33 @@ async fn main() {
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                             if !settings.muted {
-                                info!("SND: Match Cascade (Combo {})", board.combo_count);
-                                if let Some(ref snd) = snd_match {
-                                    play_sound(snd, PlaySoundParams { looped: false, volume: 1.0 });
-                                }
+                                let idx = (board.combo_count as usize - 1).min(snd_matches.len() - 1);
+                                if let Some(Some(ref snd)) = snd_matches.get(idx) { play_sound(snd, PlaySoundParams::default()); }
                             }
-                        } else {
-                            board.state = GameState::Idle;
-                        }
+                        } else { board.state = GameState::Idle; }
                     }
-                } else {
-                    board.state = GameState::Falling { timer };
-                }
+                } else { board.state = GameState::Falling { timer }; }
             }
             GameState::EnteringName { score, mut initials, mut active_index } => {
                 if is_mouse_button_pressed(MouseButton::Left) {
                     let char_w = sw * 0.15;
                     let start_x = sw / 2.0 - char_w * 1.5;
                     let entry_y = sh * 0.5;
-
                     for i in 0..3 {
                         let rect_x = start_x + i as f32 * char_w;
                         if mx >= rect_x && mx <= rect_x + char_w && my >= entry_y - char_w && my <= entry_y + char_w {
                             if i == active_index {
-                                // Cycle character
-                                let current_char = initials[i];
-                                let pos = ENTRY_CHARS.iter().position(|&c| c == current_char).unwrap_or(0);
-                                if my < entry_y {
-                                    initials[i] = ENTRY_CHARS[(pos + 1) % ENTRY_CHARS.len()];
-                                } else {
-                                    initials[i] = ENTRY_CHARS[(pos + ENTRY_CHARS.len() - 1) % ENTRY_CHARS.len()];
-                                }
-                            } else {
-                                active_index = i;
-                            }
+                                let pos = ENTRY_CHARS.iter().position(|&c| c == initials[i]).unwrap_or(0);
+                                if my < entry_y { initials[i] = ENTRY_CHARS[(pos + 1) % ENTRY_CHARS.len()]; }
+                                else { initials[i] = ENTRY_CHARS[(pos + ENTRY_CHARS.len() - 1) % ENTRY_CHARS.len()]; }
+                            } else { active_index = i; }
                         }
                     }
-
-                    // OK Button
                     let ok_w = sw * 0.3;
                     let ok_x = sw / 2.0 - ok_w / 2.0;
                     let ok_y = sh * 0.7;
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + sh * 0.1 {
-                        let name: String = initials.iter().collect();
-                        board.add_to_leaderboard(name, score);
+                        board.add_to_leaderboard(initials.iter().collect(), score);
                         board.state = GameState::GameOver;
                     }
                 }
@@ -479,9 +465,7 @@ async fn main() {
             }
             GameState::Paused { .. } => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
-                    if let GameState::Paused { previous_state } = board.state {
-                        board.state = *previous_state;
-                    }
+                    if let GameState::Paused { previous_state } = board.state { board.state = *previous_state; }
                 }
             }
         }
@@ -496,7 +480,6 @@ async fn main() {
         }
 
         draw_rectangle(offset_x + shake_x, offset_y + shake_y, board_size, board_size, Color::new(0.2, 0.2, 0.2, 1.0));
-
         if let Some((sx, sy)) = board.selected {
             draw_rectangle(offset_x + sx as f32 * cell_size + shake_x, offset_y + sy as f32 * cell_size + shake_y, cell_size, cell_size, Color::new(1.0, 1.0, 1.0, 0.3));
         }
@@ -507,7 +490,6 @@ async fn main() {
                 let mut draw_y = offset_y + y as f32 * cell_size + shake_y;
                 let mut scale = 1.0;
                 let mut alpha = 1.0;
-
                 match board.state {
                     GameState::Swapping { x1, y1, x2, y2, timer, revert } => {
                         let progress = timer / ANIM_DURATION;
@@ -535,7 +517,6 @@ async fn main() {
                     }
                     _ => {}
                 }
-
                 if let Some(t_idx) = board.grid[y][x] {
                     let actual_cell = cell_size * scale;
                     let pad = cell_size * 0.1;
@@ -544,10 +525,7 @@ async fn main() {
                         draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
                         draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
                         Color::new(1.0, 1.0, 1.0, alpha),
-                        DrawTextureParams {
-                            dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)),
-                            ..Default::default()
-                        },
+                        DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
                     );
                 }
             }
@@ -564,18 +542,9 @@ async fn main() {
             draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
         }
 
-        draw_texture_ex(
-            if settings.muted { &tex_mute_on } else { &tex_mute_off },
-            mute_x, mute_y, WHITE,
-            DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
-        );
-
+        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
         if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
-            draw_texture_ex(
-                if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause },
-                pause_x, pause_y, WHITE,
-                DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
-            );
+            draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
         }
 
         // --- Overlays ---
@@ -601,31 +570,23 @@ async fn main() {
             let title = "NEW HIGH SCORE!";
             let tw = measure_text(title, None, font_size as _, 1.0).width;
             draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.2, font_size, YELLOW);
-
             let sub = "Enter Initials";
             let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
             draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
-
             let char_w = sw * 0.15;
             let start_x = sw / 2.0 - char_w * 1.5;
             let entry_y = sh * 0.5;
-
             for i in 0..3 {
                 let rect_x = start_x + i as f32 * char_w;
-                if i == active_index {
-                    draw_rectangle(rect_x + 5.0, entry_y - char_w * 0.8, char_w - 10.0, char_w * 1.6, Color::new(1.0, 1.0, 1.0, 0.2));
-                }
+                if i == active_index { draw_rectangle(rect_x + 5.0, entry_y - char_w * 0.8, char_w - 10.0, char_w * 1.6, Color::new(1.0, 1.0, 1.0, 0.2)); }
                 let c_text = initials[i].to_string();
                 let cw = measure_text(&c_text, None, char_w as _, 1.0).width;
                 draw_text(&c_text, rect_x + char_w / 2.0 - cw / 2.0, entry_y + char_w * 0.3, char_w, if i == active_index { YELLOW } else { WHITE });
-                
-                // Draw indicators
                 if i == active_index {
                     draw_text("▲", rect_x + char_w / 2.0 - 10.0, entry_y - char_w * 0.9, char_w * 0.4, WHITE);
                     draw_text("▼", rect_x + char_w / 2.0 - 10.0, entry_y + char_w * 1.1, char_w * 0.4, WHITE);
                 }
             }
-
             let ok_text = "OK";
             let ok_w = sw * 0.3;
             let ok_x = sw / 2.0 - ok_w / 2.0;
@@ -638,7 +599,6 @@ async fn main() {
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
             draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
-            
             draw_text("TOP SCORES:", sw * 0.2, sh * 0.3, font_size * 0.7, WHITE);
             for (i, (name, score)) in board.high_scores.iter().enumerate() {
                 let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
