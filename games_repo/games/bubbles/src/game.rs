@@ -7,6 +7,14 @@ pub const VIRTUAL_WIDTH: f32 = 256.0;
 pub const VIRTUAL_HEIGHT: f32 = 224.0;
 pub const TILE_SIZE: f32 = 16.0;
 
+// Physics Constants
+const GRAVITY: f32 = 0.25;
+const JUMP_FORCE: f32 = -5.5;
+const ACCEL: f32 = 0.2;
+const FRICTION: f32 = 0.85;
+const MAX_SPEED: f32 = 2.0;
+const TERMINAL_VELOCITY: f32 = 6.0;
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Direction { Left, Right }
 
@@ -15,8 +23,8 @@ pub struct Player {
     pub vel: Vec2,
     pub dir: Direction,
     pub grounded: bool,
-    #[allow(dead_code)]
-    pub jump_timer: f32,
+    pub coyote_timer: f32,
+    pub jump_buffer: f32,
     pub dead: bool,
     pub score: u32,
     pub id: usize, // 0 for Bub, 1 for Bob
@@ -29,7 +37,8 @@ impl Player {
             vel: Vec2::ZERO,
             dir: if id == 0 { Direction::Right } else { Direction::Left },
             grounded: false,
-            jump_timer: 0.0,
+            coyote_timer: 0.0,
+            jump_buffer: 0.0,
             dead: false,
             score: 0,
             id,
@@ -131,21 +140,39 @@ impl Game {
             
             {
                 let p = &mut self.players[i];
-                // Horizontal movement
+                
+                // Horizontal movement with inertia
                 if input.left {
-                    p.vel.x = -1.5;
+                    p.vel.x -= ACCEL;
                     p.dir = Direction::Left;
                 } else if input.right {
-                    p.vel.x = 1.5;
+                    p.vel.x += ACCEL;
                     p.dir = Direction::Right;
                 } else {
-                    p.vel.x *= 0.8;
+                    p.vel.x *= FRICTION;
+                }
+                
+                // Cap speed
+                p.vel.x = p.vel.x.clamp(-MAX_SPEED, MAX_SPEED);
+
+                // Jump logic with buffer and coyote time
+                if p.grounded {
+                    p.coyote_timer = 0.1;
+                } else {
+                    p.coyote_timer -= 0.016;
                 }
 
-                // Jumping
-                if input.jump && p.grounded {
-                    p.vel.y = -4.0;
+                if input.jump {
+                    p.jump_buffer = 0.1;
+                } else {
+                    p.jump_buffer -= 0.016;
+                }
+
+                if p.jump_buffer > 0.0 && p.coyote_timer > 0.0 {
+                    p.vel.y = JUMP_FORCE;
                     p.grounded = false;
+                    p.coyote_timer = 0.0;
+                    p.jump_buffer = 0.0;
                     audio.play_jump();
                 }
             }
@@ -156,7 +183,7 @@ impl Game {
                 let bx = if p.dir == Direction::Right { p.pos.x + 16.0 } else { p.pos.x - 16.0 };
                 self.bubbles.push(Bubble {
                     pos: vec2(bx, p.pos.y),
-                    vel: vec2(if p.dir == Direction::Right { 3.0 } else { -3.0 }, 0.0),
+                    vel: vec2(if p.dir == Direction::Right { 3.5 } else { -3.0 }, 0.0),
                     timer: 5.0,
                     trapped_enemy: false,
                 });
@@ -165,8 +192,9 @@ impl Game {
 
             {
                 let p = &mut self.players[i];
-                // Apply gravity
-                p.vel.y += 0.2;
+                // Apply gravity with heft
+                p.vel.y += GRAVITY;
+                if p.vel.y > TERMINAL_VELOCITY { p.vel.y = TERMINAL_VELOCITY; }
 
                 // Physics and screen wrap
                 p.pos += p.vel;
@@ -177,6 +205,8 @@ impl Game {
                 let p = &mut self.players[i];
                 if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
                 if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
+                
+                // Screen wrap top/bottom
                 if p.pos.y > VIRTUAL_HEIGHT { p.pos.y = -16.0; }
                 if p.pos.y < -16.0 { p.pos.y = VIRTUAL_HEIGHT; }
             }
@@ -185,10 +215,10 @@ impl Game {
         // Update Bubbles
         for b in self.bubbles.iter_mut() {
             b.pos += b.vel;
-            b.vel.x *= 0.9;
+            b.vel.x *= 0.92;
             if b.vel.x.abs() < 0.1 {
                 b.vel.x = 0.0;
-                b.vel.y = -0.5; // Float up
+                b.vel.y = -0.6; // Float up
             }
             b.timer -= 0.016;
         }
@@ -203,11 +233,12 @@ impl Game {
                     e.trap_timer -= 0.016;
                     if e.trap_timer <= 0.0 {
                         e.trapped = false;
-                        e.vel.x = 1.0; // Angry
+                        e.vel.x = 1.2; // Angry
                     }
                 } else {
                     e.pos.x += e.vel.x;
-                    e.vel.y += 0.2;
+                    e.vel.y += GRAVITY;
+                    if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                     e.pos.y += e.vel.y;
                 }
             }
@@ -259,7 +290,7 @@ impl Game {
                             score_val: 500,
                             timer: 10.0,
                         });
-                        // Find and remove the actual enemy (this is simplified)
+                        // Find and remove the actual enemy
                         if let Some(e) = self.enemies.iter_mut().find(|e| e.trapped) {
                             e.dead = true;
                         }
