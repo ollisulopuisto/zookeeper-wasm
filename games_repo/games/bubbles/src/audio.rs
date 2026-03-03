@@ -48,7 +48,7 @@ impl AudioManager {
     }
 
     pub fn play_music(&self) {
-        play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.2 });
+        play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.25 });
     }
 
     pub fn stop_music(&self) {
@@ -179,35 +179,71 @@ fn generate_death_wav() -> Vec<u8> {
 
 fn generate_music_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let bpm = 140.0;
+    let bpm = 135.0;
     let beat_duration = 60.0 / bpm;
+    let sixteen_duration = beat_duration / 4.0;
+    
+    // Melody: More complex, driving, Rush-style prog-rock vibes
     let melody = [
-        523.25, 587.33, 659.25, 698.46, 783.99, 659.25, 523.25, 587.33,
-        523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 587.33, 523.25,
+        392.00, 392.00, 440.00, 466.16, 523.25, 392.00, 349.23, 392.00,
+        392.00, 466.16, 523.25, 587.33, 523.25, 466.16, 440.00, 392.00,
+        392.00, 392.00, 440.00, 466.16, 523.25, 392.00, 349.23, 392.00,
+        783.99, 698.46, 587.33, 523.25, 466.16, 440.00, 349.23, 392.00,
     ];
-    let num_beats = melody.len();
-    let total_duration = beat_duration * num_beats as f32;
+    
+    let num_sixteens = melody.len();
+    let total_duration = sixteen_duration * num_sixteens as f32;
     let num_samples = (sample_rate as f32 * total_duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
+    let mut seed = 0x1234u32;
+
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let beat_idx = (t / beat_duration) as usize % melody.len();
-        let freq = melody[beat_idx];
+        let sixteen_idx = (t / sixteen_duration) as usize % melody.len();
+        let beat_idx = (t / beat_duration) as usize;
         
-        // Square wave
-        let mut sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.2 } else { -0.2 };
+        // --- Channel 1: Lead (Proggy Square with slight vibrato) ---
+        let vibrato = (t * 6.0 * 2.0 * std::f32::consts::PI).sin() * 2.0;
+        let freq = melody[sixteen_idx] + vibrato;
+        let lead = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.15 } else { -0.15 };
+        let lead_env = 1.0 - (t % sixteen_duration) / sixteen_duration;
         
-        // Simple envelope per beat
-        let beat_t = (t % beat_duration) / beat_duration;
-        let envelope = if beat_t < 0.1 { beat_t / 0.1 } else { 1.0 - (beat_t - 0.1) / 0.9 };
+        // --- Channel 2: Driving Bass (Thick pulsing square) ---
+        let bass_notes = [196.00, 196.00, 233.08, 261.63];
+        let bass_freq = bass_notes[(sixteen_idx / 4) % bass_notes.len()];
+        let bass = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.3 { 0.2 } else { -0.2 };
+        let bass_env = if sixteen_idx % 2 == 0 { 1.0 } else { 0.6 };
+
+        // --- Channel 3: Drums (Noise Snare/Hi-hat and Pulse Kick) ---
+        let mut drums = 0.0;
+        let t_beat = t % beat_duration;
         
-        // Add a simple bass line
-        let bass_freq = melody[beat_idx] / 2.0;
-        let bass_sample = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.15 } else { -0.15 };
-        
-        sample = (sample + bass_sample) * envelope;
-        samples.push((sample * envelope * 16383.0) as i16);
+        // Kick on every beat
+        let kick_freq = 60.0 * (1.0 - (t_beat % 0.1) / 0.1).max(0.0) + 40.0;
+        let kick = (t % 1.0 * kick_freq * 2.0 * std::f32::consts::PI).sin() * 0.3;
+        let kick_env = (1.0 - (t_beat % 0.1) / 0.1).max(0.0);
+        if t_beat < 0.1 { drums += kick * kick_env; }
+
+        // Snare on 2 and 4
+        if beat_idx % 2 == 1 && t_beat < 0.1 {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let noise = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+            let snare_env = (1.0 - t_beat / 0.1).powi(2);
+            drums += noise * snare_env * 0.25;
+        }
+
+        // Hi-hat on every eighth
+        let t_eighth = t % (beat_duration / 2.0);
+        if t_eighth < 0.03 {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let noise = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+            let hat_env = (1.0 - t_eighth / 0.03).powi(2);
+            drums += noise * hat_env * 0.1;
+        }
+
+        let mixed = (lead * lead_env + bass * bass_env + drums) * 0.8;
+        samples.push((mixed * 16383.0) as i16);
     }
 
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
