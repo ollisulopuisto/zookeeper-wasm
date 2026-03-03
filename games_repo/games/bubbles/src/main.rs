@@ -40,15 +40,18 @@ async fn main() {
                     two_player = false;
                     game = Game::new(false);
                     state = AppState::Playing;
+                    audio.play_music();
                 } else if is_key_pressed(KeyCode::Key2) {
                     two_player = true;
                     game = Game::new(true);
                     state = AppState::Playing;
+                    audio.play_music();
                 } else if input.any_key {
                     // Default to 1P on touch
                     two_player = false;
                     game = Game::new(false);
                     state = AppState::Playing;
+                    audio.play_music();
                 }
             }
             AppState::Playing => {
@@ -60,6 +63,7 @@ async fn main() {
                 game.update(&inputs, &audio);
                 if game.game_over {
                     state = AppState::GameOver;
+                    audio.stop_music();
                     // Save high scores
                     for p in &game.players {
                         storage::add_score("BUB".to_string(), p.score);

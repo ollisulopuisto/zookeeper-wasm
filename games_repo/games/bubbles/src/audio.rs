@@ -1,4 +1,4 @@
-use macroquad::audio::{load_sound_from_bytes, Sound, play_sound, PlaySoundParams};
+use macroquad::audio::{load_sound_from_bytes, Sound, play_sound, stop_sound, PlaySoundParams};
 
 pub struct AudioManager {
     pub jump: Sound,
@@ -7,6 +7,7 @@ pub struct AudioManager {
     pub enemy_trapped: Sound,
     pub fruit_collect: Sound,
     pub death: Sound,
+    pub music: Sound,
 }
 
 impl AudioManager {
@@ -18,6 +19,7 @@ impl AudioManager {
             enemy_trapped: load_sound_from_bytes(&generate_enemy_trapped_wav()).await.unwrap(),
             fruit_collect: load_sound_from_bytes(&generate_fruit_collect_wav()).await.unwrap(),
             death: load_sound_from_bytes(&generate_death_wav()).await.unwrap(),
+            music: load_sound_from_bytes(&generate_music_wav()).await.unwrap(),
         }
     }
 
@@ -43,6 +45,14 @@ impl AudioManager {
 
     pub fn play_death(&self) {
         play_sound(&self.death, PlaySoundParams { looped: false, volume: 0.5 });
+    }
+
+    pub fn play_music(&self) {
+        play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.2 });
+    }
+
+    pub fn stop_music(&self) {
+        stop_sound(&self.music);
     }
 }
 
@@ -162,6 +172,44 @@ fn generate_death_wav() -> Vec<u8> {
         let amplitude = (1.0 - t / duration).powi(2);
         samples.push((sample * amplitude * 16383.0) as i16);
     }
+    let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
+    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
+    wav
+}
+
+fn generate_music_wav() -> Vec<u8> {
+    let sample_rate = 44100;
+    let bpm = 140.0;
+    let beat_duration = 60.0 / bpm;
+    let melody = [
+        523.25, 587.33, 659.25, 698.46, 783.99, 659.25, 523.25, 587.33,
+        523.25, 659.25, 783.99, 1046.50, 783.99, 659.25, 587.33, 523.25,
+    ];
+    let num_beats = melody.len();
+    let total_duration = beat_duration * num_beats as f32;
+    let num_samples = (sample_rate as f32 * total_duration) as usize;
+    let mut samples = Vec::with_capacity(num_samples);
+
+    for i in 0..num_samples {
+        let t = i as f32 / sample_rate as f32;
+        let beat_idx = (t / beat_duration) as usize % melody.len();
+        let freq = melody[beat_idx];
+        
+        // Square wave
+        let mut sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.2 } else { -0.2 };
+        
+        // Simple envelope per beat
+        let beat_t = (t % beat_duration) / beat_duration;
+        let envelope = if beat_t < 0.1 { beat_t / 0.1 } else { 1.0 - (beat_t - 0.1) / 0.9 };
+        
+        // Add a simple bass line
+        let bass_freq = melody[beat_idx] / 2.0;
+        let bass_sample = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.15 } else { -0.15 };
+        
+        sample = (sample + bass_sample) * envelope;
+        samples.push((sample * envelope * 16383.0) as i16);
+    }
+
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
     for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
     wav
