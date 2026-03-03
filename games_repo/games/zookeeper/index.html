@@ -70,7 +70,7 @@
     <script src="mq_js_bundle.js"></script>
     <script>
         // Centralized Leaderboard System
-        window.get_leaderboard = function(gameId) {
+        window.get_leaderboard_js = function(gameId) {
             try {
                 const data = localStorage.getItem("WASM_GAMES_LEADERBOARD");
                 const leaderboard = data ? JSON.parse(data) : {};
@@ -78,17 +78,32 @@
             } catch (e) { return "[]"; }
         };
 
-        window.save_score = function(gameId, name, score) {
+        window.save_score_js = function(gameId, name, score, combo) {
             try {
                 const data = localStorage.getItem("WASM_GAMES_LEADERBOARD");
                 const leaderboard = data ? JSON.parse(data) : {};
                 if (!leaderboard[gameId]) leaderboard[gameId] = [];
-                leaderboard[gameId].push({ name, score });
+                leaderboard[gameId].push({ name, score, combo: combo || 0 });
                 leaderboard[gameId].sort((a, b) => b.score - a.score);
                 leaderboard[gameId] = leaderboard[gameId].slice(0, 5);
                 localStorage.setItem("WASM_GAMES_LEADERBOARD", JSON.stringify(leaderboard));
             } catch (e) { console.error(e); }
         };
+
+        // Bridge for Rust
+        miniquad_add_plugin({
+            register_plugin: function (importObject) {
+                importObject.env.get_leaderboard_js = function (game_id_ptr) {
+                    const game_id = js_objects.get(game_id_ptr);
+                    return js_objects.add(window.get_leaderboard_js(game_id));
+                };
+                importObject.env.save_score_js = function (game_id_ptr, name_ptr, score, combo) {
+                    const game_id = js_objects.get(game_id_ptr);
+                    const name = js_objects.get(name_ptr);
+                    window.save_score_js(game_id, name, score, combo);
+                };
+            }
+        });
 
         window.ask_name = function() {
             return prompt("Enter your initials:", "") || "ANON";

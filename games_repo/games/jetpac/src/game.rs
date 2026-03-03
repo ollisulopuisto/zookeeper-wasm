@@ -1,347 +1,272 @@
 use macroquad::prelude::*;
-use crate::physics::{Entity, update_physics, wrap_around};
+use crate::physics::{Entity, RectCollider};
+use crate::audio::AudioManager;
 
 pub const SCREEN_WIDTH: f32 = 800.0;
 pub const SCREEN_HEIGHT: f32 = 600.0;
+pub const TILE_SIZE: f32 = 32.0;
+pub const COLS: usize = 25;
+pub const ROWS: usize = 18; // 18 * 32 = 576, leaves 24 for HUD
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum TileType {
+    Empty,
+    NormalBrick,
+    SolidBrick,
+    Ladder,
+}
+
+pub struct PhasedBrick {
+    pub col: usize,
+    pub row: usize,
+    pub timer: f32,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum CollectibleType {
+    Emerald,
+    Fuel,
+}
+
+pub struct Collectible {
+    pub col: usize,
+    pub row: usize,
+    pub ctype: CollectibleType,
+    pub active: bool,
+}
+
+pub struct Portal {
+    pub col: usize,
+    pub row: usize,
+    pub active: bool,
+}
 
 pub struct Player {
     pub entity: Entity,
+    pub fuel: f32,
     pub is_jetting: bool,
     pub facing_right: bool,
-    pub shoot_cooldown: f32,
-    pub holding_part: Option<PartType>,
-}
-
-use macroquad::color::SKYBLUE;
-
-impl Player {
-    pub fn new() -> Self {
-        Self {
-            entity: Entity::new(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT - 50.0, 32.0, 48.0),
-            is_jetting: false,
-            facing_right: true,
-            shoot_cooldown: 0.0,
-            holding_part: None,
-        }
-    }
-
-    pub fn update(&mut self, dt: f32, lasers: &mut Vec<Laser>) -> bool {
-        let mut fired = false;
-        
-        let mut touch_left = false;
-        let mut touch_right = false;
-        let mut touch_up = false;
-        let mut touch_space = false;
-
-        for touch in touches() {
-            let x = touch.position.x / screen_width() * SCREEN_WIDTH;
-            let y = touch.position.y / screen_height() * SCREEN_HEIGHT;
-
-            if x < SCREEN_WIDTH / 2.0 {
-                if x < SCREEN_WIDTH / 4.0 {
-                    touch_left = true;
-                } else {
-                    touch_right = true;
-                }
-            } else {
-                if y < SCREEN_HEIGHT / 2.0 {
-                    touch_up = true;
-                } else {
-                    touch_space = true;
-                }
-            }
-        }
-
-        self.is_jetting = is_key_down(KeyCode::Up) || is_key_down(KeyCode::W) || touch_up;
-        
-        if self.is_jetting {
-            const THRUST: f32 = 800.0;
-            self.entity.vy -= THRUST * dt;
-        }
-
-        if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) || touch_left {
-            self.entity.vx = -300.0;
-            self.facing_right = false;
-        } else if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) || touch_right {
-            self.entity.vx = 300.0;
-            self.facing_right = true;
-        } else {
-            self.entity.vx = 0.0;
-        }
-
-        if self.shoot_cooldown > 0.0 {
-            self.shoot_cooldown -= dt;
-        }
-
-        if (is_key_down(KeyCode::Space) || is_key_down(KeyCode::Enter) || touch_space) && self.shoot_cooldown <= 0.0 {
-            let laser_x = if self.facing_right { self.entity.x + self.entity.width } else { self.entity.x - 20.0 };
-            let laser_vx = if self.facing_right { 600.0 } else { -600.0 };
-            lasers.push(Laser::new(laser_x, self.entity.y + 20.0, laser_vx));
-            self.shoot_cooldown = 0.2;
-            fired = true;
-        }
-
-        update_physics(&mut self.entity, dt);
-        wrap_around(&mut self.entity, SCREEN_WIDTH);
-
-        // Ground collision (simple)
-        if self.entity.y > SCREEN_HEIGHT - self.entity.height {
-            self.entity.y = SCREEN_HEIGHT - self.entity.height;
-            self.entity.vy = 0.0;
-        }
-        fired
-    }
-
-    pub fn draw(&self) {
-        let color_main = if self.is_jetting { YELLOW } else { RED };
-        let color_shadow = if self.is_jetting { ORANGE } else { MAROON };
-        
-        // Body with gradient/shading
-        draw_rectangle(self.entity.x, self.entity.y, self.entity.width, self.entity.height, color_shadow);
-        draw_rectangle(self.entity.x + 2.0, self.entity.y + 2.0, self.entity.width - 4.0, self.entity.height - 4.0, color_main);
-        
-        // Glass visor (Amiga style highlight)
-        draw_rectangle(self.entity.x + 10.0, self.entity.y + 8.0, self.entity.width - 14.0, 12.0, SKYBLUE);
-        draw_rectangle(self.entity.x + 12.0, self.entity.y + 10.0, self.entity.width - 18.0, 4.0, WHITE); // Highlight
-
-        // Directional "eye" or visor detail
-        let visor_x = if self.facing_right { self.entity.x + 20.0 } else { self.entity.x + 4.0 };
-        draw_rectangle(visor_x, self.entity.y + 8.0, 8.0, 12.0, DARKBLUE);
-
-        // Jetpack on back
-        let pack_x = if self.facing_right { self.entity.x - 6.0 } else { self.entity.x + self.entity.width - 2.0 };
-        draw_rectangle(pack_x, self.entity.y + 10.0, 8.0, 24.0, GRAY);
-        if self.is_jetting {
-            // Flame effect
-            let flame_y = self.entity.y + 34.0;
-            draw_triangle(
-                vec2(pack_x, flame_y),
-                vec2(pack_x + 8.0, flame_y),
-                vec2(pack_x + 4.0, flame_y + 15.0 + rand::gen_range(0.0, 10.0)),
-                ORANGE
-            );
-        }
-
-        // Draw held part
-        if let Some(part_type) = self.holding_part {
-            draw_part_at(self.entity.x - 4.0, self.entity.y + self.entity.height, part_type);
-        }
-    }
-}
-
-fn draw_part_at(x: f32, y: f32, part_type: PartType) {
-    match part_type {
-        PartType::Base => {
-            // Red, ribbed/wide base
-            draw_rectangle(x, y, 40.0, 20.0, MAROON);
-            draw_rectangle(x + 2.0, y + 2.0, 36.0, 16.0, RED);
-            for i in 0..4 {
-                draw_line(x + 8.0 + i as f32 * 8.0, y + 2.0, x + 8.0 + i as f32 * 8.0, y + 18.0, 2.0, MAROON);
-            }
-        }
-        PartType::Middle => {
-            // Blue, smooth cylindrical section
-            draw_rectangle(x + 5.0, y, 30.0, 20.0, DARKBLUE);
-            draw_rectangle(x + 7.0, y + 2.0, 26.0, 16.0, BLUE);
-            draw_rectangle(x + 10.0, y + 4.0, 4.0, 12.0, SKYBLUE); // Shine
-        }
-        PartType::Top => {
-            // Gold, pointed nose cone
-            draw_triangle(
-                vec2(x + 20.0, y),
-                vec2(x, y + 20.0),
-                vec2(x + 40.0, y + 20.0),
-                GOLD
-            );
-            draw_triangle(
-                vec2(x + 20.0, y + 4.0),
-                vec2(x + 10.0, y + 18.0),
-                vec2(x + 30.0, y + 18.0),
-                YELLOW
-            );
-        }
-    }
-}
-
-pub struct Laser {
-    pub x: f32,
-    pub y: f32,
-    pub vx: f32,
-    pub lifetime: f32,
-}
-
-impl Laser {
-    pub fn new(x: f32, y: f32, vx: f32) -> Self {
-        Self { x, y, vx, lifetime: 1.0 }
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        self.x += self.vx * dt;
-        self.lifetime -= dt;
-    }
-
-    pub fn draw(&self) {
-        draw_line(self.x, self.y, self.x + 10.0 * self.vx.signum(), self.y, 2.0, SKYBLUE);
-    }
-}
-
-pub struct Platform {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-}
-
-impl Platform {
-    pub fn draw(&self) {
-        // Metallic platform with top highlight
-        draw_rectangle(self.x, self.y, self.width, 10.0, DARKGREEN);
-        draw_rectangle(self.x, self.y, self.width, 3.0, GREEN);
-        draw_rectangle(self.x + 5.0, self.y + 1.0, self.width - 10.0, 1.0, LIME);
-    }
-
-    pub fn check_collision(&self, entity: &mut Entity) {
-        if entity.vy > 0.0 && 
-           entity.y + entity.height > self.y && 
-           entity.y + entity.height < self.y + 20.0 &&
-           entity.x + entity.width > self.x && 
-           entity.x < self.x + self.width {
-            entity.y = self.y - entity.height;
-            entity.vy = 0.0;
-        }
-    }
+    pub dead: bool,
+    pub phase_cooldown: f32,
 }
 
 pub struct Enemy {
     pub entity: Entity,
-    pub speed: f32,
+    pub facing_right: bool,
 }
 
-impl Enemy {
-    pub fn new(x: f32, y: f32, speed: f32) -> Self {
-        Self {
-            entity: Entity::new(x, y, 24.0, 24.0),
-            speed,
+pub struct Level {
+    pub grid: [[TileType; COLS]; ROWS],
+    pub phased_bricks: Vec<PhasedBrick>,
+    pub collectibles: Vec<Collectible>,
+    pub portal: Portal,
+    pub emeralds_total: usize,
+    pub emeralds_collected: usize,
+}
+
+impl Level {
+    pub fn get_tile(&self, c: usize, r: usize) -> TileType {
+        if c >= COLS || r >= ROWS {
+            return TileType::SolidBrick;
+        }
+        self.grid[r][c]
+    }
+
+    pub fn set_tile(&mut self, c: usize, r: usize, t: TileType) {
+        if c < COLS && r < ROWS {
+            self.grid[r][c] = t;
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
-        self.entity.vx = self.speed;
-        update_physics(&mut self.entity, dt);
-        self.entity.vy = 0.0; 
-        wrap_around(&mut self.entity, SCREEN_WIDTH);
+    pub fn draw(&self) {
+        for r in 0..ROWS {
+            for c in 0..COLS {
+                let x = c as f32 * TILE_SIZE;
+                let y = r as f32 * TILE_SIZE;
+                match self.grid[r][c] {
+                    TileType::NormalBrick => {
+                        draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, MAROON);
+                        draw_rectangle(x + 2.0, y + 2.0, TILE_SIZE - 4.0, TILE_SIZE - 4.0, RED);
+                        draw_line(x, y + TILE_SIZE / 2.0, x + TILE_SIZE, y + TILE_SIZE / 2.0, 2.0, MAROON);
+                    }
+                    TileType::SolidBrick => {
+                        draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, DARKGRAY);
+                        draw_rectangle(x + 2.0, y + 2.0, TILE_SIZE - 4.0, TILE_SIZE - 4.0, GRAY);
+                    }
+                    TileType::Ladder => {
+                        draw_rectangle(x + 6.0, y, 4.0, TILE_SIZE, DARKBROWN);
+                        draw_rectangle(x + TILE_SIZE - 10.0, y, 4.0, TILE_SIZE, DARKBROWN);
+                        for i in 0..4 {
+                            let ly = y + 4.0 + i as f32 * 8.0;
+                            draw_rectangle(x + 6.0, ly, TILE_SIZE - 12.0, 4.0, DARKBROWN);
+                        }
+                    }
+                    TileType::Empty => {}
+                }
+            }
+        }
+
+        // Draw phased bricks (fading effect)
+        for pb in &self.phased_bricks {
+            let x = pb.col as f32 * TILE_SIZE;
+            let y = pb.row as f32 * TILE_SIZE;
+            let alpha = if pb.timer < 1.0 { 1.0 - pb.timer } else { 0.2 };
+            draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, Color::new(1.0, 0.0, 0.0, alpha));
+        }
+
+        // Draw collectibles
+        for col in &self.collectibles {
+            if col.active {
+                let x = col.col as f32 * TILE_SIZE + TILE_SIZE / 2.0;
+                let y = col.row as f32 * TILE_SIZE + TILE_SIZE / 2.0;
+                let t = get_time() * 5.0;
+                let bounce = (t.sin() * 4.0) as f32;
+                match col.ctype {
+                    CollectibleType::Emerald => {
+                        draw_poly(x, y + bounce, 4, 12.0, 0.0, GREEN);
+                        draw_poly(x, y + bounce, 4, 6.0, 0.0, LIME);
+                    }
+                    CollectibleType::Fuel => {
+                        draw_rectangle(x - 8.0, y - 10.0 + bounce, 16.0, 20.0, YELLOW);
+                        draw_rectangle(x - 6.0, y - 8.0 + bounce, 12.0, 16.0, GOLD);
+                        draw_rectangle(x - 4.0, y - 12.0 + bounce, 8.0, 4.0, GRAY);
+                    }
+                }
+            }
+        }
+
+        // Draw Portal
+        let px = self.portal.col as f32 * TILE_SIZE;
+        let py = self.portal.row as f32 * TILE_SIZE;
+        draw_rectangle(px, py, TILE_SIZE * 2.0, TILE_SIZE * 2.0, DARKGRAY);
+        if self.portal.active {
+            draw_rectangle(px + 4.0, py + 4.0, TILE_SIZE * 2.0 - 8.0, TILE_SIZE * 2.0 - 8.0, BLACK);
+            let t = get_time() * 10.0;
+            for i in 0..5 {
+                let r = (t + i as f64).sin() as f32 * 10.0 + 15.0;
+                draw_circle(px + TILE_SIZE, py + TILE_SIZE, r, Color::new(0.5, 0.0, 1.0, 0.3));
+            }
+            draw_circle(px + TILE_SIZE, py + TILE_SIZE, 10.0, MAGENTA);
+        } else {
+            // Closed doors
+            draw_rectangle(px + 4.0, py + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
+            draw_rectangle(px + TILE_SIZE, py + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
+            draw_line(px + TILE_SIZE, py + 4.0, px + TILE_SIZE, py + TILE_SIZE * 2.0 - 4.0, 2.0, BLACK);
+        }
+    }
+}
+
+impl Player {
+    pub fn new(col: usize, row: usize) -> Self {
+        Self {
+            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE, 24.0, 30.0),
+            fuel: 100.0,
+            is_jetting: false,
+            facing_right: true,
+            dead: false,
+            phase_cooldown: 0.0,
+        }
+    }
+
+    pub fn draw(&self) {
+        if self.dead {
+            return;
+        }
+        let color_main = if self.is_jetting { YELLOW } else { GREEN };
+        let color_shadow = DARKGREEN;
+        
+        draw_rectangle(self.entity.collider.x, self.entity.collider.y, self.entity.collider.w, self.entity.collider.h, color_shadow);
+        draw_rectangle(self.entity.collider.x + 2.0, self.entity.collider.y + 2.0, self.entity.collider.w - 4.0, self.entity.collider.h - 4.0, color_main);
+        
+        // Visor
+        let visor_x = if self.facing_right { self.entity.collider.x + 12.0 } else { self.entity.collider.x + 2.0 };
+        draw_rectangle(visor_x, self.entity.collider.y + 6.0, 10.0, 8.0, SKYBLUE);
+
+        // Jetpack
+        let pack_x = if self.facing_right { self.entity.collider.x - 6.0 } else { self.entity.collider.x + self.entity.collider.w - 2.0 };
+        draw_rectangle(pack_x, self.entity.collider.y + 6.0, 8.0, 16.0, GRAY);
+
+        if self.is_jetting {
+            let flame_y = self.entity.collider.y + 22.0;
+            draw_triangle(
+                vec2(pack_x, flame_y),
+                vec2(pack_x + 8.0, flame_y),
+                vec2(pack_x + 4.0, flame_y + 10.0 + rand::gen_range(0.0, 8.0)),
+                ORANGE
+            );
+        }
+    }
+}
+
+impl Enemy {
+    pub fn new(col: usize, row: usize) -> Self {
+        Self {
+            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE + 8.0, 24.0, 24.0),
+            facing_right: true,
+        }
     }
 
     pub fn draw(&self) {
         let t = get_time() * 10.0;
         let wobble = (t.sin() * 2.0) as f32;
-        // Spiky "Amiga" alien
-        draw_circle(self.entity.x + 12.0, self.entity.y + 12.0, 10.0 + wobble, PURPLE);
-        draw_circle(self.entity.x + 12.0, self.entity.y + 12.0, 6.0, MAGENTA);
-        // Eyes
-        draw_circle(self.entity.x + 8.0, self.entity.y + 10.0, 2.0, WHITE);
-        draw_circle(self.entity.x + 16.0, self.entity.y + 10.0, 2.0, WHITE);
+        let x = self.entity.collider.x;
+        let y = self.entity.collider.y;
+        
+        // Trackbot style
+        draw_rectangle(x, y - wobble, 24.0, 24.0, PURPLE);
+        draw_rectangle(x + 2.0, y + 2.0 - wobble, 20.0, 20.0, MAGENTA);
+        
+        // Treads
+        draw_rectangle(x - 2.0, y + 20.0, 28.0, 6.0, DARKGRAY);
+        
+        let eye_x = if self.facing_right { x + 14.0 } else { x + 4.0 };
+        draw_rectangle(eye_x, y + 6.0 - wobble, 6.0, 6.0, RED);
     }
 }
 
-pub struct Item {
-    pub entity: Entity,
-    pub collected: bool,
-}
-
-impl Item {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self {
-            entity: Entity::new(x, y, 20.0, 20.0),
-            collected: false,
-        }
+pub fn create_test_level() -> Level {
+    let mut grid = [[TileType::Empty; COLS]; ROWS];
+    
+    // Border
+    for c in 0..COLS {
+        grid[0][c] = TileType::SolidBrick;
+        grid[ROWS-1][c] = TileType::SolidBrick;
+    }
+    for r in 0..ROWS {
+        grid[r][0] = TileType::SolidBrick;
+        grid[r][COLS-1] = TileType::SolidBrick;
     }
 
-    pub fn update(&mut self, dt: f32) {
-        update_physics(&mut self.entity, dt);
-    }
+    // Platforms
+    for c in 2..10 { grid[14][c] = TileType::NormalBrick; }
+    for c in 12..20 { grid[10][c] = TileType::NormalBrick; }
+    for c in 4..15 { grid[6][c] = TileType::NormalBrick; }
 
-    pub fn draw(&self) {
-        if !self.collected {
-            // Golden star/fuel pod
-            let t = get_time() * 5.0;
-            let scale = 1.0 + (t.sin() * 0.2) as f32;
-            let x = self.entity.x + 10.0;
-            let y = self.entity.y + 10.0;
-            draw_poly(x, y, 5, 10.0 * scale, t as f32 * 10.0, GOLD);
-            draw_poly(x, y, 5, 6.0 * scale, t as f32 * 10.0, YELLOW);
-        }
-    }
-}
+    // Indestructible blocks
+    grid[14][5] = TileType::SolidBrick;
+    grid[10][15] = TileType::SolidBrick;
 
-#[derive(PartialEq, Clone, Copy)]
-pub enum PartType {
-    Base,
-    Middle,
-    Top,
-}
+    // Ladders
+    for r in 11..18 { grid[r][10] = TileType::Ladder; }
+    for r in 7..11 { grid[r][18] = TileType::Ladder; }
 
-pub struct RocketPart {
-    pub entity: Entity,
-    pub part_type: PartType,
-    pub is_held: bool,
-    pub is_attached: bool,
-}
+    let collectibles = vec![
+        Collectible { col: 3, row: 13, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 9, row: 13, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 14, row: 9, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 19, row: 9, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 5, row: 5, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 13, row: 5, ctype: CollectibleType::Emerald, active: true },
+        Collectible { col: 7, row: 17, ctype: CollectibleType::Fuel, active: true },
+        Collectible { col: 15, row: 17, ctype: CollectibleType::Fuel, active: true },
+    ];
 
-impl RocketPart {
-    pub fn new(x: f32, y: f32, part_type: PartType) -> Self {
-        Self {
-            entity: Entity::new(x, y, 40.0, 20.0),
-            part_type,
-            is_held: false,
-            is_attached: false,
-        }
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        if !self.is_held && !self.is_attached {
-            update_physics(&mut self.entity, dt);
-        }
-    }
-
-    pub fn draw(&self) {
-        if !self.is_attached && !self.is_held {
-            draw_part_at(self.entity.x, self.entity.y, self.part_type);
-        }
-    }
-}
-
-pub struct Rocket {
-    pub x: f32,
-    pub y: f32,
-    pub parts_attached: Vec<PartType>,
-    pub fuel_level: f32,
-}
-
-impl Rocket {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self {
-            x,
-            y,
-            parts_attached: vec![PartType::Base], // Base starts at site
-            fuel_level: 0.0,
-        }
-    }
-
-    pub fn draw(&self) {
-        for (i, part) in self.parts_attached.iter().enumerate() {
-            draw_part_at(self.x, self.y - (i as f32 * 20.0), *part);
-        }
-
-        // Draw fuel bar if fully assembled
-        if self.parts_attached.len() == 3 {
-            // Glass tube container
-            draw_rectangle(self.x + 45.0, self.y - 40.0, 12.0, 60.0, DARKGRAY);
-            draw_rectangle(self.x + 47.0, self.y - 38.0, 8.0, 56.0, BLACK);
-            
-            // Pulsing fuel
-            let fuel_h = self.fuel_level * 56.0;
-            let fuel_color = if (get_time() * 5.0) as i32 % 2 == 0 { SKYBLUE } else { BLUE };
-            draw_rectangle(self.x + 47.0, self.y + 18.0 - fuel_h, 8.0, fuel_h, fuel_color);
-        }
+    Level {
+        grid,
+        phased_bricks: Vec::new(),
+        emeralds_total: 6,
+        emeralds_collected: 0,
+        collectibles,
+        portal: Portal { col: 20, row: 16, active: false }, // 2x2 portal at bottom right
     }
 }

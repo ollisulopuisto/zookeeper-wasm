@@ -7,6 +7,8 @@ use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
+use sapp_jsutils::JsObject;
+use serde::{Deserialize, Serialize};
 
 /// The standard grid width for the game board.
 const COLS: usize = 8;
@@ -19,9 +21,21 @@ const ANIM_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
 
+#[derive(Serialize, Deserialize, Clone)]
+struct LeaderboardEntry {
+    name: String,
+    score: u32,
+    combo: u32,
+}
+
 /// Leaderboard data stored in global storage.
 struct Leaderboard {
-    entries: Vec<(String, u32, u32)>, // name, score, max_combo
+    entries: Vec<LeaderboardEntry>,
+}
+
+extern "C" {
+    fn get_leaderboard_js(game_id: JsObject) -> JsObject;
+    fn save_score_js(game_id: JsObject, name: JsObject, score: u32, combo: u32);
 }
 
 /// Persistent user settings.
@@ -81,7 +95,7 @@ struct Board {
     score: u32,
     time_left: f32,
     selected: Option<(usize, usize)>,
-    high_scores: Vec<(String, u32, u32)>,
+    high_scores: Vec<LeaderboardEntry>,
     new_record: bool,
     combo_count: u32,
     max_combo: u32,
@@ -125,27 +139,31 @@ impl Board {
         board
     }
 
-    fn load_high_scores() -> Vec<(String, u32, u32)> {
-        let lb = storage::get_mut::<Leaderboard>();
-        lb.entries.clone()
-    }
-
-    fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<Leaderboard>();
-        lb.entries = self.high_scores.clone();
+    fn load_high_scores() -> Vec<LeaderboardEntry> {
+        let game_id = JsObject::string("zookeeper");
+        let js_data = unsafe { get_leaderboard_js(game_id) };
+        let mut json_str = String::new();
+        js_data.to_string(&mut json_str);
+        
+        serde_json::from_str(&json_str).unwrap_or_else(|_| {
+            vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES]
+        })
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
-        self.high_scores.iter().any(|(_, s, _)| self.score > *s) || self.high_scores.len() < MAX_HIGH_SCORES
+        self.high_scores.iter().any(|e| self.score > e.score) || self.high_scores.len() < MAX_HIGH_SCORES
     }
 
     fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32) {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
-        self.new_record = self.high_scores.first().map_or(true, |(_, best, _)| score > *best);
-        self.high_scores.push((name, score, combo));
-        self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
-        self.high_scores.truncate(MAX_HIGH_SCORES);
-        self.save_high_scores();
+        self.new_record = self.high_scores.first().map_or(true, |best| score > best.score);
+        
+        let game_id = JsObject::string("zookeeper");
+        let js_name = JsObject::string(&name);
+        unsafe { save_score_js(game_id, js_name, score, combo) };
+        
+        // Refresh local cache
+        self.high_scores = Self::load_high_scores();
     }
 
     fn fill_initial(&mut self, rules: GenerationRules) {
@@ -324,7 +342,7 @@ async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
     // Initialize high score and settings storage
-    storage::store(Leaderboard { entries: vec![("---".to_string(), 0, 0); MAX_HIGH_SCORES] });
+    storage::store(Leaderboard { entries: vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES] });
     storage::store(Settings { muted: false, slow_mode: false });
 
     let textures = [
@@ -727,10 +745,14 @@ async fn main() {
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
             draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
-            draw_text("TOP SCORES:", sw * 0.2, sh * 0.25, font_size * 0.7, WHITE);
-            for (i, (name, score, combo)) in board.high_scores.iter().enumerate() {
-                let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
-                draw_text(&format!("{}. {}  {} (X{})", i + 1, name, score, combo), sw * 0.25, sh * 0.32 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
+            let ts_text = "TOP SCORES:";
+            let tsw = measure_text(ts_text, None, (font_size * 0.7) as _, 1.0).width;
+            draw_text(ts_text, sw / 2.0 - tsw / 2.0, sh * 0.25, font_size * 0.7, WHITE);
+            for (i, entry) in board.high_scores.iter().enumerate() {
+                let color = if entry.score == board.score && board.score > 0 { YELLOW } else { GRAY };
+                let entry_text = format!("{}. {}  {} (X{})", i + 1, entry.name, entry.score, entry.combo);
+                let ew = measure_text(&entry_text, None, (font_size * 0.6) as _, 1.0).width;
+                draw_text(&entry_text, sw / 2.0 - ew / 2.0, sh * 0.32 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
             }
             draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
         }

@@ -3,12 +3,13 @@ mod game;
 mod audio;
 
 use macroquad::prelude::*;
-use game::{Player, Platform, Enemy, Item, Laser, Rocket, RocketPart, PartType, SCREEN_WIDTH, SCREEN_HEIGHT};
+use game::{Player, Enemy, Level, TileType, CollectibleType, SCREEN_WIDTH, SCREEN_HEIGHT, TILE_SIZE, COLS, ROWS, create_test_level};
+use physics::RectCollider;
 use audio::AudioManager;
 
 fn conf() -> Conf {
     Conf {
-        window_title: "Jetpac Clone".to_string(),
+        window_title: "Jetpack DOS Clone".to_string(),
         window_width: SCREEN_WIDTH as i32,
         window_height: SCREEN_HEIGHT as i32,
         ..Default::default()
@@ -22,30 +23,49 @@ enum GameState {
     Victory,
 }
 
+fn check_collision(level: &Level, collider: &RectCollider) -> bool {
+    let left_col = (collider.x / TILE_SIZE).floor() as i32;
+    let right_col = ((collider.x + collider.w - 0.1) / TILE_SIZE).floor() as i32;
+    let top_row = (collider.y / TILE_SIZE).floor() as i32;
+    let bottom_row = ((collider.y + collider.h - 0.1) / TILE_SIZE).floor() as i32;
+
+    for r in top_row..=bottom_row {
+        for c in left_col..=right_col {
+            if c >= 0 && c < COLS as i32 && r >= 0 && r < ROWS as i32 {
+                let tile = level.grid[r as usize][c as usize];
+                if tile == TileType::NormalBrick || tile == TileType::SolidBrick {
+                    return true;
+                }
+            } else {
+                return true; // Out of bounds is solid
+            }
+        }
+    }
+    false
+}
+
+fn get_tile_at(level: &Level, x: f32, y: f32) -> TileType {
+    let c = (x / TILE_SIZE).floor() as i32;
+    let r = (y / TILE_SIZE).floor() as i32;
+    if c >= 0 && c < COLS as i32 && r >= 0 && r < ROWS as i32 {
+        level.grid[r as usize][c as usize]
+    } else {
+        TileType::SolidBrick
+    }
+}
+
 #[macroquad::main(conf)]
 async fn main() {
-    let audio = AudioManager::new().await;
-    let mut player = Player::new();
-    let mut lasers: Vec<Laser> = Vec::new();
-    let platforms = vec![
-        Platform { x: 100.0, y: 150.0, width: 150.0 },
-        Platform { x: 500.0, y: 250.0, width: 200.0 },
-        Platform { x: 200.0, y: 400.0, width: 150.0 },
-    ];
-    let mut enemies = vec![
-        Enemy::new(0.0, 100.0, 200.0),
-        Enemy::new(SCREEN_WIDTH, 300.0, -150.0),
-    ];
-    let mut item = Item::new(400.0, 50.0);
-    
-    let mut rocket = Rocket::new(600.0, SCREEN_HEIGHT - 20.0);
-    let mut parts = vec![
-        RocketPart::new(100.0, 50.0, PartType::Middle),
-        RocketPart::new(500.0, 50.0, PartType::Top),
-    ];
-
+    let mut audio = AudioManager::new().await;
     let mut state = GameState::Menu;
     let mut frame_count = 0;
+
+    let mut level = create_test_level();
+    let mut player = Player::new(2, 13);
+    let mut enemies = vec![
+        Enemy::new(5, 5),
+        Enemy::new(12, 5),
+    ];
 
     loop {
         frame_count += 1;
@@ -54,7 +74,6 @@ async fn main() {
 
         match state {
             GameState::Menu => {
-                // Input polling (with 5-frame delay to prevent accidental start)
                 let start_keyed = is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter);
                 let start_clicked = frame_count > 5 && is_mouse_button_pressed(MouseButton::Left);
                 let start_touched = frame_count > 5 && touches().iter().any(|t| t.phase == TouchPhase::Started);
@@ -63,114 +82,31 @@ async fn main() {
                     state = GameState::Playing;
                 }
 
-                // Drawing
                 clear_background(BLACK);
-                let font_title = sh * 0.08;
-                let font_instr = sh * 0.035;
-                let font_sub = sh * 0.025;
-
-                let title = "JETPAC";
-                let t_w = measure_text(title, None, font_title as u16, 1.0).width;
-                draw_text(title, sw / 2.0 - t_w / 2.0, sh * 0.15, font_title, YELLOW);
+                let title = "JETPACK";
+                let t_w = measure_text(title, None, 60, 1.0).width;
+                draw_text(title, sw / 2.0 - t_w / 2.0, sh * 0.2, 60.0, GREEN);
                 
                 let instr = [
-                    "INSTRUCTIONS",
-                    "ARROWS/WASD or Touch Left side: Move",
-                    "(Left 1/4 = Left, 2/4 = Right)",
-                    "SPACE/ENTER or Touch Right side: Shoot",
-                    "(Top Right = Fly, Bottom Right = Shoot)",
-                    "Build rocket at launch site",
-                    "Collect blue fuel squares",
-                    "Fly into fueled rocket to launch!",
+                    "ARROWS / WASD: Move & Climb",
+                    "SPACE / J: Jetpack (uses fuel)",
+                    "X / K: Phase Shifter (destroy bricks)",
+                    "Collect all Emeralds to open the Portal!"
                 ];
-
-                let start_y = sh * 0.25;
-                let spacing = sh * 0.06;
                 for (i, line) in instr.iter().enumerate() {
-                    let size = if i == 0 { font_instr * 1.2 } else if line.starts_with("(") { font_sub } else { font_instr };
-                    let color = if i == 0 { WHITE } else if line.starts_with("(") { GRAY } else { LIGHTGRAY };
-                    let t_measure = measure_text(line, None, size as u16, 1.0);
-                    draw_text(line, sw / 2.0 - t_measure.width / 2.0, start_y + i as f32 * spacing, size, color);
+                    let w = measure_text(line, None, 20, 1.0).width;
+                    draw_text(line, sw / 2.0 - w / 2.0, sh * 0.4 + i as f32 * 40.0, 20.0, WHITE);
                 }
-
-                let start_text = "TAP TO START";
-                let st_size = font_instr * 1.5;
-                let st_w = measure_text(start_text, None, st_size as u16, 1.0).width;
-                let blink = (get_time() * 3.0) as i32 % 2 == 0;
-                if blink {
-                    draw_text(start_text, sw / 2.0 - st_w / 2.0, sh * 0.85, st_size, GREEN);
-                }
-            }
-            GameState::Victory => {
-                // Input polling
-                let restart_keyed = is_key_pressed(KeyCode::R) || is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter);
-                let restart_clicked = is_mouse_button_pressed(MouseButton::Left);
-                let restart_touched = touches().iter().any(|t| t.phase == TouchPhase::Started);
-
-                if restart_keyed || restart_clicked || restart_touched {
-                    player = Player::new();
-                    lasers.clear();
-                    enemies = vec![
-                        Enemy::new(0.0, 100.0, 200.0),
-                        Enemy::new(SCREEN_WIDTH, 300.0, -150.0),
-                    ];
-                    item = Item::new(400.0, 50.0);
-                    rocket = Rocket::new(600.0, SCREEN_HEIGHT - 20.0);
-                    parts = vec![
-                        RocketPart::new(100.0, 50.0, PartType::Middle),
-                        RocketPart::new(500.0, 50.0, PartType::Top),
-                    ];
-                    state = GameState::Playing;
-                }
-
-                // Drawing
-                clear_background(BLACK);
-                let msg = "ROCKET LAUNCHED!";
-                let font_size = sh * 0.07;
-                let m_width = measure_text(msg, None, font_size as u16, 1.0).width;
-                draw_text(msg, sw / 2.0 - m_width / 2.0, sh / 2.0, font_size, GREEN);
                 
-                let sub = "TAP TO PLAY AGAIN";
-                let s_width = measure_text(sub, None, (font_size * 0.5) as u16, 1.0).width;
-                draw_text(sub, sw / 2.0 - s_width / 2.0, sh / 2.0 + sh * 0.1, font_size * 0.5, WHITE);
-            }
-            GameState::GameOver => {
-                // Input polling
-                let restart_keyed = is_key_pressed(KeyCode::R) || is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter);
-                let restart_clicked = is_mouse_button_pressed(MouseButton::Left);
-                let restart_touched = touches().iter().any(|t| t.phase == TouchPhase::Started);
-
-                if restart_keyed || restart_clicked || restart_touched {
-                    player = Player::new();
-                    lasers.clear();
-                    enemies = vec![
-                        Enemy::new(0.0, 100.0, 200.0),
-                        Enemy::new(SCREEN_WIDTH, 300.0, -150.0),
-                    ];
-                    item = Item::new(400.0, 50.0);
-                    rocket = Rocket::new(600.0, SCREEN_HEIGHT - 20.0);
-                    parts = vec![
-                        RocketPart::new(100.0, 50.0, PartType::Middle),
-                        RocketPart::new(500.0, 50.0, PartType::Top),
-                    ];
-                    state = GameState::Playing;
+                if (get_time() * 3.0) as i32 % 2 == 0 {
+                    let msg = "TAP OR PRESS SPACE TO START";
+                    let mw = measure_text(msg, None, 30, 1.0).width;
+                    draw_text(msg, sw / 2.0 - mw / 2.0, sh * 0.8, 30.0, YELLOW);
                 }
-
-                // Drawing
-                clear_background(BLACK);
-                let msg = "GAME OVER";
-                let font_size = sh * 0.08;
-                let m_width = measure_text(msg, None, font_size as u16, 1.0).width;
-                draw_text(msg, sw / 2.0 - m_width / 2.0, sh / 2.0, font_size, RED);
-                
-                let sub = "TAP TO RESTART";
-                let s_width = measure_text(sub, None, (font_size * 0.5) as u16, 1.0).width;
-                draw_text(sub, sw / 2.0 - s_width / 2.0, sh / 2.0 + sh * 0.1, font_size * 0.5, WHITE);
             }
             GameState::Playing => {
-                let dt = get_frame_time();
+                let dt = get_frame_time().min(0.05); // Cap delta time
 
-                // Use a manual Camera2D to avoid automatic Y-flipping issues
                 let camera = Camera2D {
                     target: vec2(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0),
                     zoom: vec2(2.0 / SCREEN_WIDTH, 2.0 / SCREEN_HEIGHT),
@@ -178,170 +114,216 @@ async fn main() {
                 };
                 set_camera(&camera);
 
-                // Update
-                if player.update(dt, &mut lasers) {
-                    audio.play_laser();
-                }
-                if player.is_jetting {
-                    audio.play_jet();
-                }
+                // --- Player Update ---
+                if !player.dead {
+                    let mut dx = 0.0;
+                    let mut dy = 0.0;
+                    
+                    // Input mapping
+                    let move_left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
+                    let move_right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
+                    let move_up = is_key_down(KeyCode::Up) || is_key_down(KeyCode::W);
+                    let move_down = is_key_down(KeyCode::Down) || is_key_down(KeyCode::S);
+                    let jet_btn = is_key_down(KeyCode::Space) || is_key_down(KeyCode::J);
+                    let phase_btn = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::K);
 
-                item.update(dt);
-                
-                for platform in &platforms {
-                    platform.check_collision(&mut player.entity);
-                    platform.check_collision(&mut item.entity);
-                    for part in &mut parts {
-                        platform.check_collision(&mut part.entity);
+                    // Jetpack logic
+                    player.is_jetting = false;
+                    if jet_btn && player.fuel > 0.0 {
+                        player.is_jetting = true;
+                        player.fuel -= 20.0 * dt;
+                        dy -= 200.0 * dt;
+                        if player.entity.vy > -150.0 {
+                            player.entity.vy -= 800.0 * dt; // Jet thrust
+                        }
+                    } else {
+                        // Gravity
+                        player.entity.vy += 600.0 * dt;
+                    }
+
+                    // Ladder logic
+                    let center_x = player.entity.collider.x + player.entity.collider.w / 2.0;
+                    let center_y = player.entity.collider.y + player.entity.collider.h / 2.0;
+                    let on_ladder = get_tile_at(&level, center_x, center_y) == TileType::Ladder;
+                    
+                    if on_ladder && !player.is_jetting {
+                        player.entity.vy = 0.0;
+                        if move_up { dy -= 150.0 * dt; }
+                        if move_down { dy += 150.0 * dt; }
+                    }
+
+                    // Horizontal movement
+                    if move_left {
+                        dx -= 150.0 * dt;
+                        player.facing_right = false;
+                    }
+                    if move_right {
+                        dx += 150.0 * dt;
+                        player.facing_right = true;
+                    }
+
+                    // Apply horizontal physics
+                    player.entity.collider.x += dx;
+                    if check_collision(&level, &player.entity.collider) {
+                        player.entity.collider.x -= dx; // Revert
+                    }
+
+                    // Apply vertical physics
+                    player.entity.collider.y += dy + player.entity.vy * dt;
+                    if check_collision(&level, &player.entity.collider) {
+                        player.entity.collider.y -= dy + player.entity.vy * dt; // Revert
+                        player.entity.vy = 0.0;
+                    }
+
+                    // Phase Shifter logic
+                    if player.phase_cooldown > 0.0 {
+                        player.phase_cooldown -= dt;
+                    }
+                    if phase_btn && player.phase_cooldown <= 0.0 {
+                        // Find tile directly in front and below
+                        let pc_x = player.entity.collider.x + if player.facing_right { TILE_SIZE } else { -TILE_SIZE/2.0 };
+                        let pc_y = player.entity.collider.y + player.entity.collider.h + 2.0; // Phasing floor
+                        let c = (pc_x / TILE_SIZE).floor() as usize;
+                        let r = (pc_y / TILE_SIZE).floor() as usize;
+                        
+                        if c < COLS && r < ROWS && level.grid[r][c] == TileType::NormalBrick {
+                            level.grid[r][c] = TileType::Empty;
+                            level.phased_bricks.push(game::PhasedBrick { col: c, row: r, timer: 5.0 });
+                            player.phase_cooldown = 0.5;
+                            audio.play_phase();
+                        }
+                    }
+
+                    // Audio
+                    if player.is_jetting {
+                        audio.start_jet();
+                    } else {
+                        audio.stop_jet();
+                    }
+
+                    // Collectibles
+                    for col in &mut level.collectibles {
+                        if col.active {
+                            let cx = col.col as f32 * TILE_SIZE;
+                            let cy = col.row as f32 * TILE_SIZE;
+                            let col_rect = RectCollider::new(cx, cy, TILE_SIZE, TILE_SIZE);
+                            
+                            if player.entity.collider.overlaps(&col_rect) {
+                                col.active = false;
+                                match col.ctype {
+                                    CollectibleType::Emerald => {
+                                        level.emeralds_collected += 1;
+                                        audio.play_gem();
+                                        if level.emeralds_collected >= level.emeralds_total {
+                                            level.portal.active = true;
+                                            audio.play_portal();
+                                        }
+                                    }
+                                    CollectibleType::Fuel => {
+                                        player.fuel = (player.fuel + 50.0).min(100.0);
+                                        audio.play_fuel();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Portal completion
+                    if level.portal.active {
+                        let px = level.portal.col as f32 * TILE_SIZE;
+                        let py = level.portal.row as f32 * TILE_SIZE;
+                        let portal_rect = RectCollider::new(px, py, TILE_SIZE * 2.0, TILE_SIZE * 2.0);
+                        if player.entity.collider.overlaps(&portal_rect) {
+                            state = GameState::Victory;
+                            audio.stop_jet();
+                        }
                     }
                 }
 
+                // --- Environment Update ---
+                let mut p_idx = 0;
+                while p_idx < level.phased_bricks.len() {
+                    level.phased_bricks[p_idx].timer -= dt;
+                    if level.phased_bricks[p_idx].timer <= 0.0 {
+                        let c = level.phased_bricks[p_idx].col;
+                        let r = level.phased_bricks[p_idx].row;
+                        level.grid[r][c] = TileType::NormalBrick;
+                        
+                        // Check if player is telefragged
+                        let brick_rect = RectCollider::new(c as f32 * TILE_SIZE, r as f32 * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        if player.entity.collider.overlaps(&brick_rect) {
+                            player.dead = true;
+                            state = GameState::GameOver;
+                            audio.stop_jet();
+                            audio.play_game_over();
+                        }
+                        level.phased_bricks.remove(p_idx);
+                    } else {
+                        p_idx += 1;
+                    }
+                }
+
+                // --- Enemy Update ---
                 for enemy in &mut enemies {
-                    enemy.update(dt);
-                    // Collision with player
-                    if player.entity.x < enemy.entity.x + enemy.entity.width &&
-                       player.entity.x + player.entity.width > enemy.entity.x &&
-                       player.entity.y < enemy.entity.y + enemy.entity.height &&
-                       player.entity.y + player.entity.height > enemy.entity.y {
+                    let mut dx = if enemy.facing_right { 100.0 * dt } else { -100.0 * dt };
+                    enemy.entity.vy += 600.0 * dt; // Gravity
+                    
+                    enemy.entity.collider.x += dx;
+                    if check_collision(&level, &enemy.entity.collider) {
+                        enemy.entity.collider.x -= dx;
+                        enemy.facing_right = !enemy.facing_right; // Turn around
+                    }
+                    
+                    enemy.entity.collider.y += enemy.entity.vy * dt;
+                    if check_collision(&level, &enemy.entity.collider) {
+                        enemy.entity.collider.y -= enemy.entity.vy * dt;
+                        enemy.entity.vy = 0.0;
+                    }
+
+                    if player.entity.collider.overlaps(&enemy.entity.collider) && !player.dead {
+                        player.dead = true;
                         state = GameState::GameOver;
+                        audio.stop_jet();
                         audio.play_game_over();
                     }
                 }
 
-                for laser in &mut lasers {
-                    laser.update(dt);
-                }
-                lasers.retain(|l| l.lifetime > 0.0);
-
-                for part in &mut parts {
-                    part.update(dt);
-                }
-
-                // Simple collision with item
-                if !item.collected && 
-                   player.entity.x < item.entity.x + item.entity.width &&
-                   player.entity.x + player.entity.width > item.entity.x &&
-                   player.entity.y < item.entity.y + item.entity.height &&
-                   player.entity.y + player.entity.height > item.entity.y {
-                    item.collected = true;
-                    audio.play_pickup();
-                    // If rocket is assembled, item counts as fuel
-                    if rocket.parts_attached.len() == 3 {
-                        rocket.fuel_level = (rocket.fuel_level + 0.2).min(1.0);
-                        item.collected = false; // "respawn" item for more fuel
-                        item.entity.x = rand::gen_range(0.0, SCREEN_WIDTH - 20.0);
-                        item.entity.y = 0.0;
-                    }
-                }
-
-                // Picking up rocket parts
-                if player.holding_part.is_none() {
-                    for part in &mut parts {
-                        if !part.is_attached && !part.is_held &&
-                           player.entity.x < part.entity.x + part.entity.width &&
-                           player.entity.x + player.entity.width > part.entity.x &&
-                           player.entity.y < part.entity.y + part.entity.height &&
-                           player.entity.y + player.entity.height > part.entity.y {
-                            player.holding_part = Some(part.part_type);
-                            part.is_held = true;
-                            audio.play_pickup();
-                            break;
-                        }
-                    }
-                }
-
-                // Dropping off parts at rocket
-                if let Some(held_part) = player.holding_part {
-                    // If player is above rocket launch site
-                    if player.entity.x > rocket.x - 20.0 && player.entity.x < rocket.x + 60.0 {
-                        let next_needed = match rocket.parts_attached.len() {
-                            1 => Some(PartType::Middle),
-                            2 => Some(PartType::Top),
-                            _ => None,
-                        };
-
-                        if Some(held_part) == next_needed {
-                            rocket.parts_attached.push(held_part);
-                            player.holding_part = None;
-                            audio.play_pickup();
-                            // Find and mark the part as attached
-                            if let Some(p) = parts.iter_mut().find(|p| p.part_type == held_part) {
-                                p.is_attached = true;
-                            }
-                        }
-                    }
-                }
-
-                // Collision: Lasers vs Enemies
-                enemies.retain(|enemy| {
-                    let mut hit = false;
-                    for laser in &lasers {
-                        if laser.x > enemy.entity.x && laser.x < enemy.entity.x + enemy.entity.width &&
-                           laser.y > enemy.entity.y && laser.y < enemy.entity.y + enemy.entity.height {
-                            hit = true;
-                            audio.play_explosion();
-                            break;
-                        }
-                    }
-                    !hit
-                });
-
-                // Drawing
-                clear_background(BLACK);
-
-                // Amiga-style "Copper" background gradient (subtle)
-                for i in 0..20 {
-                    let y = i as f32 * (SCREEN_HEIGHT / 20.0);
-                    let intensity = 0.05 + (i as f32 / 20.0) * 0.1;
-                    draw_rectangle(0.0, y, SCREEN_WIDTH, SCREEN_HEIGHT / 20.0, Color::new(0.0, 0.0, intensity, 1.0));
-                }
-
-                // Simple scrolling stars
-                let t = get_time() as f32;
-                for i in 0..50 {
-                    let x = ((i as f32 * 791.0 + t * 50.0) % SCREEN_WIDTH).abs();
-                    let y = (i as f32 * 617.0) % SCREEN_HEIGHT;
-                    let size = if i % 10 == 0 { 2.0 } else { 1.0 };
-                    draw_rectangle(x, y, size, size, Color::new(0.8, 0.8, 1.0, 0.5));
-                }
-                
-                for platform in &platforms {
-                    platform.draw();
-                }
-                
-                rocket.draw();
-                item.draw();
-                
-                for part in &parts {
-                    part.draw();
-                }
-                
+                // --- Render ---
+                clear_background(Color::new(0.05, 0.05, 0.1, 1.0));
+                level.draw();
                 for enemy in &enemies {
                     enemy.draw();
                 }
-                
-                for laser in &lasers {
-                    laser.draw();
-                }
-                
                 player.draw();
 
-                if rocket.fuel_level >= 1.0 {
-                    draw_text("READY TO LAUNCH!", SCREEN_WIDTH / 2.0 - 100.0, SCREEN_HEIGHT / 2.0, 30.0, GREEN);
-                    // Check for player entry to launch
-                    if player.entity.x > rocket.x - 20.0 && player.entity.x < rocket.x + 60.0 &&
-                       player.entity.y > rocket.y - 60.0 {
-                        state = GameState::Victory;
-                        audio.play_win();
-                    }
+                // --- HUD ---
+                set_default_camera();
+                draw_rectangle(0.0, SCREEN_HEIGHT - 24.0, SCREEN_WIDTH, 24.0, DARKGRAY);
+                draw_text(&format!("FUEL: {}%", player.fuel.round()), 10.0, SCREEN_HEIGHT - 6.0, 20.0, YELLOW);
+                draw_text(&format!("EMERALDS: {}/{}", level.emeralds_collected, level.emeralds_total), 200.0, SCREEN_HEIGHT - 6.0, 20.0, GREEN);
+                draw_text(&format!("FPS: {}", get_fps()), SCREEN_WIDTH - 100.0, SCREEN_HEIGHT - 6.0, 20.0, WHITE);
+            }
+            GameState::GameOver | GameState::Victory => {
+                let restart = is_key_pressed(KeyCode::R) || is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left);
+                if restart {
+                    level = create_test_level();
+                    player = Player::new(2, 13);
+                    enemies = vec![Enemy::new(5, 5), Enemy::new(12, 5)];
+                    state = GameState::Playing;
                 }
 
                 set_default_camera();
-                draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 20.0, WHITE);
+                let msg = if matches!(state, GameState::Victory) { "LEVEL COMPLETE!" } else { "GAME OVER" };
+                let color = if matches!(state, GameState::Victory) { GREEN } else { RED };
+                let mw = measure_text(msg, None, 60, 1.0).width;
+                draw_text(msg, sw / 2.0 - mw / 2.0, sh / 2.0, 60.0, color);
+                
+                let sub = "TAP OR PRESS R TO RESTART";
+                let s_width = measure_text(sub, None, 30, 1.0).width;
+                draw_text(sub, sw / 2.0 - s_width / 2.0, sh / 2.0 + 50.0, 30.0, WHITE);
             }
         }
         
         next_frame().await;
     }
 }
-

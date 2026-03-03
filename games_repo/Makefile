@@ -1,4 +1,4 @@
-GAMES := $(patsubst games/%/,%,$(dir $(wildcard games/*/Makefile)))
+GAMES := jetpac zookeeper
 
 .PHONY: all setup build test lint clean rename $(GAMES)
 
