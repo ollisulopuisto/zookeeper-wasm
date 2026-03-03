@@ -91,12 +91,12 @@
                     const data = localStorage.getItem("WASM_GAMES_BUBBLES_HISCORES") || "[]";
                     const bytes = new TextEncoder().encode(data);
                     const len = Math.min(bytes.length, max_len);
-                    const heap = new Uint8Array(importObject.env.memory.buffer);
+                    const heap = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
                     heap.set(bytes.subarray(0, len), ptr);
                     return len;
                 };
                 importObject.env.js_save_leaderboard = function (ptr, len) {
-                    const heap = new Uint8Array(importObject.env.memory.buffer);
+                    const heap = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
                     const data = new TextDecoder().decode(heap.subarray(ptr, ptr + len));
                     localStorage.setItem("WASM_GAMES_BUBBLES_HISCORES", data);
                 };
