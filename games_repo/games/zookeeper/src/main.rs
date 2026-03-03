@@ -104,19 +104,13 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries.clone()
-        } else {
-            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
-            storage::store(Leaderboard { entries: initial.clone() });
-            initial
-        }
+        let lb = storage::get_mut::<Leaderboard>();
+        lb.entries.clone()
     }
 
     fn save_high_scores(&self) {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries = self.high_scores.clone();
-        }
+        let mut lb = storage::get_mut::<Leaderboard>();
+        lb.entries = self.high_scores.clone();
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -372,9 +366,11 @@ async fn main() {
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
+        // Pause button
         let pause_x = mute_x - btn_size - pad;
         let pause_y = pad;
         let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
+        // Snail button
         let snail_x = pause_x - btn_size - pad;
         let snail_y = pad;
         let over_snail = mx >= snail_x - pad && mx <= pause_x && my >= 0.0 && my <= snail_y + btn_size + pad;
@@ -405,7 +401,6 @@ async fn main() {
             }
             GameState::Idle => {
                 board.combo_count = 0;
-                // Check if any moves are possible
                 if !board.can_make_move() {
                     board.state = GameState::NoMoreMoves { timer: 0.0 };
                     if !settings.muted {
@@ -429,9 +424,7 @@ async fn main() {
                                 }
                             }
                             board.selected = None;
-                        } else {
-                            board.selected = Some((cx, cy));
-                        }
+                        } else { board.selected = Some((cx, cy)); }
                     } else { board.selected = None; }
                 }
             }
@@ -483,9 +476,7 @@ async fn main() {
                                 if !settings.muted {
                                     if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
                                 }
-                            } else {
-                                board.state = GameState::Idle;
-                            }
+                            } else { board.state = GameState::Idle; }
                         }
                     }
                 } else { board.state = GameState::Falling { timer }; }
@@ -493,12 +484,9 @@ async fn main() {
             GameState::NoMoreMoves { mut timer } => {
                 timer += dt;
                 if timer >= 2.0 {
-                    // Option B like logic: Clear and reseed
                     for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
                     board.state = GameState::Falling { timer: 0.0 };
-                } else {
-                    board.state = GameState::NoMoreMoves { timer };
-                }
+                } else { board.state = GameState::NoMoreMoves { timer }; }
             }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
@@ -507,12 +495,9 @@ async fn main() {
                     board.level_tiles_cleared = 0;
                     board.level_goal = 50 + board.level * 25;
                     board.time_left = 60.0;
-                    // Option B: Fresh Start (Wipe board)
                     for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
                     board.state = GameState::Falling { timer: 0.0 };
-                } else {
-                    board.state = GameState::LevelUp { timer };
-                }
+                } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, mut name } => {
                 while let Some(c) = get_char_pressed() {
@@ -521,10 +506,12 @@ async fn main() {
                     }
                 }
                 if is_key_pressed(KeyCode::Backspace) { name.pop(); }
+                
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
+                
                 if is_key_pressed(KeyCode::Enter) {
                     board.add_to_leaderboard(name.clone(), score);
                     board.state = GameState::GameOver;
