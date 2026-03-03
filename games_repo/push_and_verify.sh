@@ -9,7 +9,7 @@ fi
 
 git add .
 git commit -m "$MESSAGE"
-git push origin master
+git push origin main
 
 echo "Pushed. Waiting for GitHub Actions to start..."
 sleep 5
