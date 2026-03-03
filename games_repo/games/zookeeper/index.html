@@ -13,38 +13,58 @@
             background: #111;
             overflow: hidden;
             touch-action: none; /* Prevent scroll on touch devices */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         canvas {
-            display: block;
+            display: none; /* Hidden until start */
             width: 100%;
             height: 100%;
             outline: none;
         }
+        #start-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        #start-button {
+            padding: 1.5rem 3rem;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #111;
+            background: #4af;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(74, 170, 255, 0.4);
+            transition: transform 0.1s, background 0.2s;
+        }
+        #start-button:active {
+            transform: scale(0.95);
+        }
+        #start-button:hover {
+            background: #6cf;
+        }
     </style>
 </head>
 <body>
+    <div id="start-overlay">
+        <button id="start-button">START GAME</button>
+    </div>
     <canvas id="glcanvas" tabindex='1'></canvas>
+    
     <!-- Macroquad JS shim -->
     <script src="mq_js_bundle.js"></script>
     <script>
-        // iOS Audio Unlocker
-        const resumeAudio = () => {
-            if (typeof (miniquad_audio_context) !== "undefined" && miniquad_audio_context !== null) {
-                if (miniquad_audio_context.state === 'suspended') {
-                    miniquad_audio_context.resume();
-                }
-            }
-            // Also create and resume a temporary context just in case Macroquad hasn't initialized yet
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioContext();
-            if (ctx.state === 'suspended') ctx.resume();
-            
-            console.log("AudioContext attempt resume");
-            window.removeEventListener('click', resumeAudio);
-            window.removeEventListener('touchstart', resumeAudio);
-        };
-        window.addEventListener('click', resumeAudio);
-        window.addEventListener('touchstart', resumeAudio);
+        const startButton = document.getElementById('start-button');
+        const startOverlay = document.getElementById('start-overlay');
+        const canvas = document.getElementById('glcanvas');
 
         // Centralized Leaderboard System
         window.get_leaderboard = function(gameId) {
@@ -69,7 +89,24 @@
             return name || "";
         };
 
-        load("zookeeper_wasm.wasm");
+        const startGame = () => {
+            // Unlocking audio context via user gesture
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            if (ctx.state === 'suspended') ctx.resume();
+            
+            // Show canvas and start WASM
+            startOverlay.style.display = 'none';
+            canvas.style.display = 'block';
+            
+            load("zookeeper_wasm.wasm");
+        };
+
+        startButton.addEventListener('click', startGame);
+        startButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startGame();
+        });
     </script>
 </body>
 </html>

@@ -33,8 +33,6 @@ struct Settings {
 /// Represents the current state of the game loop and any active animations.
 #[derive(Clone, PartialEq, Debug)]
 enum GameState {
-    /// Waiting for initial tap to start (essential for iOS audio context).
-    WaitingToStart,
     /// The game is waiting for player input.
     Idle,
     /// Two tiles are in the process of being swapped.
@@ -88,7 +86,7 @@ impl Board {
     fn new() -> Self {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
-            state: GameState::WaitingToStart,
+            state: GameState::Idle,
             score: 0,
             time_left: 60.0,
             selected: None,
@@ -343,7 +341,7 @@ async fn main() {
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. });
         
         if is_playing {
             board.time_left -= dt;
@@ -391,14 +389,6 @@ async fn main() {
 
         // --- Logic Updates ---
         match board.state.clone() {
-            GameState::WaitingToStart => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
-                    if !settings.muted {
-                        if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams { volume: 0.01, ..Default::default() }); }
-                    }
-                    board.state = GameState::Idle;
-                }
-            }
             GameState::Idle => {
                 board.combo_count = 0;
                 if !board.can_make_move() {
@@ -620,17 +610,11 @@ async fn main() {
         if settings.slow_mode { draw_rectangle(snail_x, snail_y, btn_size, btn_size, Color::new(0.0, 1.0, 1.0, 0.2)); }
         draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.5) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
-        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
+        if !matches!(board.state, GameState::GameOver | GameState::EnteringName { .. }) {
             draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
         }
 
         // --- Overlays ---
-        if board.state == GameState::WaitingToStart {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            let start_text = "TAP TO START";
-            let tw = measure_text(start_text, None, font_size as _, 1.0).width;
-            draw_text(start_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size, WHITE);
-        }
 
         if let GameState::Paused { .. } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.6));

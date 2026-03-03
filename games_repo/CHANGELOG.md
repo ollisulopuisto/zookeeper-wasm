@@ -2,11 +2,12 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.3.3.38] - 2026-03-03
-### Changed
-- Refined Zookeeper layout to ensure HUD/Progress bar visibility on desktop.
-- Fixed high score name entry to support physical keyboard and Enter key.
-- Improved level-up transition to wait for all falling animations to complete.
+## [26.3.3.42] - 2026-03-03
+### Added
+- **Explicit Start Button:** Added a "START GAME" HTML button to index.html to ensure 100% reliable audio initialization on all browsers (especially iOS Safari).
+- **Robust Audio Unlock:** WASM module now only loads and starts after a direct user gesture, fulfilling strict browser security policies for Web Audio.
+
+## [26.3.3.41] - 2026-03-03
 
 ## [26.3.3.37] - 2026-03-03
 ### Added
