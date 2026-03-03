@@ -4,16 +4,16 @@ build:
 	@echo "Building Bubbles WASM..."
 	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
-	@if [ -f ../../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then 
-		cp ../../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; 
-	elif [ -f ../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then 
-		cp ../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; 
-	else 
-		echo "Error: WASM binary not found in target directory"; exit 1; 
+	@if [ -f ../../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then \
+		cp ../../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; \
+	else \
+		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi
 	cp index.html dist/
-	@if [ ! -f dist/mq_js_bundle.js ]; then 
-		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js dist/; 
+	@if [ ! -f dist/mq_js_bundle.js ]; then \
+		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js dist/; \
 	fi
 
 serve: build
