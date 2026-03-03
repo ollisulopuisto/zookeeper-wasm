@@ -104,6 +104,7 @@ pub struct Game {
     pub bubbles: Vec<Bubble>,
     pub fruits: Vec<Fruit>,
     pub level: Vec<u8>, // 0: empty, 1: wall
+    pub current_level: usize,
     pub game_over: bool,
 }
 
@@ -119,22 +120,54 @@ impl Game {
             players.push(Player::new(1));
         }
 
-        let level = generate_level();
-        let enemies = vec![
-            Enemy::new(vec2(100.0, 50.0)),
-            Enemy::new(vec2(200.0, 50.0)),
-            Enemy::new(vec2(50.0, 100.0)),
-            Enemy::new(vec2(150.0, 150.0)),
-        ];
-
-        Self {
+        let mut game = Self {
             players,
-            enemies,
+            enemies: Vec::new(),
             bubbles: Vec::new(),
             fruits: Vec::new(),
-            level,
+            level: Vec::new(),
+            current_level: 0,
             game_over: false,
+        };
+        game.load_level(0);
+        game
+    }
+
+    fn load_level(&mut self, idx: usize) {
+        self.current_level = idx;
+        self.level = get_level_layout(idx);
+        self.bubbles.clear();
+        self.fruits.clear();
+        
+        // Reset player positions
+        for p in self.players.iter_mut() {
+            p.pos = vec2(40.0 + (p.id as f32 * 160.0), 180.0);
+            p.vel = Vec2::ZERO;
+            p.dead = false;
         }
+
+        // Spawn enemies based on level
+        self.enemies = match idx % 3 {
+            0 => vec![
+                Enemy::new(vec2(100.0, 50.0)),
+                Enemy::new(vec2(200.0, 50.0)),
+                Enemy::new(vec2(50.0, 100.0)),
+                Enemy::new(vec2(150.0, 150.0)),
+            ],
+            1 => vec![
+                Enemy::new(vec2(40.0, 40.0)),
+                Enemy::new(vec2(200.0, 40.0)),
+                Enemy::new(vec2(120.0, 80.0)),
+                Enemy::new(vec2(120.0, 140.0)),
+            ],
+            _ => vec![
+                Enemy::new(vec2(80.0, 40.0)),
+                Enemy::new(vec2(160.0, 40.0)),
+                Enemy::new(vec2(40.0, 80.0)),
+                Enemy::new(vec2(200.0, 80.0)),
+                Enemy::new(vec2(120.0, 120.0)),
+            ],
+        };
     }
 
     pub fn update(&mut self, inputs: &[PlayerInput], audio: &AudioManager) {
@@ -348,10 +381,8 @@ impl Game {
         for f in self.fruits.iter_mut() { f.timer -= 0.016; }
 
         if self.enemies.is_empty() && !self.game_over {
-            self.enemies = vec![
-                Enemy::new(vec2(100.0, 50.0)),
-                Enemy::new(vec2(200.0, 50.0)),
-            ];
+            // Progress to next level
+            self.load_level(self.current_level + 1);
         }
     }
 
@@ -414,11 +445,22 @@ impl Game {
         // Draw Bubbles
         for b in &self.bubbles {
             let frame_idx = (get_time() * 4.0) as usize % 2;
+            
+            // Blinking when about to pop
+            if b.timer < 1.5 && (get_time() * 10.0) as i32 % 2 == 0 {
+                continue;
+            }
+
             let tex = if b.trapped_enemy { &gfx.zen_chan[frame_idx] } else { &gfx.bubble };
-            draw_texture_ex(tex, vx + b.pos.x * scale, vy + b.pos.y * scale, WHITE, DrawTextureParams {
-                dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+            
+            let draw_scale = if b.trapped_enemy { 0.7 } else { 1.0 };
+            let offset = (16.0 * (1.0 - draw_scale)) / 2.0;
+
+            draw_texture_ex(tex, vx + (b.pos.x + offset) * scale, vy + (b.pos.y + offset) * scale, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(16.0 * draw_scale * scale, 16.0 * draw_scale * scale)),
                 ..Default::default()
             });
+            
             if b.trapped_enemy {
                 draw_texture_ex(&gfx.bubble, vx + b.pos.x * scale, vy + b.pos.y * scale, Color::new(1.0, 1.0, 1.0, 0.5), DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
@@ -427,7 +469,7 @@ impl Game {
             }
         }
 
-        // Draw Enemies
+        // Draw Enemies (only untrapped, trapped are drawn with bubbles)
         for e in &self.enemies {
             if !e.trapped {
                 let frame_idx = (e.anim_timer as usize) % 2;
@@ -474,22 +516,37 @@ impl Game {
         if self.players.len() > 1 {
             draw_text(&format!("P2: {:06}", self.players[1].score), vx + 160.0 * scale, vy + 15.0 * scale, font_size as f32, BLUE);
         }
+        draw_text(&format!("LEVEL {:02}", self.current_level + 1), vx + 100.0 * scale, vy + 15.0 * scale, font_size as f32, YELLOW);
     }
 }
 
-fn generate_level() -> Vec<u8> {
+fn get_level_layout(idx: usize) -> Vec<u8> {
     let mut lvl = vec![0u8; 16 * 14];
     // Borders
     for x in 0..16 { lvl[x] = 1; lvl[13 * 16 + x] = 1; }
     for y in 0..14 { lvl[y * 16] = 1; lvl[y * 16 + 15] = 1; }
     
-    // Platforms
-    let platforms = [
-        (2, 4, 12), (2, 7, 5), (9, 7, 5), (2, 10, 12)
-    ];
-    for (px, py, pw) in platforms {
-        for x in 0..pw {
-            lvl[py * 16 + px + x] = 1;
+    match idx % 3 {
+        0 => {
+            // Level 1: Standard platforms
+            let platforms = [(2, 4, 12), (2, 7, 5), (9, 7, 5), (2, 10, 12)];
+            for (px, py, pw) in platforms {
+                for x in 0..pw { lvl[py * 16 + px + x] = 1; }
+            }
+        }
+        1 => {
+            // Level 2: Symmetrical gaps
+            let platforms = [(2, 4, 4), (10, 4, 4), (5, 7, 6), (2, 10, 4), (10, 10, 4)];
+            for (px, py, pw) in platforms {
+                for x in 0..pw { lvl[py * 16 + px + x] = 1; }
+            }
+        }
+        _ => {
+            // Level 3: Vertical-ish focus
+            let platforms = [(2, 3, 3), (11, 3, 3), (6, 6, 4), (2, 9, 3), (11, 9, 3), (5, 11, 6)];
+            for (px, py, pw) in platforms {
+                for x in 0..pw { lvl[py * 16 + px + x] = 1; }
+            }
         }
     }
     lvl
