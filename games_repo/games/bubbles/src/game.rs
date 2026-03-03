@@ -273,6 +273,8 @@ impl Game {
             if b.vel.x.abs() < 0.1 {
                 b.vel.x = 0.0;
                 b.vel.y = -0.6; // Float up
+                // Add wiggle
+                b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
             b.timer -= 0.016;
         }

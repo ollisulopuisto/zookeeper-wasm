@@ -179,70 +179,82 @@ fn generate_death_wav() -> Vec<u8> {
 
 fn generate_music_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let bpm = 135.0;
+    let bpm = 125.0;
     let beat_duration = 60.0 / bpm;
     let sixteen_duration = beat_duration / 4.0;
     
-    // Melody: More complex, driving, Rush-style prog-rock vibes
-    let melody = [
-        392.00, 392.00, 440.00, 466.16, 523.25, 392.00, 349.23, 392.00,
-        392.00, 466.16, 523.25, 587.33, 523.25, 466.16, 440.00, 392.00,
-        392.00, 392.00, 440.00, 466.16, 523.25, 392.00, 349.23, 392.00,
-        783.99, 698.46, 587.33, 523.25, 466.16, 440.00, 349.23, 392.00,
-    ];
+    // Scale: C Major / A Minor
+    let scale = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25];
     
-    let num_sixteens = melody.len();
+    let mut seed = 42u32;
+    let mut next_rand = |max: usize| -> usize {
+        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+        ((seed >> 16) as usize) % max
+    };
+
+    // Generate 10 different "song sections"
+    let mut song_melody = Vec::new();
+    let mut song_bass = Vec::new();
+    
+    for _ in 0..10 {
+        let mut section_melody = Vec::new();
+        let mut section_bass = Vec::new();
+        let root_idx = next_rand(scale.len());
+        
+        for i in 0..16 {
+            // Semi-random melody based on scale
+            let note = if i % 4 == 0 { scale[root_idx] }
+                      else if i % 2 == 0 { scale[next_rand(scale.len())] }
+                      else { scale[next_rand(scale.len())] * (if next_rand(2) == 0 { 1.0 } else { 2.0 }) };
+            section_melody.push(note);
+            
+            // Bass matches the root or follows simply
+            section_bass.push(scale[root_idx] / 2.0);
+        }
+        song_melody.extend(section_melody);
+        song_bass.extend(section_bass);
+    }
+    
+    let num_sixteens = song_melody.len();
     let total_duration = sixteen_duration * num_sixteens as f32;
     let num_samples = (sample_rate as f32 * total_duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
-    let mut seed = 0x1234u32;
+    let mut noise_seed = 0x9876u32;
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let sixteen_idx = (t / sixteen_duration) as usize % melody.len();
+        let sixteen_idx = (t / sixteen_duration) as usize % song_melody.len();
         let beat_idx = (t / beat_duration) as usize;
         
-        // --- Channel 1: Lead (Proggy Square with slight vibrato) ---
-        let vibrato = (t * 6.0 * 2.0 * std::f32::consts::PI).sin() * 2.0;
-        let freq = melody[sixteen_idx] + vibrato;
-        let lead = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.15 } else { -0.15 };
+        // Lead
+        let freq = song_melody[sixteen_idx];
+        let lead = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.12 } else { -0.12 };
         let lead_env = 1.0 - (t % sixteen_duration) / sixteen_duration;
         
-        // --- Channel 2: Driving Bass (Thick pulsing square) ---
-        let bass_notes = [196.00, 196.00, 233.08, 261.63];
-        let bass_freq = bass_notes[(sixteen_idx / 4) % bass_notes.len()];
-        let bass = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.3 { 0.2 } else { -0.2 };
-        let bass_env = if sixteen_idx % 2 == 0 { 1.0 } else { 0.6 };
+        // Bass
+        let bass_freq = song_bass[sixteen_idx];
+        let bass = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.4 { 0.18 } else { -0.18 };
+        let bass_env = if sixteen_idx % 2 == 0 { 1.0 } else { 0.7 };
 
-        // --- Channel 3: Drums (Noise Snare/Hi-hat and Pulse Kick) ---
+        // Drums
         let mut drums = 0.0;
         let t_beat = t % beat_duration;
         
-        // Kick on every beat
-        let kick_freq = 60.0 * (1.0 - (t_beat % 0.1) / 0.1).max(0.0) + 40.0;
-        let kick = (t % 1.0 * kick_freq * 2.0 * std::f32::consts::PI).sin() * 0.3;
-        let kick_env = (1.0 - (t_beat % 0.1) / 0.1).max(0.0);
-        if t_beat < 0.1 { drums += kick * kick_env; }
-
-        // Snare on 2 and 4
-        if beat_idx % 2 == 1 && t_beat < 0.1 {
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-            let noise = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            let snare_env = (1.0 - t_beat / 0.1).powi(2);
-            drums += noise * snare_env * 0.25;
+        // Kick
+        if t_beat < 0.08 {
+            let kick_freq = 50.0 * (1.0 - t_beat / 0.08) + 30.0;
+            drums += (t * kick_freq * 2.0 * std::f32::consts::PI).sin() * 0.25;
         }
 
-        // Hi-hat on every eighth
-        let t_eighth = t % (beat_duration / 2.0);
-        if t_eighth < 0.03 {
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-            let noise = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            let hat_env = (1.0 - t_eighth / 0.03).powi(2);
-            drums += noise * hat_env * 0.1;
+        // Snare
+        if beat_idx % 2 == 1 && t_beat < 0.08 {
+            noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let noise = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+            drums += noise * (1.0 - t_beat / 0.08) * 0.2;
         }
 
-        let mixed = (lead * lead_env + bass * bass_env + drums) * 0.8;
+        let mixed = (lead * lead_env + bass * bass_env + drums) * 0.7;
         samples.push((mixed * 16383.0) as i16);
     }
 
