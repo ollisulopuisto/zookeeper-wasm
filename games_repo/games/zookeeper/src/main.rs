@@ -621,6 +621,7 @@ async fn main() {
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
+                let font_size = sh * 0.05;
 
                 // Also allow triggering JS prompt via a button for mobile users who can't trigger the virtual keyboard
                 let prompt_w = sw * 0.4;

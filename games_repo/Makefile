@@ -17,9 +17,9 @@ build:
 	cp assets/1f680.png docs/assets/1f680.png
 	@for game in $(GAMES); do \
 		echo "Building $$game..."; \
-		$(MAKE) -C games/$$game build; \
-		mkdir -p docs/$$game; \
-		cp -r games/$$game/dist/* docs/$$game/; \
+		$(MAKE) -C games/$$game build || exit 1; \
+		mkdir -p docs/$$game || exit 1; \
+		cp -r games/$$game/dist/* docs/$$game/ || exit 1; \
 	done
 
 test:
