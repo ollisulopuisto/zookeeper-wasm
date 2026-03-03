@@ -345,12 +345,15 @@ impl Game {
         }
     }
 
-    pub fn draw(&self, gfx: &SpriteManager) {
+    pub fn draw(&self, gfx: &SpriteManager, vx: f32, vy: f32, scale: f32) {
         // Draw Level
         for y in 0..14 {
             for x in 0..16 {
                 if self.level[y * 16 + x] == 1 {
-                    draw_texture(&gfx.tile, x as f32 * 16.0, y as f32 * 16.0, WHITE);
+                    draw_texture_ex(&gfx.tile, vx + x as f32 * 16.0 * scale, vy + y as f32 * 16.0 * scale, WHITE, DrawTextureParams {
+                        dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                        ..Default::default()
+                    });
                 }
             }
         }
@@ -358,29 +361,42 @@ impl Game {
         // Draw Bubbles
         for b in &self.bubbles {
             let tex = if b.trapped_enemy { &gfx.zen_chan } else { &gfx.bubble };
-            draw_texture(tex, b.pos.x, b.pos.y, WHITE);
+            draw_texture_ex(tex, vx + b.pos.x * scale, vy + b.pos.y * scale, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                ..Default::default()
+            });
             if b.trapped_enemy {
-                draw_texture(&gfx.bubble, b.pos.x, b.pos.y, Color::new(1.0, 1.0, 1.0, 0.5));
+                draw_texture_ex(&gfx.bubble, vx + b.pos.x * scale, vy + b.pos.y * scale, Color::new(1.0, 1.0, 1.0, 0.5), DrawTextureParams {
+                    dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                    ..Default::default()
+                });
             }
         }
 
         // Draw Enemies
         for e in &self.enemies {
             if !e.trapped {
-                draw_texture(&gfx.zen_chan, e.pos.x, e.pos.y, WHITE);
+                draw_texture_ex(&gfx.zen_chan, vx + e.pos.x * scale, vy + e.pos.y * scale, WHITE, DrawTextureParams {
+                    dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                    ..Default::default()
+                });
             }
         }
 
         // Draw Fruits
         for f in &self.fruits {
-            draw_texture(&gfx.apple, f.pos.x, f.pos.y, WHITE);
+            draw_texture_ex(&gfx.apple, vx + f.pos.x * scale, vy + f.pos.y * scale, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
+                ..Default::default()
+            });
         }
 
         // Draw Players
         for p in &self.players {
             if !p.dead {
                 let tex = if p.id == 0 { &gfx.bub } else { &gfx.bob };
-                draw_texture_ex(tex, p.pos.x, p.pos.y, WHITE, DrawTextureParams {
+                draw_texture_ex(tex, vx + p.pos.x * scale, vy + p.pos.y * scale, WHITE, DrawTextureParams {
+                    dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                     flip_x: p.dir == Direction::Left,
                     ..Default::default()
                 });
@@ -388,14 +404,16 @@ impl Game {
         }
 
         // UI
-        draw_text(&format!("P1: {:06}", self.players[0].score), 10.0, 15.0, 20.0, GREEN);
+        let font_size = (20.0 * scale) as u16;
+        draw_text(&format!("P1: {:06}", self.players[0].score), vx + 10.0 * scale, vy + 15.0 * scale, font_size as f32, GREEN);
         if self.players.len() > 1 {
-            draw_text(&format!("P2: {:06}", self.players[1].score), 160.0, 15.0, 20.0, BLUE);
+            draw_text(&format!("P2: {:06}", self.players[1].score), vx + 160.0 * scale, vy + 15.0 * scale, font_size as f32, BLUE);
         }
 
         if self.game_over {
-            draw_text("GAME OVER", 80.0, 100.0, 40.0, RED);
-            draw_text("PRESS ANY KEY", 85.0, 130.0, 20.0, WHITE);
+            let go_size = (40.0 * scale) as u16;
+            draw_text("GAME OVER", vx + 80.0 * scale, vy + 100.0 * scale, go_size as f32, RED);
+            draw_text("PRESS ANY KEY", vx + 85.0 * scale, vy + 130.0 * scale, font_size as f32, WHITE);
         }
     }
 }

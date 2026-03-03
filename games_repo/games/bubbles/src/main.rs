@@ -26,10 +26,14 @@ async fn main() {
     let mut game = Game::new(false);
     let mut state = AppState::Menu;
     let mut two_player = false;
+    let mut touch_detected = false;
 
     loop {
         // Handle input using virtual resolution
         input.update(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        if !touches().is_empty() {
+            touch_detected = true;
+        }
 
         match state {
             AppState::Menu => {
@@ -83,41 +87,39 @@ async fn main() {
         let sw = screen_width();
         let sh = screen_height();
         let scale = (sw / VIRTUAL_WIDTH).min(sh / VIRTUAL_HEIGHT);
+        let vx = (sw - VIRTUAL_WIDTH * scale) / 2.0;
+        let vy = (sh - VIRTUAL_HEIGHT * scale) / 2.0;
 
         // Clear the whole screen
         clear_background(BLACK);
 
-        // Set camera to scale virtual resolution to fit screen
-        set_camera(&Camera2D {
-            zoom: vec2(scale * 2.0 / sw, -scale * 2.0 / sh),
-            target: vec2(VIRTUAL_WIDTH / 2.0, VIRTUAL_HEIGHT / 2.0),
-            ..Default::default()
-        });
-
         match state {
             AppState::Menu => {
-                draw_text("BUBBLES", 60.0, 60.0, 40.0, SKYBLUE);
-                draw_text("1: 1 PLAYER", 80.0, 100.0, 20.0, WHITE);
-                draw_text("2: 2 PLAYERS", 80.0, 120.0, 20.0, WHITE);
-                draw_text("TOUCH TO START", 75.0, 160.0, 20.0, YELLOW);
+                let title_size = 40.0 * scale;
+                let text_size = 20.0 * scale;
+                draw_text("BUBBLES", vx + 60.0 * scale, vy + 60.0 * scale, title_size, SKYBLUE);
+                draw_text("1: 1 PLAYER", vx + 80.0 * scale, vy + 100.0 * scale, text_size, WHITE);
+                draw_text("2: 2 PLAYERS", vx + 80.0 * scale, vy + 120.0 * scale, text_size, WHITE);
+                draw_text("TOUCH TO START", vx + 75.0 * scale, vy + 160.0 * scale, text_size, YELLOW);
             }
             AppState::Playing | AppState::GameOver => {
-                game.draw(&gfx);
-                if !two_player {
-                    input.draw_debug_touch_regions(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+                game.draw(&gfx, vx, vy, scale);
+                if !two_player && touch_detected {
+                    input.draw_debug_touch_regions(vx, vy, scale, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
                 }
             }
             AppState::Leaderboard => {
-                draw_text("HISCORES", 80.0, 40.0, 30.0, MAGENTA);
+                let title_size = 30.0 * scale;
+                let text_size = 15.0 * scale;
+                draw_text("HISCORES", vx + 80.0 * scale, vy + 40.0 * scale, title_size, MAGENTA);
                 let scores = storage::load_scores();
                 for (i, s) in scores.iter().enumerate() {
-                    draw_text(&format!("{}. {} {:06}", i + 1, s.name, s.score), 60.0, 70.0 + (i as f32 * 15.0), 20.0, WHITE);
+                    draw_text(&format!("{}. {} {:06}", i + 1, s.name, s.score), vx + 60.0 * scale, vy + 70.0 * scale + (i as f32 * 15.0 * scale), text_size, WHITE);
                 }
-                draw_text("PRESS ANY KEY", 75.0, 210.0, 15.0, GRAY);
+                draw_text("PRESS ANY KEY", vx + 75.0 * scale, vy + 210.0 * scale, text_size, GRAY);
             }
         }
 
-        set_default_camera();
         next_frame().await;
     }
 }

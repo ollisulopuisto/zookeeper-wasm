@@ -72,21 +72,22 @@ impl InputManager {
         }
     }
 
-    pub fn draw_debug_touch_regions(&self, virtual_width: f32, virtual_height: f32) {
+    pub fn draw_debug_touch_regions(&self, vx: f32, vy: f32, scale: f32, virtual_width: f32, virtual_height: f32) {
         // Only draw if there are touches or for debugging
         let alpha = 0.3;
+        let font_size = 30.0 * scale;
         // Left
-        draw_rectangle(0.0, virtual_height * 0.8, virtual_width * 0.2, virtual_height * 0.2, Color::new(1.0, 1.0, 1.0, alpha));
+        draw_rectangle(vx, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(1.0, 1.0, 1.0, alpha));
         // Right
-        draw_rectangle(virtual_width * 0.2, virtual_height * 0.8, virtual_width * 0.2, virtual_height * 0.2, Color::new(0.8, 0.8, 0.8, alpha));
+        draw_rectangle(vx + virtual_width * 0.2 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(0.8, 0.8, 0.8, alpha));
         // Jump
-        draw_rectangle(virtual_width * 0.6, virtual_height * 0.8, virtual_width * 0.2, virtual_height * 0.2, Color::new(0.0, 1.0, 0.0, alpha));
+        draw_rectangle(vx + virtual_width * 0.6 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(0.0, 1.0, 0.0, alpha));
         // Bubble
-        draw_rectangle(virtual_width * 0.8, virtual_height * 0.8, virtual_width * 0.2, virtual_height * 0.2, Color::new(1.0, 0.0, 0.0, alpha));
+        draw_rectangle(vx + virtual_width * 0.8 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(1.0, 0.0, 0.0, alpha));
         
-        draw_text("L", 10.0, virtual_height - 20.0, 30.0, WHITE);
-        draw_text("R", virtual_width * 0.2 + 10.0, virtual_height - 20.0, 30.0, WHITE);
-        draw_text("J", virtual_width * 0.6 + 10.0, virtual_height - 20.0, 30.0, WHITE);
-        draw_text("B", virtual_width * 0.8 + 10.0, virtual_height - 20.0, 30.0, WHITE);
+        draw_text("L", vx + 10.0 * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
+        draw_text("R", vx + (virtual_width * 0.2 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
+        draw_text("J", vx + (virtual_width * 0.6 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
+        draw_text("B", vx + (virtual_width * 0.8 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
     }
 }
