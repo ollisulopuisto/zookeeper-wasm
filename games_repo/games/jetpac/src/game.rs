@@ -1,6 +1,5 @@
 use macroquad::prelude::*;
-use crate::physics::{Entity, RectCollider};
-use crate::audio::AudioManager;
+use crate::physics::Entity;
 
 pub const SCREEN_WIDTH: f32 = 800.0;
 pub const SCREEN_HEIGHT: f32 = 600.0;
@@ -65,19 +64,6 @@ pub struct Level {
 }
 
 impl Level {
-    pub fn get_tile(&self, c: usize, r: usize) -> TileType {
-        if c >= COLS || r >= ROWS {
-            return TileType::SolidBrick;
-        }
-        self.grid[r][c]
-    }
-
-    pub fn set_tile(&mut self, c: usize, r: usize, t: TileType) {
-        if c < COLS && r < ROWS {
-            self.grid[r][c] = t;
-        }
-    }
-
     pub fn draw(&self) {
         for r in 0..ROWS {
             for c in 0..COLS {

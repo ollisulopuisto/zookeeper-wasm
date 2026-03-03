@@ -23,7 +23,6 @@ impl RectCollider {
 
 pub struct Entity {
     pub collider: RectCollider,
-    pub vx: f32,
     pub vy: f32,
 }
 
@@ -31,7 +30,6 @@ impl Entity {
     pub fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
         Self {
             collider: RectCollider::new(x, y, w, h),
-            vx: 0.0,
             vy: 0.0,
         }
     }

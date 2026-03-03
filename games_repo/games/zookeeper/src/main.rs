@@ -7,7 +7,6 @@ use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
-use sapp_jsutils::JsObject;
 use serde::{Deserialize, Serialize};
 
 /// The standard grid width for the game board.
@@ -34,8 +33,8 @@ struct Leaderboard {
 }
 
 extern "C" {
-    fn get_leaderboard_js(game_id: JsObject) -> JsObject;
-    fn save_score_js(game_id: JsObject, name: JsObject, score: u32, combo: u32);
+    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
+    fn js_save_leaderboard(ptr: *const u8, len: u32);
 }
 
 /// Persistent user settings.
@@ -140,11 +139,13 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<LeaderboardEntry> {
-        let game_id = JsObject::string("zookeeper");
-        let js_data = unsafe { get_leaderboard_js(game_id) };
-        let mut json_str = String::new();
-        js_data.to_string(&mut json_str);
+        let mut buffer = [0u8; 4096];
+        let len = unsafe { js_load_leaderboard(buffer.as_mut_ptr(), buffer.len() as u32) };
+        if len == 0 {
+            return vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES];
+        }
         
+        let json_str = String::from_utf8_lossy(&buffer[..len as usize]);
         serde_json::from_str(&json_str).unwrap_or_else(|_| {
             vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES]
         })
@@ -158,12 +159,15 @@ impl Board {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
         self.new_record = self.high_scores.first().map_or(true, |best| score > best.score);
         
-        let game_id = JsObject::string("zookeeper");
-        let js_name = JsObject::string(&name);
-        unsafe { save_score_js(game_id, js_name, score, combo) };
-        
-        // Refresh local cache
-        self.high_scores = Self::load_high_scores();
+        // Add locally first
+        self.high_scores.push(LeaderboardEntry { name, score, combo });
+        self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+        self.high_scores.truncate(MAX_HIGH_SCORES);
+
+        // Save to JS
+        if let Ok(json_str) = serde_json::to_string(&self.high_scores) {
+            unsafe { js_save_leaderboard(json_str.as_ptr(), json_str.len() as u32) };
+        }
     }
 
     fn fill_initial(&mut self, rules: GenerationRules) {
@@ -336,6 +340,13 @@ const ENTRY_CHARS: &[char] = &[
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '.', '!', '?'
 ];
+
+/// Centered text drawing helper
+fn draw_text_centered(text: &str, y: f32, size: f32, color: Color) {
+    let sw = screen_width();
+    let dims = measure_text(text, None, size as u16, 1.0);
+    draw_text(text, sw / 2.0 - dims.width / 2.0, y, size, color);
+}
 
 #[macroquad::main(window_conf)]
 async fn main() {
@@ -744,17 +755,14 @@ async fn main() {
 
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
-            let ts_text = "TOP SCORES:";
-            let tsw = measure_text(ts_text, None, (font_size * 0.7) as _, 1.0).width;
-            draw_text(ts_text, sw / 2.0 - tsw / 2.0, sh * 0.25, font_size * 0.7, WHITE);
+            draw_text_centered("GAME OVER", sh * 0.15, font_size, RED);
+            draw_text_centered("TOP SCORES:", sh * 0.25, font_size * 0.7, WHITE);
             for (i, entry) in board.high_scores.iter().enumerate() {
                 let color = if entry.score == board.score && board.score > 0 { YELLOW } else { GRAY };
                 let entry_text = format!("{}. {}  {} (X{})", i + 1, entry.name, entry.score, entry.combo);
-                let ew = measure_text(&entry_text, None, (font_size * 0.6) as _, 1.0).width;
-                draw_text(&entry_text, sw / 2.0 - ew / 2.0, sh * 0.32 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
+                draw_text_centered(&entry_text, sh * 0.32 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
             }
-            draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
+            draw_text_centered("Tap to restart", sh * 0.85, font_size * 0.6, WHITE);
         }
 
         if let GameState::NoMoreMoves { .. } = board.state {
@@ -776,27 +784,20 @@ async fn main() {
 
         if let GameState::EnteringName { score, combo, ref name } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
-            let title = "NEW HIGH SCORE!";
-            let tw = measure_text(title, None, font_size as _, 1.0).width;
-            draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.15, font_size, YELLOW);
+            draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
             
             let stats = format!("SCORE: {}  COMBO: X{}", score, combo);
-            let sw_width = measure_text(&stats, None, (font_size * 0.6) as _, 1.0).width;
-            draw_text(&stats, sw / 2.0 - sw_width / 2.0, sh * 0.25, font_size * 0.6, WHITE);
+            draw_text_centered(&stats, sh * 0.25, font_size * 0.6, WHITE);
 
-            let sub = "Type your name";
-            let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
-            draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.35, font_size * 0.6, GRAY);
+            draw_text_centered("Type your name", sh * 0.35, font_size * 0.6, GRAY);
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
-            let nw = measure_text(&display_name, None, font_size as _, 1.0).width;
-            draw_text(&display_name, sw / 2.0 - nw / 2.0, sh * 0.5, font_size, WHITE);
+            draw_text_centered(&display_name, sh * 0.5, font_size, WHITE);
             let ok_text = "OK";
             let ok_w = sw * 0.3;
             let ok_x = sw / 2.0 - ok_w / 2.0;
             let ok_y = sh * 0.7;
             draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
-            let otw = measure_text(ok_text, None, font_size as _, 1.0).width;
-            draw_text(ok_text, sw / 2.0 - otw / 2.0, ok_y + sh * 0.07, font_size, WHITE);
+            draw_text_centered(ok_text, ok_y + sh * 0.07, font_size, WHITE);
         }
 
         next_frame().await

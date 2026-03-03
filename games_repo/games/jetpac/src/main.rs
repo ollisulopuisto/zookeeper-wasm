@@ -56,7 +56,7 @@ fn get_tile_at(level: &Level, x: f32, y: f32) -> TileType {
 
 #[macroquad::main(conf)]
 async fn main() {
-    let mut audio = AudioManager::new().await;
+    let audio = AudioManager::new().await;
     let mut state = GameState::Menu;
     let mut frame_count = 0;
 
@@ -91,6 +91,9 @@ async fn main() {
                     "ARROWS / WASD: Move & Climb",
                     "SPACE / J: Jetpack (uses fuel)",
                     "X / K: Phase Shifter (destroy bricks)",
+                    "--- TOUCH CONTROLS ---",
+                    "LEFT COL: Climb | MID COL: Move",
+                    "RIGHT TOP: Jet | RIGHT BTM: Phase",
                     "Collect all Emeralds to open the Portal!"
                 ];
                 for (i, line) in instr.iter().enumerate() {
@@ -120,12 +123,29 @@ async fn main() {
                     let mut dy = 0.0;
                     
                     // Input mapping
-                    let move_left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
-                    let move_right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
-                    let move_up = is_key_down(KeyCode::Up) || is_key_down(KeyCode::W);
-                    let move_down = is_key_down(KeyCode::Down) || is_key_down(KeyCode::S);
-                    let jet_btn = is_key_down(KeyCode::Space) || is_key_down(KeyCode::J);
-                    let phase_btn = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::K);
+                    let mut move_left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
+                    let mut move_right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
+                    let mut move_up = is_key_down(KeyCode::Up) || is_key_down(KeyCode::W);
+                    let mut move_down = is_key_down(KeyCode::Down) || is_key_down(KeyCode::S);
+                    let mut jet_btn = is_key_down(KeyCode::Space) || is_key_down(KeyCode::J);
+                    let mut phase_btn = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::K);
+
+                    // Touch mapping
+                    for touch in touches() {
+                        let tx = touch.position.x / sw * SCREEN_WIDTH;
+                        let ty = touch.position.y / sh * SCREEN_HEIGHT;
+
+                        if tx < SCREEN_WIDTH / 3.0 {
+                            if ty < SCREEN_HEIGHT / 2.0 { move_up = true; }
+                            else { move_down = true; }
+                        } else if tx < 2.0 * SCREEN_WIDTH / 3.0 {
+                            if tx < SCREEN_WIDTH / 2.0 { move_left = true; }
+                            else { move_right = true; }
+                        } else {
+                            if ty < SCREEN_HEIGHT / 2.0 { jet_btn = true; }
+                            else if touch.phase == TouchPhase::Started { phase_btn = true; }
+                        }
+                    }
 
                     // Jetpack logic
                     player.is_jetting = false;
@@ -265,7 +285,7 @@ async fn main() {
 
                 // --- Enemy Update ---
                 for enemy in &mut enemies {
-                    let mut dx = if enemy.facing_right { 100.0 * dt } else { -100.0 * dt };
+                    let dx = if enemy.facing_right { 100.0 * dt } else { -100.0 * dt };
                     enemy.entity.vy += 600.0 * dt; // Gravity
                     
                     enemy.entity.collider.x += dx;
