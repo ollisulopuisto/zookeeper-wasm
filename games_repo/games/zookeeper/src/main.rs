@@ -82,6 +82,21 @@ struct Board {
     level_goal: u32,
 }
 
+/// Rules for board generation to allow future tweaks.
+struct GenerationRules {
+    min_initial_moves: usize,
+    max_attempts: usize,
+}
+
+impl Default for GenerationRules {
+    fn default() -> Self {
+        Self {
+            min_initial_moves: 3,
+            max_attempts: 100,
+        }
+    }
+}
+
 impl Board {
     fn new() -> Self {
         let mut board = Self {
@@ -97,7 +112,7 @@ impl Board {
             level_tiles_cleared: 0,
             level_goal: 50,
         };
-        board.fill_initial();
+        board.fill_initial(GenerationRules::default());
         board
     }
 
@@ -124,7 +139,7 @@ impl Board {
         self.save_high_scores();
     }
 
-    fn fill_initial(&mut self) {
+    fn fill_initial(&mut self, rules: GenerationRules) {
         let mut attempts = 0;
         loop {
             for y in 0..ROWS {
@@ -139,14 +154,13 @@ impl Board {
                 }
             }
             
-            // Nudge: Ensure at least 3 possible moves for a better start, 
-            // but fallback to 1 if we're struggling to generate.
-            let min_moves = if attempts < 10 { 3 } else { 1 };
-            if self.count_available_moves() >= min_moves {
+            // Ensure solvability with a "nudge" towards a better starting field.
+            let target_moves = if attempts < 10 { rules.min_initial_moves } else { 1 };
+            if self.count_available_moves() >= target_moves {
                 break;
             }
             attempts += 1;
-            if attempts > 100 { break; } // Safety break
+            if attempts > rules.max_attempts { break; } 
         }
     }
 
@@ -485,8 +499,8 @@ async fn main() {
             GameState::NoMoreMoves { mut timer } => {
                 timer += dt;
                 if timer >= 2.0 {
-                    for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
-                    board.state = GameState::Falling { timer: 0.0 };
+                    board.fill_initial(GenerationRules::default());
+                    board.state = GameState::Idle;
                 } else { board.state = GameState::NoMoreMoves { timer }; }
             }
             GameState::LevelUp { mut timer } => {
@@ -496,8 +510,8 @@ async fn main() {
                     board.level_tiles_cleared = 0;
                     board.level_goal = 50 + board.level * 25;
                     board.time_left = 60.0;
-                    for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
-                    board.state = GameState::Falling { timer: 0.0 };
+                    board.fill_initial(GenerationRules::default());
+                    board.state = GameState::Idle;
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, mut name } => {
