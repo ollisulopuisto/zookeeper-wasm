@@ -59,6 +59,12 @@ enum GameState {
         score: u32,
         name: String,
     },
+    /// The board is being refilled after a shuffle or level up.
+    Reshuffling {
+        target_grid: [[u8; COLS]; ROWS],
+        next_row: usize,
+        timer: f32,
+    },
     /// Celebration for clearing a level.
     LevelUp { timer: f32 },
     /// The timer has reached zero.
@@ -504,19 +510,49 @@ async fn main() {
                 timer += dt;
                 if timer >= 2.0 {
                     board.fill_initial(GenerationRules::default());
-                    board.state = GameState::Idle;
+                    let mut target = [[0u8; COLS]; ROWS];
+                    for y in 0..ROWS { for x in 0..COLS { target[y][x] = board.grid[y][x].unwrap(); } }
+                    board.grid = [[None; COLS]; ROWS];
+                    board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::NoMoreMoves { timer }; }
+            }
+            GameState::Reshuffling { target_grid, mut next_row, mut timer } => {
+                timer += dt;
+                if timer >= 0.05 {
+                    timer = 0.0;
+                    let mut moved = false;
+                    for x in 0..COLS {
+                        for y in (1..ROWS).rev() {
+                            if board.grid[y][x].is_none() && board.grid[y - 1][x].is_some() {
+                                board.grid[y][x] = board.grid[y - 1][x].take();
+                                moved = true;
+                            }
+                        }
+                    }
+                    if next_row > 0 {
+                        for x in 0..COLS { board.grid[0][x] = Some(target_grid[next_row - 1][x]); }
+                        next_row -= 1;
+                        moved = true;
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_fall { play_sound(snd, PlaySoundParams { volume: 0.1, ..Default::default() }); }
+                        }
+                    }
+                    if !moved && next_row == 0 { board.state = GameState::Idle; }
+                    else { board.state = GameState::Reshuffling { target_grid, next_row, timer }; }
+                } else { board.state = GameState::Reshuffling { target_grid, next_row, timer }; }
             }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
                 if timer >= 2.0 {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
-                    // More gradual goal increase (15 tiles per level instead of 25)
                     board.level_goal = 50 + board.level * 15;
                     board.time_left = 60.0;
                     board.fill_initial(GenerationRules::default());
-                    board.state = GameState::Idle;
+                    let mut target = [[0u8; COLS]; ROWS];
+                    for y in 0..ROWS { for x in 0..COLS { target[y][x] = board.grid[y][x].unwrap(); } }
+                    board.grid = [[None; COLS]; ROWS];
+                    board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, mut name } => {
