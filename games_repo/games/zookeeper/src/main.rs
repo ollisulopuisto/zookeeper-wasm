@@ -54,6 +54,8 @@ enum GameState {
     },
     /// Empty spaces are being filled by tiles falling from above.
     Falling { timer: f32 },
+    /// No legal moves are available on the board.
+    NoMoreMoves { timer: f32 },
     /// New High Score name entry.
     EnteringName {
         score: u32,
@@ -102,13 +104,19 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        let lb = storage::get_mut::<Leaderboard>();
-        lb.entries.clone()
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries.clone()
+        } else {
+            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
+            storage::store(Leaderboard { entries: initial.clone() });
+            initial
+        }
     }
 
     fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<Leaderboard>();
-        lb.entries = self.high_scores.clone();
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries = self.high_scores.clone();
+        }
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -203,6 +211,29 @@ impl Board {
         self.grid[y1][x1] = self.grid[y2][x2];
         self.grid[y2][x2] = tmp;
     }
+
+    /// Simulates all possible swaps to see if any move is legally available.
+    fn can_make_move(&mut self) -> bool {
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                // Try Right
+                if x + 1 < COLS {
+                    self.swap(x, y, x + 1, y);
+                    let found = self.has_match_at(x, y) || self.has_match_at(x + 1, y);
+                    self.swap(x, y, x + 1, y);
+                    if found { return true; }
+                }
+                // Try Down
+                if y + 1 < ROWS {
+                    self.swap(x, y, x, y + 1);
+                    let found = self.has_match_at(x, y) || self.has_match_at(x, y + 1);
+                    self.swap(x, y, x, y + 1);
+                    if found { return true; }
+                }
+            }
+        }
+        false
+    }
 }
 
 /// Minimal WAV generator for blips and blops
@@ -294,6 +325,7 @@ async fn main() {
     let snd_fall = load_sound_from_bytes(&create_wav(220.0, 0.05, 0.3)).await.ok();
     let snd_game_over = load_sound_from_bytes(&create_wav(110.0, 0.5, 0.5)).await.ok();
     let snd_level_up = load_sound_from_bytes(&create_wav(880.0, 0.3, 0.5)).await.ok();
+    let snd_reshuffle = load_sound_from_bytes(&create_wav(660.0, 0.2, 0.5)).await.ok();
     
     let mut snd_matches = Vec::new();
     for i in 0..10 {
@@ -317,7 +349,7 @@ async fn main() {
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. });
         
         if is_playing {
             board.time_left -= dt;
@@ -340,12 +372,9 @@ async fn main() {
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
-        // Pause button
         let pause_x = mute_x - btn_size - pad;
         let pause_y = pad;
         let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
-
-        // Slow mode button (Snail)
         let snail_x = pause_x - btn_size - pad;
         let snail_y = pad;
         let over_snail = mx >= snail_x - pad && mx <= pause_x && my >= 0.0 && my <= snail_y + btn_size + pad;
@@ -358,7 +387,7 @@ async fn main() {
             } else if over_pause || is_key_pressed(KeyCode::Space) {
                 match board.state.clone() {
                     GameState::Paused { previous_state } => board.state = *previous_state,
-                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } => {}
+                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } => {}
                     other => board.state = GameState::Paused { previous_state: Box::new(other) },
                 }
             }
@@ -376,7 +405,13 @@ async fn main() {
             }
             GameState::Idle => {
                 board.combo_count = 0;
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
+                // Check if any moves are possible
+                if !board.can_make_move() {
+                    board.state = GameState::NoMoreMoves { timer: 0.0 };
+                    if !settings.muted {
+                        if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
+                    }
+                } else if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
                         let cx = ((mx - offset_x) / cell_size) as usize;
                         let cy = ((my - offset_y) / cell_size) as usize;
@@ -455,6 +490,16 @@ async fn main() {
                     }
                 } else { board.state = GameState::Falling { timer }; }
             }
+            GameState::NoMoreMoves { mut timer } => {
+                timer += dt;
+                if timer >= 2.0 {
+                    // Option B like logic: Clear and reseed
+                    for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
+                    board.state = GameState::Falling { timer: 0.0 };
+                } else {
+                    board.state = GameState::NoMoreMoves { timer };
+                }
+            }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
                 if timer >= 2.0 {
@@ -462,7 +507,9 @@ async fn main() {
                     board.level_tiles_cleared = 0;
                     board.level_goal = 50 + board.level * 25;
                     board.time_left = 60.0;
-                    board.state = GameState::Idle;
+                    // Option B: Fresh Start (Wipe board)
+                    for y in 0..ROWS { for x in 0..COLS { board.grid[y][x] = None; } }
+                    board.state = GameState::Falling { timer: 0.0 };
                 } else {
                     board.state = GameState::LevelUp { timer };
                 }
@@ -474,17 +521,14 @@ async fn main() {
                     }
                 }
                 if is_key_pressed(KeyCode::Backspace) { name.pop(); }
-                
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
-                
                 if is_key_pressed(KeyCode::Enter) {
                     board.add_to_leaderboard(name.clone(), score);
                     board.state = GameState::GameOver;
                 }
-
                 if is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
                         board.add_to_leaderboard(name.clone(), score);
@@ -509,8 +553,8 @@ async fn main() {
         // --- Rendering ---
         let mut shake_x = 0.0;
         let mut shake_y = 0.0;
-        if (board.combo_count > 1 && matches!(board.state, GameState::Clearing { .. })) || matches!(board.state, GameState::LevelUp { .. }) {
-            let intensity = if matches!(board.state, GameState::LevelUp { .. }) { 5.0 } else { (board.combo_count as f32 - 1.0) * 2.0 };
+        if (board.combo_count > 1 && matches!(board.state, GameState::Clearing { .. })) || matches!(board.state, GameState::LevelUp { .. } | GameState::NoMoreMoves { .. }) {
+            let intensity = if matches!(board.state, GameState::LevelUp { .. } | GameState::NoMoreMoves { .. }) { 5.0 } else { (board.combo_count as f32 - 1.0) * 2.0 };
             shake_x = qrand::gen_range(-intensity, intensity);
             shake_y = qrand::gen_range(-intensity, intensity);
         }
@@ -620,6 +664,16 @@ async fn main() {
                 draw_text(&format!("{}. {}  {}", i + 1, name, score), sw * 0.25, sh * 0.38 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
             }
             draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
+        }
+
+        if let GameState::NoMoreMoves { .. } = board.state {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.5));
+            let nmm_text = "NO MORE MOVES!";
+            let tw = measure_text(nmm_text, None, font_size as _, 1.0).width;
+            draw_text(nmm_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size, ORANGE);
+            let sub_text = "Reshuffling...";
+            let stw = measure_text(sub_text, None, (font_size * 0.6) as _, 1.0).width;
+            draw_text(sub_text, sw / 2.0 - stw / 2.0, sh / 2.0 + font_size, font_size * 0.6, WHITE);
         }
 
         if let GameState::LevelUp { .. } = board.state {
