@@ -83,10 +83,6 @@ async fn main() {
         let sw = screen_width();
         let sh = screen_height();
         let scale = (sw / VIRTUAL_WIDTH).min(sh / VIRTUAL_HEIGHT);
-        let vw = VIRTUAL_WIDTH * scale;
-        let vh = VIRTUAL_HEIGHT * scale;
-        let vx = (sw - vw) / 2.0;
-        let vy = (sh - vh) / 2.0;
 
         // Clear the whole screen
         clear_background(BLACK);
