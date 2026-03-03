@@ -211,7 +211,7 @@ async fn main() {
 
     let textures = [
         Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f981.png"), None),
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f427.png"), None),
         Texture2D::from_file_with_format(include_bytes!("../assets/1f42f.png"), None),
         Texture2D::from_file_with_format(include_bytes!("../assets/1f418.png"), None),
         Texture2D::from_file_with_format(include_bytes!("../assets/1f992.png"), None),

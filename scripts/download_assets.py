@@ -3,7 +3,7 @@ import os
 
 EMOJIS = {
     "monkey": "1f435",
-    "lion": "1f981",
+    "penguin": "1f427",
     "tiger": "1f42f",
     "elephant": "1f418",
     "giraffe": "1f992",
