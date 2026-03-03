@@ -1,6 +1,6 @@
 use macroquad::prelude::*;
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct PlayerInput {
     pub left: bool,
     pub right: bool,

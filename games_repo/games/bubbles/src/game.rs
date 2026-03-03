@@ -283,6 +283,13 @@ impl Game {
         }
     }
 
+fn is_wall(level: &[u8], x: i32, y: i32) -> bool {
+    if x < 0 || x >= 16 || y < 0 || y >= 14 { return false; }
+    level[(y * 16 + x) as usize] == 1
+}
+
+impl Game {
+...
     fn handle_player_collision(&mut self, player_idx: usize) {
         let p = &mut self.players[player_idx];
         let (_tx, ty) = ((p.pos.x / TILE_SIZE) as i32, (p.pos.y / TILE_SIZE) as i32);
@@ -290,7 +297,7 @@ impl Game {
         // Ground collision
         let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
         let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
-        if self.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
+        if is_wall(&self.level, ground_tile_x as i32, ground_tile_y as i32) {
             if p.vel.y > 0.0 {
                 p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
                 p.vel.y = 0.0;
@@ -301,10 +308,10 @@ impl Game {
         }
         
         // Wall collisions
-        if self.is_wall((p.pos.x + 4.0) as i32 / 16, ty) || self.is_wall((p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
+        if is_wall(&self.level, (p.pos.x + 4.0) as i32 / 16, ty) || is_wall(&self.level, (p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
             if p.vel.x < 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16 + 16) as f32; p.vel.x = 0.0; }
         }
-        if self.is_wall((p.pos.x + 12.0) as i32 / 16, ty) || self.is_wall((p.pos.x + 12.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
+        if is_wall(&self.level, (p.pos.x + 12.0) as i32 / 16, ty) || is_wall(&self.level, (p.pos.x + 12.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
             if p.vel.x > 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16) as f32; p.vel.x = 0.0; }
         }
     }
@@ -313,7 +320,7 @@ impl Game {
         let e = &mut self.enemies[enemy_idx];
         let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
         let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
-        if self.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
+        if is_wall(&self.level, ground_tile_x as i32, ground_tile_y as i32) {
             if e.vel.y > 0.0 {
                 e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
                 e.vel.y = 0.0;
@@ -321,14 +328,9 @@ impl Game {
         }
         
         // Bounce off walls
-        if self.is_wall((e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 }) as i32 / 16, (e.pos.y + 8.0) as i32 / 16) {
+        if is_wall(&self.level, (e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 }) as i32 / 16, (e.pos.y + 8.0) as i32 / 16) {
             e.vel.x = -e.vel.x;
         }
-    }
-
-    fn is_wall(&self, x: i32, y: i32) -> bool {
-        if x < 0 || x >= 16 || y < 0 || y >= 14 { return false; }
-        self.level[(y * 16 + x) as usize] == 1
     }
 
     pub fn draw(&self, gfx: &SpriteManager) {
