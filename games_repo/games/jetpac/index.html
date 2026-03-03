@@ -78,20 +78,40 @@
     
     <script src="mq_js_bundle.js"></script>
     <script>
+        // Capture AudioContext to resume it on iOS Safari
+        let captured_ctx = null;
+        (function() {
+            const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+            if (OriginalAudioContext) {
+                const NewAudioContext = function() {
+                    const ctx = new OriginalAudioContext();
+                    captured_ctx = ctx;
+                    return ctx;
+                };
+                NewAudioContext.prototype = OriginalAudioContext.prototype;
+                if (window.AudioContext) window.AudioContext = NewAudioContext;
+                if (window.webkitAudioContext) window.webkitAudioContext = NewAudioContext;
+            }
+        })();
+
         let started = false;
         const gameCanvas = document.getElementById('glcanvas');
         
+        function resumeAudio() {
+            if (captured_ctx && captured_ctx.state === 'suspended') {
+                captured_ctx.resume().then(() => {
+                    console.log("AudioContext resumed successfully");
+                });
+            }
+        }
+
         function startGame() {
             if (started) return;
             started = true;
             console.log("Starting JETPAC...");
 
-            // Resume AudioContext
-            const Context = window.AudioContext || window.webkitAudioContext;
-            if (Context) {
-                const ctx = new Context();
-                ctx.resume();
-            }
+            // Try to resume on first click
+            resumeAudio();
 
             document.getElementById('start-overlay').style.display = 'none';
             
@@ -107,6 +127,11 @@
             e.preventDefault();
             startGame();
         });
+        
+        // Add listeners for any subsequent interaction to ensure audio is unlocked
+        window.addEventListener('click', resumeAudio, true);
+        window.addEventListener('touchstart', resumeAudio, true);
+        window.addEventListener('touchend', resumeAudio, true);
 
         gameCanvas.addEventListener('mousedown', () => {
             gameCanvas.focus();
