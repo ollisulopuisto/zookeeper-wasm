@@ -149,7 +149,7 @@ const BUB_BLOW: [u8; 256] = [
     0,0,3,3,3,3,0,0,3,3,3,3,0,0,0,0,
 ];
 
-// --- BOB ANIMATION FRAMES (Blue variants) ---
+// --- BOB ANIMATION FRAMES ---
 const BOB_IDLE: [u8; 256] = [
     0,0,0,0,0,5,5,5,5,5,0,0,0,0,0,0,
     0,0,0,5,5,6,6,6,6,6,5,5,0,0,0,0,
