@@ -59,6 +59,8 @@ enum GameState {
         initials: [char; 3],
         active_index: usize,
     },
+    /// Celebration for clearing a level.
+    LevelUp { timer: f32 },
     /// The timer has reached zero.
     GameOver,
     /// The game is manually paused.
@@ -75,6 +77,9 @@ struct Board {
     high_scores: Vec<(String, u32)>,
     new_record: bool,
     combo_count: u32,
+    level: u32,
+    level_points: u32,
+    level_goal: u32,
 }
 
 impl Board {
@@ -88,6 +93,9 @@ impl Board {
             high_scores: Self::load_high_scores(),
             new_record: false,
             combo_count: 0,
+            level: 1,
+            level_points: 0,
+            level_goal: 500, // Initial goal
         };
         board.fill_initial();
         board
@@ -164,8 +172,9 @@ impl Board {
 
     fn clear_matches(&mut self) {
         let matches = self.find_matches();
-        // Award points with combo multiplier
-        self.score += matches.len() as u32 * 10 * self.combo_count;
+        let match_points = matches.len() as u32 * 10 * self.combo_count;
+        self.score += match_points;
+        self.level_points += match_points;
         self.time_left = (self.time_left + matches.len() as f32 * 0.5).min(60.0);
         for &(x, y) in &matches {
             self.grid[y][x] = None;
@@ -283,6 +292,7 @@ async fn main() {
     let snd_swap = load_sound_from_bytes(&create_wav(440.0, 0.1, 0.5)).await.ok();
     let snd_fall = load_sound_from_bytes(&create_wav(220.0, 0.05, 0.3)).await.ok();
     let snd_game_over = load_sound_from_bytes(&create_wav(110.0, 0.5, 0.5)).await.ok();
+    let snd_level_up = load_sound_from_bytes(&create_wav(880.0, 0.3, 0.5)).await.ok();
     
     // Pre-generate 10 levels of match sounds for combos
     let mut snd_matches = Vec::new();
@@ -306,7 +316,7 @@ async fn main() {
         let mut settings = storage::get_mut::<Settings>();
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. });
         
         if is_playing {
             board.time_left -= get_frame_time();
@@ -340,7 +350,7 @@ async fn main() {
             } else if over_pause || is_key_pressed(KeyCode::Space) {
                 match board.state.clone() {
                     GameState::Paused { previous_state } => board.state = *previous_state,
-                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } => {}
+                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } => {}
                     other => board.state = GameState::Paused { previous_state: Box::new(other) },
                 }
             }
@@ -400,8 +410,17 @@ async fn main() {
             }
             GameState::Clearing { mut timer, matches, match_count } => {
                 timer += get_frame_time();
-                if timer >= ANIM_DURATION { board.clear_matches(); board.state = GameState::Falling { timer: 0.0 }; }
-                else { board.state = GameState::Clearing { timer, matches, match_count }; }
+                if timer >= ANIM_DURATION {
+                    board.clear_matches();
+                    if board.level_points >= board.level_goal {
+                        board.state = GameState::LevelUp { timer: 0.0 };
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
+                        }
+                    } else {
+                        board.state = GameState::Falling { timer: 0.0 };
+                    }
+                } else { board.state = GameState::Clearing { timer, matches, match_count }; }
             }
             GameState::Falling { mut timer } => {
                 timer += get_frame_time();
@@ -425,6 +444,18 @@ async fn main() {
                         } else { board.state = GameState::Idle; }
                     }
                 } else { board.state = GameState::Falling { timer }; }
+            }
+            GameState::LevelUp { mut timer } => {
+                timer += get_frame_time();
+                if timer >= 2.0 {
+                    board.level += 1;
+                    board.level_points = 0;
+                    board.level_goal = 500 + board.level * 250;
+                    board.time_left = (board.time_left + 20.0).min(60.0);
+                    board.state = GameState::Idle;
+                } else {
+                    board.state = GameState::LevelUp { timer };
+                }
             }
             GameState::EnteringName { score, mut initials, mut active_index } => {
                 if is_mouse_button_pressed(MouseButton::Left) {
@@ -467,8 +498,8 @@ async fn main() {
         // --- Rendering ---
         let mut shake_x = 0.0;
         let mut shake_y = 0.0;
-        if board.combo_count > 1 && matches!(board.state, GameState::Clearing { .. }) {
-            let intensity = (board.combo_count as f32 - 1.0) * 2.0;
+        if (board.combo_count > 1 && matches!(board.state, GameState::Clearing { .. })) || matches!(board.state, GameState::LevelUp { .. }) {
+            let intensity = if matches!(board.state, GameState::LevelUp { .. }) { 5.0 } else { (board.combo_count as f32 - 1.0) * 2.0 };
             shake_x = qrand::gen_range(-intensity, intensity);
             shake_y = qrand::gen_range(-intensity, intensity);
         }
@@ -530,6 +561,14 @@ async fn main() {
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
 
+        // Progress Bar
+        let bar_w = board_size;
+        let bar_h = 10.0;
+        let progress = (board.level_points as f32 / board.level_goal as f32).min(1.0);
+        draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w, bar_h, GRAY);
+        draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w * progress, bar_h, SKYBLUE);
+        draw_text(&format!("LEVEL {} - GOAL: {}/{}", board.level, board.level_points, board.level_goal), offset_x, offset_y + board_size + 35.0, font_size * 0.5, WHITE);
+
         if board.combo_count > 1 {
             let combo_text = format!("COMBO X{}", board.combo_count);
             let tw = measure_text(&combo_text, None, (font_size * 1.2) as _, 1.0).width;
@@ -557,6 +596,24 @@ async fn main() {
             let r_text = "Tap to resume";
             let rtw = measure_text(r_text, None, (font_size*0.6) as _, 1.0).width;
             draw_text(r_text, sw / 2.0 - rtw / 2.0, sh * 0.5, font_size * 0.6, GRAY);
+        }
+
+        if board.state == GameState::GameOver {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+            draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
+            draw_text("TOP SCORES:", sw * 0.2, sh * 0.3, font_size * 0.7, WHITE);
+            for (i, (name, score)) in board.high_scores.iter().enumerate() {
+                let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
+                draw_text(&format!("{}. {}  {}", i + 1, name, score), sw * 0.25, sh * 0.38 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
+            }
+            draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
+        }
+
+        if let GameState::LevelUp { .. } = board.state {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.5));
+            let lu_text = "LEVEL UP!";
+            let tw = measure_text(lu_text, None, (font_size * 1.5) as _, 1.0).width;
+            draw_text(lu_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size * 1.5, SKYBLUE);
         }
 
         if let GameState::EnteringName { initials, active_index, .. } = board.state {
@@ -588,17 +645,6 @@ async fn main() {
             draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
             let otw = measure_text(ok_text, None, font_size as _, 1.0).width;
             draw_text(ok_text, sw / 2.0 - otw / 2.0, ok_y + sh * 0.07, font_size, WHITE);
-        }
-
-        if board.state == GameState::GameOver {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
-            draw_text("TOP SCORES:", sw * 0.2, sh * 0.3, font_size * 0.7, WHITE);
-            for (i, (name, score)) in board.high_scores.iter().enumerate() {
-                let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
-                draw_text(&format!("{}. {}  {}", i + 1, name, score), sw * 0.25, sh * 0.38 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
-            }
-            draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
         }
 
         next_frame().await
