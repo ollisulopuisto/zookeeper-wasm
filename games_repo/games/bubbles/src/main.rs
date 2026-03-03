@@ -27,11 +27,8 @@ async fn main() {
     let mut state = AppState::Menu;
     let mut two_player = false;
 
-    // Render target for virtual resolution
-    let render_target = render_target(VIRTUAL_WIDTH as u32, VIRTUAL_HEIGHT as u32);
-    render_target.texture.set_filter(FilterMode::Nearest);
-
     loop {
+        // Handle input using virtual resolution
         input.update(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
         match state {
@@ -82,15 +79,24 @@ async fn main() {
             }
         }
 
-        // Draw to render target
+        // Calculate scaling to fit screen while maintaining aspect ratio
+        let sw = screen_width();
+        let sh = screen_height();
+        let scale = (sw / VIRTUAL_WIDTH).min(sh / VIRTUAL_HEIGHT);
+        let vw = VIRTUAL_WIDTH * scale;
+        let vh = VIRTUAL_HEIGHT * scale;
+        let vx = (sw - vw) / 2.0;
+        let vy = (sh - vh) / 2.0;
+
+        // Clear the whole screen
+        clear_background(BLACK);
+
+        // Set camera to scale virtual resolution to fit screen
         set_camera(&Camera2D {
-            zoom: vec2(2.0 / VIRTUAL_WIDTH, 2.0 / VIRTUAL_HEIGHT),
+            zoom: vec2(scale * 2.0 / sw, -scale * 2.0 / sh),
             target: vec2(VIRTUAL_WIDTH / 2.0, VIRTUAL_HEIGHT / 2.0),
-            render_target: Some(render_target.clone()),
             ..Default::default()
         });
-
-        clear_background(BLACK);
 
         match state {
             AppState::Menu => {
@@ -115,27 +121,7 @@ async fn main() {
             }
         }
 
-        // Draw render target to screen
         set_default_camera();
-        clear_background(BLACK);
-        
-        let screen_width = screen_width();
-        let screen_height = screen_height();
-        let scale = (screen_width / VIRTUAL_WIDTH).min(screen_height / VIRTUAL_HEIGHT);
-        let w = VIRTUAL_WIDTH * scale;
-        let h = VIRTUAL_HEIGHT * scale;
-        let x = (screen_width - w) / 2.0;
-        let y = (screen_height - h) / 2.0;
-
-        draw_texture_ex(
-            &render_target.texture,
-            x, y, WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(w, h)),
-                ..Default::default()
-            },
-        );
-
         next_frame().await;
     }
 }
