@@ -49,7 +49,11 @@ async fn main() {
 
     loop {
         frame_count += 1;
-        let camera = Camera2D::from_display_rect(Rect::new(0.0, 0.0, SCREEN_WIDTH, SCREEN_HEIGHT));
+        let camera = Camera2D {
+            target: vec2(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0),
+            zoom: vec2(2.0 / SCREEN_WIDTH, -2.0 / SCREEN_HEIGHT),
+            ..Default::default()
+        };
 
         match state {
             GameState::Menu => {

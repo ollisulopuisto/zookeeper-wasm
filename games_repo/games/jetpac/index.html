@@ -69,7 +69,7 @@
     <script src="mq_js_bundle.js"></script>
     <script>
         let started = false;
-        const canvas = document.getElementById('glcanvas');
+        const gameCanvas = document.getElementById('glcanvas');
         
         function startGame() {
             if (started) return;
@@ -92,7 +92,7 @@
             document.getElementById('start-overlay').style.display = 'none';
             
             // Focus canvas for keyboard input
-            canvas.focus();
+            gameCanvas.focus();
 
             // Standard Macroquad load
             load("jetpac.wasm");
@@ -104,8 +104,8 @@
             startGame();
         });
 
-        canvas.addEventListener('mousedown', () => {
-            canvas.focus();
+        gameCanvas.addEventListener('mousedown', () => {
+            gameCanvas.focus();
         });
     </script>
 </body>

@@ -632,9 +632,17 @@ async fn main() {
         // 1. Time Bar (Top)
         let time_progress = (board.time_left / 60.0).clamp(0.0, 1.0);
         let time_bar_y = offset_y - font_size - 25.0;
+        let mut time_color = RED;
+        if board.time_left < 10.0 {
+            // Blink faster as time runs out
+            let blink_speed = if board.time_left < 5.0 { 15.0 } else { 8.0 };
+            if (get_time() * blink_speed) as i32 % 2 == 0 {
+                time_color = WHITE;
+            }
+        }
         draw_rectangle(offset_x, time_bar_y, bar_w, bar_h, Color::new(0.3, 0.1, 0.1, 1.0));
-        draw_rectangle(offset_x, time_bar_y, bar_w * time_progress, bar_h, RED);
-        draw_text("TIME", offset_x, time_bar_y - 5.0, font_size * 0.4, RED);
+        draw_rectangle(offset_x, time_bar_y, bar_w * time_progress, bar_h, time_color);
+        draw_text("TIME", offset_x, time_bar_y - 5.0, font_size * 0.4, time_color);
 
         // 2. Score and Level Info
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - pad_y, font_size, WHITE);
