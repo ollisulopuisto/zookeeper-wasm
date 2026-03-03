@@ -27,6 +27,7 @@ struct Leaderboard {
 /// Persistent user settings.
 struct Settings {
     muted: bool,
+    slow_mode: bool,
 }
 
 /// Represents the current state of the game loop and any active animations.
@@ -258,7 +259,7 @@ async fn main() {
 
     // Initialize high score and settings storage
     storage::store(Leaderboard { entries: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
-    storage::store(Settings { muted: false });
+    storage::store(Settings { muted: false, slow_mode: false });
 
     let textures = [
         Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None),
@@ -272,12 +273,14 @@ async fn main() {
 
     let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../assets/1f507.png"), None);
     let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../assets/1f50a.png"), None);
+    let tex_snail = Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None);
     let tex_pause = Texture2D::from_file_with_format(include_bytes!("../assets/23f8.png"), None);
     let tex_play = Texture2D::from_file_with_format(include_bytes!("../assets/25b6.png"), None);
 
     for t in &textures { t.set_filter(FilterMode::Linear); }
     tex_mute_on.set_filter(FilterMode::Linear);
     tex_mute_off.set_filter(FilterMode::Linear);
+    tex_snail.set_filter(FilterMode::Linear);
     tex_pause.set_filter(FilterMode::Linear);
     tex_play.set_filter(FilterMode::Linear);
 
@@ -306,12 +309,13 @@ async fn main() {
         let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
 
         let mut settings = storage::get_mut::<Settings>();
+        let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
 
         // Game Logic State Machine.
         let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. });
         
         if is_playing {
-            board.time_left -= get_frame_time();
+            board.time_left -= dt;
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
                     board.state = GameState::EnteringName { score: board.score, name: "".to_string() };
@@ -331,15 +335,23 @@ async fn main() {
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
+        // Pause button
         let pause_x = mute_x - btn_size - pad;
         let pause_y = pad;
         let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
 
+        // Slow mode button (Snail)
+        let snail_x = pause_x - btn_size - pad;
+        let snail_y = pad;
+        let over_snail = mx >= snail_x - pad && mx <= pause_x && my >= 0.0 && my <= snail_y + btn_size + pad;
+
         if is_mouse_button_pressed(MouseButton::Left) || is_key_pressed(KeyCode::Space) {
             if over_mute && is_mouse_button_pressed(MouseButton::Left) {
                 settings.muted = !settings.muted;
+            } else if over_snail && is_mouse_button_pressed(MouseButton::Left) {
+                settings.slow_mode = !settings.slow_mode;
             } else if over_pause || is_key_pressed(KeyCode::Space) {
-                match board.state.clone() {
+
                     GameState::Paused { previous_state } => board.state = *previous_state,
                     GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } => {}
                     other => board.state = GameState::Paused { previous_state: Box::new(other) },
@@ -350,7 +362,7 @@ async fn main() {
         // --- Logic Updates ---
         match board.state.clone() {
             GameState::WaitingToStart => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if !settings.muted {
                         if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams { volume: 0.01, ..Default::default() }); }
                     }
@@ -359,7 +371,7 @@ async fn main() {
             }
             GameState::Idle => {
                 board.combo_count = 0;
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
                         let cx = ((mx - offset_x) / cell_size) as usize;
                         let cy = ((my - offset_y) / cell_size) as usize;
@@ -384,7 +396,7 @@ async fn main() {
                 }
             }
             GameState::Swapping { x1, y1, x2, y2, mut timer, revert } => {
-                timer += get_frame_time();
+                timer += dt;
                 if timer >= ANIM_DURATION {
                     board.swap(x1, y1, x2, y2);
                     if revert { board.swap(x1, y1, x2, y2); board.state = GameState::Idle; }
@@ -400,7 +412,7 @@ async fn main() {
                 } else { board.state = GameState::Swapping { x1, y1, x2, y2, timer, revert }; }
             }
             GameState::Clearing { mut timer, matches, match_count } => {
-                timer += get_frame_time();
+                timer += dt;
                 if timer >= ANIM_DURATION {
                     board.clear_matches();
                     if board.level_tiles_cleared >= board.level_goal {
@@ -414,7 +426,7 @@ async fn main() {
                 } else { board.state = GameState::Clearing { timer, matches, match_count }; }
             }
             GameState::Falling { mut timer } => {
-                timer += get_frame_time();
+                timer += dt;
                 if timer >= ANIM_DURATION / 2.0 {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
@@ -437,7 +449,7 @@ async fn main() {
                 } else { board.state = GameState::Falling { timer }; }
             }
             GameState::LevelUp { mut timer } => {
-                timer += get_frame_time();
+                timer += dt;
                 if timer >= 2.0 {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
@@ -472,13 +484,13 @@ async fn main() {
                 board.state = GameState::EnteringName { score, name };
             }
             GameState::GameOver => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     board = Board::new();
                     board.state = GameState::Idle;
                 }
             }
             GameState::Paused { .. } => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if let GameState::Paused { previous_state } = board.state { board.state = *previous_state; }
                 }
             }
@@ -563,7 +575,15 @@ async fn main() {
             draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
         }
 
+        // Draw Mute Toggle
         draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        
+        // Draw Slow Mode Toggle
+        if settings.slow_mode {
+            draw_rectangle(snail_x, snail_y, btn_size, btn_size, Color::new(0.0, 1.0, 1.0, 0.2));
+        }
+        draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.5) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+
         if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
             draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
         }
