@@ -30,7 +30,7 @@ struct Settings {
 }
 
 /// Represents the current state of the game loop and any active animations.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 enum GameState {
     /// Waiting for initial tap to start (essential for iOS audio context).
     WaitingToStart,
@@ -55,6 +55,8 @@ enum GameState {
     Falling { timer: f32 },
     /// The timer has reached zero.
     GameOver,
+    /// The game is manually paused.
+    Paused { previous_state: Box<GameState> },
 }
 
 /// Manages the 8x8 grid of animal tiles and the player's session state.
@@ -219,12 +221,16 @@ async fn main() {
 
     let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../assets/1f507.png"), None);
     let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../assets/1f50a.png"), None);
+    let tex_pause = Texture2D::from_file_with_format(include_bytes!("../assets/23f8.png"), None);
+    let tex_play = Texture2D::from_file_with_format(include_bytes!("../assets/25b6.png"), None);
 
     for t in &textures {
         t.set_filter(FilterMode::Linear);
     }
     tex_mute_on.set_filter(FilterMode::Linear);
     tex_mute_off.set_filter(FilterMode::Linear);
+    tex_pause.set_filter(FilterMode::Linear);
+    tex_play.set_filter(FilterMode::Linear);
 
     // Load sounds from embedded bytes
     let snd_swap = load_sound_from_bytes(include_bytes!("../assets/swap.wav")).await.unwrap();
@@ -246,7 +252,10 @@ async fn main() {
 
         let mut settings = storage::get_mut::<Settings>();
 
-        if board.state != GameState::GameOver && board.state != GameState::WaitingToStart {
+        // Game Logic State Machine.
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::WaitingToStart | GameState::Paused { .. });
+        
+        if is_playing {
             board.time_left -= get_frame_time();
             if board.time_left <= 0.0 {
                 board.state = GameState::GameOver;
@@ -257,25 +266,50 @@ async fn main() {
             }
         }
 
-        // Mute button logic & drawing
-        let mute_size = sh * 0.05;
-        let mute_x = sw - mute_size - 10.0;
-        let mute_y = 10.0;
+        // --- UI Buttons ---
+        let pad = 10.0;
+        let btn_size = sh * 0.06;
         let (mx, my) = mouse_position();
-        let over_mute = mx >= mute_x && mx <= mute_x + mute_size && my >= mute_y && my <= mute_y + mute_size;
 
-        if is_mouse_button_pressed(MouseButton::Left) && over_mute {
-            settings.muted = !settings.muted;
+        // Mute button
+        let mute_x = sw - btn_size - pad;
+        let mute_y = pad;
+        let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
+
+        // Pause button
+        let pause_x = mute_x - btn_size - pad;
+        let pause_y = pad;
+        let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
+
+        if is_mouse_button_pressed(MouseButton::Left) {
+            if over_mute {
+                settings.muted = !settings.muted;
+            } else if over_pause {
+                match board.state.clone() {
+                    GameState::Paused { previous_state } => {
+                        board.state = *previous_state;
+                    }
+                    GameState::GameOver | GameState::WaitingToStart => {}
+                    other => {
+                        board.state = GameState::Paused { previous_state: Box::new(other) };
+                    }
+                }
+            }
         }
 
-        match board.state {
+        // --- Logic Updates ---
+        match board.state.clone() {
             GameState::WaitingToStart => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                    // Robust iOS audio context unlock: play a short burst of silence/sound
+                    if !settings.muted {
+                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01 });
+                    }
                     board.state = GameState::Idle;
                 }
             }
             GameState::Idle => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
                         let cx = ((mx - offset_x) / cell_size) as usize;
                         let cy = ((my - offset_y) / cell_size) as usize;
@@ -356,9 +390,16 @@ async fn main() {
                 }
             }
             GameState::GameOver => {
-                if is_mouse_button_pressed(MouseButton::Left) && !over_mute {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     board = Board::new();
-                    board.state = GameState::Idle; // Skip waiting to start on restart
+                    board.state = GameState::Idle;
+                }
+            }
+            GameState::Paused { .. } => {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
+                    if let GameState::Paused { previous_state } = board.state {
+                        board.state = *previous_state;
+                    }
                 }
             }
         }
@@ -398,7 +439,6 @@ async fn main() {
                             }
                         }
                     }
-                    GameState::Falling { timer: _ } => {}
                     _ => {}
                 }
 
@@ -419,39 +459,43 @@ async fn main() {
             }
         }
 
-        // HUD & Overlays
+        // --- HUD & Buttons ---
         let font_size = sh * 0.05;
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
 
-        // Draw Mute Toggle (using textures for Safari compatibility)
-        let pad = 10.0;
-        let mute_size = sh * 0.06; // Slightly larger for touch
-        let mute_x = sw - mute_size - pad;
-        let mute_y = pad;
-        let (mx, my) = mouse_position();
-        let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + mute_size + pad;
-
-        if is_mouse_button_pressed(MouseButton::Left) && over_mute {
-            settings.muted = !settings.muted;
-        }
-
+        // Draw Mute Toggle
         draw_texture_ex(
             if settings.muted { &tex_mute_on } else { &tex_mute_off },
-            mute_x,
-            mute_y,
-            WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(mute_size, mute_size)),
-                ..Default::default()
-            },
+            mute_x, mute_y, WHITE,
+            DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
+        // Draw Pause Toggle
+        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver) {
+            draw_texture_ex(
+                if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause },
+                pause_x, pause_y, WHITE,
+                DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
+            );
+        }
+
+        // --- Overlays ---
         if board.state == GameState::WaitingToStart {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
             let start_text = "TAP TO START";
             let tw = measure_text(start_text, None, font_size as _, 1.0).width;
             draw_text(start_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size, WHITE);
+        }
+
+        if let GameState::Paused { .. } = board.state {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.6));
+            let p_text = "PAUSED";
+            let tw = measure_text(p_text, None, font_size as _, 1.0).width;
+            draw_text(p_text, sw / 2.0 - tw / 2.0, sh * 0.4, font_size, WHITE);
+            let r_text = "Tap to resume";
+            let rtw = measure_text(r_text, None, (font_size*0.6) as _, 1.0).width;
+            draw_text(r_text, sw / 2.0 - rtw / 2.0, sh * 0.5, font_size * 0.6, GRAY);
         }
 
         if board.state == GameState::GameOver {
