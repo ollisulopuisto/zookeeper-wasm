@@ -253,6 +253,11 @@ fn window_conf() -> Conf {
     }
 }
 
+const ENTRY_CHARS: &[char] = &[
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', '.', '!', '?'
+];
+
 #[macroquad::main(window_conf)]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
@@ -306,7 +311,7 @@ async fn main() {
         let board_size = sw.min(sh * 0.8) * 0.95;
         let cell_size = board_size / COLS as f32;
         let offset_x = (sw - board_size) / 2.0;
-        let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
+        let offset_y = (sh - board_size) / 2.0 + (sh * 0.05);
 
         let mut settings = storage::get_mut::<Settings>();
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
@@ -415,14 +420,7 @@ async fn main() {
                 timer += dt;
                 if timer >= ANIM_DURATION {
                     board.clear_matches();
-                    if board.level_tiles_cleared >= board.level_goal {
-                        board.state = GameState::LevelUp { timer: 0.0 };
-                        if !settings.muted {
-                            if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
-                        }
-                    } else {
-                        board.state = GameState::Falling { timer: 0.0 };
-                    }
+                    board.state = GameState::Falling { timer: 0.0 };
                 } else { board.state = GameState::Clearing { timer, matches, match_count }; }
             }
             GameState::Falling { mut timer } => {
@@ -444,7 +442,16 @@ async fn main() {
                                 let idx = (board.combo_count as usize - 1).min(snd_matches.len() - 1);
                                 if let Some(Some(ref snd)) = snd_matches.get(idx) { play_sound(snd, PlaySoundParams::default()); }
                             }
-                        } else { board.state = GameState::Idle; }
+                        } else {
+                            if board.level_tiles_cleared >= board.level_goal {
+                                board.state = GameState::LevelUp { timer: 0.0 };
+                                if !settings.muted {
+                                    if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
+                                }
+                            } else {
+                                board.state = GameState::Idle;
+                            }
+                        }
                     }
                 } else { board.state = GameState::Falling { timer }; }
             }
@@ -467,16 +474,19 @@ async fn main() {
                     }
                 }
                 if is_key_pressed(KeyCode::Backspace) { name.pop(); }
+                
+                let ok_w = sw * 0.3;
+                let ok_x = sw / 2.0 - ok_w / 2.0;
+                let ok_y = sh * 0.7;
+                let ok_h = sh * 0.1;
+                
                 if is_key_pressed(KeyCode::Enter) {
                     board.add_to_leaderboard(name.clone(), score);
                     board.state = GameState::GameOver;
                 }
 
                 if is_mouse_button_pressed(MouseButton::Left) {
-                    let ok_w = sw * 0.3;
-                    let ok_x = sw / 2.0 - ok_w / 2.0;
-                    let ok_y = sh * 0.7;
-                    if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + sh * 0.1 {
+                    if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
                         board.add_to_leaderboard(name.clone(), score);
                         board.state = GameState::GameOver;
                     }
@@ -575,13 +585,8 @@ async fn main() {
             draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
         }
 
-        // Draw Mute Toggle
         draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-        
-        // Draw Slow Mode Toggle
-        if settings.slow_mode {
-            draw_rectangle(snail_x, snail_y, btn_size, btn_size, Color::new(0.0, 1.0, 1.0, 0.2));
-        }
+        if settings.slow_mode { draw_rectangle(snail_x, snail_y, btn_size, btn_size, Color::new(0.0, 1.0, 1.0, 0.2)); }
         draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.5) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
         if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
@@ -632,11 +637,9 @@ async fn main() {
             let sub = "Type your name";
             let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
             draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
-
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
             let nw = measure_text(&display_name, None, font_size as _, 1.0).width;
             draw_text(&display_name, sw / 2.0 - nw / 2.0, sh * 0.5, font_size, WHITE);
-
             let ok_text = "OK";
             let ok_w = sw * 0.3;
             let ok_x = sw / 2.0 - ok_w / 2.0;
