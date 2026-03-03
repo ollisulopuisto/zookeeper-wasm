@@ -623,17 +623,31 @@ async fn main() {
             }
         }
 
-        // --- HUD & Buttons ---
+        // --- HUD & Bars ---
         let font_size = sh * 0.05;
-        draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
-        draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
-
         let bar_w = board_size;
-        let bar_h = 10.0;
+        let bar_h = 12.0;
+        let pad_y = 10.0;
+
+        // 1. Time Bar (Top)
+        let time_progress = (board.time_left / 60.0).clamp(0.0, 1.0);
+        let time_bar_y = offset_y - font_size - 25.0;
+        draw_rectangle(offset_x, time_bar_y, bar_w, bar_h, Color::new(0.3, 0.1, 0.1, 1.0));
+        draw_rectangle(offset_x, time_bar_y, bar_w * time_progress, bar_h, RED);
+        draw_text("TIME", offset_x, time_bar_y - 5.0, font_size * 0.4, RED);
+
+        // 2. Score and Level Info
+        draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - pad_y, font_size, WHITE);
+        let level_text = format!("LEVEL {}", board.level);
+        let ltw = measure_text(&level_text, None, (font_size * 0.8) as _, 1.0).width;
+        draw_text(&level_text, offset_x + board_size - ltw, offset_y - pad_y, font_size * 0.8, WHITE);
+
+        // 3. Level Progress Bar (Bottom)
         let progress = (board.level_tiles_cleared as f32 / board.level_goal as f32).min(1.0);
-        draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w, bar_h, GRAY);
-        draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w * progress, bar_h, SKYBLUE);
-        draw_text(&format!("LEVEL {} - TILES: {}/{}", board.level, board.level_tiles_cleared, board.level_goal), offset_x, offset_y + board_size + 35.0, font_size * 0.5, WHITE);
+        let progress_bar_y = offset_y + board_size + 10.0;
+        draw_rectangle(offset_x, progress_bar_y, bar_w, bar_h, Color::new(0.1, 0.2, 0.3, 1.0));
+        draw_rectangle(offset_x, progress_bar_y, bar_w * progress, bar_h, SKYBLUE);
+        draw_text(&format!("PROGRESS: {}/{}", board.level_tiles_cleared, board.level_goal), offset_x, progress_bar_y + 30.0, font_size * 0.5, SKYBLUE);
 
         if board.combo_count > 1 {
             let combo_text = format!("COMBO X{}", board.combo_count);
