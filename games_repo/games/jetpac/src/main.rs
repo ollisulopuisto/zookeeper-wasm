@@ -75,6 +75,8 @@ fn get_tile_at(level: &Level, x: f32, y: f32) -> TileType {
 #[macroquad::main(conf)]
 async fn main() {
     let audio = AudioManager::new().await;
+    let tex_rocket = load_texture("assets/1f680.png").await.ok();
+    if let Some(ref tex) = tex_rocket { tex.set_filter(FilterMode::Linear); }
     let mut state = GameState::Menu;
     let mut frame_count = 0;
 
@@ -191,7 +193,7 @@ async fn main() {
                         audio.play_jump();
                     }
 
-                    // Ladder logic
+                    // --- Ladder logic ---
                     let center_x = player.entity.collider.x + player.entity.collider.w / 2.0;
                     let center_y = player.entity.collider.y + player.entity.collider.h / 2.0;
                     let current_tile = get_tile_at(&level, center_x, center_y);
@@ -202,6 +204,13 @@ async fn main() {
                         player.entity.vy = 0.0;
                         if move_up { dy -= climb_speed * dt; }
                         if move_down { dy += climb_speed * dt; }
+                    }
+
+                    // --- Energy Charger/Drain Logic ---
+                    if current_tile == TileType::EnergyCharger {
+                        player.fuel = (player.fuel + 60.0 * dt).min(100.0);
+                    } else if current_tile == TileType::EnergyDrain {
+                        player.fuel = (player.fuel - 40.0 * dt).max(0.0);
                     }
 
                     // Horizontal movement
@@ -400,6 +409,14 @@ async fn main() {
                 }
 
                 set_default_camera();
+                if matches!(state, GameState::Victory) {
+                    if let Some(ref tex) = tex_rocket {
+                        draw_texture_ex(tex, sw / 2.0 - 50.0, sh / 2.0 - 150.0, WHITE, DrawTextureParams {
+                            dest_size: Some(vec2(100.0, 100.0)),
+                            ..Default::default()
+                        });
+                    }
+                }
                 let msg = if matches!(state, GameState::Victory) { "LEVEL COMPLETE!" } else { "GAME OVER" };
                 let color = if matches!(state, GameState::Victory) { GREEN } else { RED };
                 let mw = measure_text(msg, None, 60, 1.0).width;

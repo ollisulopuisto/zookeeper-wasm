@@ -7,6 +7,7 @@ pub const TILE_SIZE: f32 = 32.0;
 pub const COLS: usize = 25;
 pub const ROWS: usize = 18; // 18 * 32 = 576, leaves 24 for HUD
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum TileType {
     Empty,
@@ -285,6 +286,10 @@ pub fn create_test_level() -> Level {
 
     // Spikes
     for c in 10..15 { grid[ROWS-2][c] = TileType::Spikes; }
+
+    // Energy
+    grid[13][3] = TileType::EnergyCharger;
+    grid[13][9] = TileType::EnergyDrain;
 
     // Ladders
     for r in 11..18 { grid[r][10] = TileType::Ladder; }

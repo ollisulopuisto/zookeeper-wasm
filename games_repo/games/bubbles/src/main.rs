@@ -90,7 +90,7 @@ async fn main() {
 
         match state {
             AppState::Menu => {
-                draw_text("BUBBLES", 60.0, 60.0, 40.0, CYAN);
+                draw_text("BUBBLES", 60.0, 60.0, 40.0, SKYBLUE);
                 draw_text("1: 1 PLAYER", 80.0, 100.0, 20.0, WHITE);
                 draw_text("2: 2 PLAYERS", 80.0, 120.0, 20.0, WHITE);
                 draw_text("TOUCH TO START", 75.0, 160.0, 20.0, YELLOW);

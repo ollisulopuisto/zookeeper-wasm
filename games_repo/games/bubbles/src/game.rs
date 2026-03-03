@@ -117,9 +117,10 @@ impl Game {
     pub fn update(&mut self, inputs: &[PlayerInput], audio: &AudioManager) {
         if self.game_over { return; }
 
-        for (i, p) in self.players.iter_mut().enumerate() {
-            if p.dead { continue; }
+        for i in 0..self.players.len() {
+            if self.players[i].dead { continue; }
             let input = &inputs[i];
+            let p = &mut self.players[i];
 
             // Horizontal movement
             if input.left {
@@ -151,13 +152,15 @@ impl Game {
                 audio.play_bubble_blow();
             }
 
+            let p = &mut self.players[i];
             // Apply gravity
             p.vel.y += 0.2;
 
             // Physics and screen wrap
             p.pos += p.vel;
-            self.handle_player_collision(p);
+            self.handle_player_collision(i);
             
+            let p = &mut self.players[i];
             if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
             if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
             if p.pos.y > VIRTUAL_HEIGHT { p.pos.y = -16.0; }
@@ -177,7 +180,8 @@ impl Game {
         self.bubbles.retain(|b| b.timer > 0.0);
 
         // Update Enemies
-        for e in self.enemies.iter_mut() {
+        for i in 0..self.enemies.len() {
+            let e = &mut self.enemies[i];
             if e.trapped {
                 e.pos.y -= 0.5;
                 e.trap_timer -= 0.016;
@@ -189,9 +193,10 @@ impl Game {
                 e.pos.x += e.vel.x;
                 e.vel.y += 0.2;
                 e.pos.y += e.vel.y;
-                self.handle_enemy_collision(e);
+                self.handle_enemy_collision(i);
             }
             
+            let e = &mut self.enemies[i];
             if e.pos.x < -16.0 { e.pos.x = VIRTUAL_WIDTH; }
             if e.pos.x > VIRTUAL_WIDTH { e.pos.x = -16.0; }
             if e.pos.y > VIRTUAL_HEIGHT { e.pos.y = -16.0; }
@@ -214,8 +219,10 @@ impl Game {
         }
 
         // Collision: Players vs Bubbles/Enemies
-        for p in self.players.iter_mut().filter(|p| !p.dead) {
-            let p_rect = p.rect();
+        let mut game_over_now = false;
+        for i in 0..self.players.len() {
+            if self.players[i].dead { continue; }
+            let p_rect = self.players[i].rect();
             
             // Pop trapped bubbles
             for b in self.bubbles.iter_mut() {
@@ -243,10 +250,10 @@ impl Game {
             // Player vs Enemies
             for e in self.enemies.iter_mut().filter(|e| !e.trapped && !e.dead) {
                 if p_rect.overlaps(&e.rect()) {
-                    p.dead = true;
+                    self.players[i].dead = true;
                     audio.play_death();
                     if self.players.iter().all(|p| p.dead) {
-                        self.game_over = true;
+                        game_over_now = true;
                     }
                 }
             }
@@ -255,12 +262,13 @@ impl Game {
             for f in self.fruits.iter_mut() {
                 let f_rect = Rect::new(f.pos.x, f.pos.y, 16.0, 16.0);
                 if p_rect.overlaps(&f_rect) {
-                    p.score += f.score_val;
+                    self.players[i].score += f.score_val;
                     f.timer = 0.0;
                     audio.play_fruit_collect();
                 }
             }
         }
+        if game_over_now { self.game_over = true; }
 
         self.enemies.retain(|e| !e.dead);
         self.fruits.retain(|f| f.timer > 0.0);
@@ -275,8 +283,9 @@ impl Game {
         }
     }
 
-    fn handle_player_collision(&mut self, p: &mut Player) {
-        let (tx, ty) = ((p.pos.x / TILE_SIZE) as i32, (p.pos.y / TILE_SIZE) as i32);
+    fn handle_player_collision(&mut self, player_idx: usize) {
+        let p = &mut self.players[player_idx];
+        let (_tx, ty) = ((p.pos.x / TILE_SIZE) as i32, (p.pos.y / TILE_SIZE) as i32);
         
         // Ground collision
         let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
@@ -300,7 +309,8 @@ impl Game {
         }
     }
 
-    fn handle_enemy_collision(&mut self, e: &mut Enemy) {
+    fn handle_enemy_collision(&mut self, enemy_idx: usize) {
+        let e = &mut self.enemies[enemy_idx];
         let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
         let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
         if self.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
