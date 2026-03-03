@@ -7,7 +7,7 @@ def main():
     # CalVer (SemVer-compatible): YY.M.DHHMM
     version = f"{now.year % 100}.{now.month}.{now.day}{now.hour:02}{now.minute:02}"
     
-    cargo_path = os.path.join(os.path.dirname(__file__), "..", "games_repo", "games", "jetpac_wasm", "Cargo.toml")
+    cargo_path = os.path.join(os.path.dirname(__file__), "..", "games_repo", "games", "jetpac", "Cargo.toml")
     
     with open(cargo_path, "r") as f:
         content = f.read()

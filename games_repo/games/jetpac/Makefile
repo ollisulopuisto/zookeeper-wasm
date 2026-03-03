@@ -4,11 +4,12 @@ build:
 	@echo "Building Jetpac WASM..."
 	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
-	@if [ -f ../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm ]; then \
-		cp ../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm dist/jetpac_wasm.wasm; \
+	@if [ -f ../../target/wasm32-unknown-unknown/release/jetpac.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/jetpac.wasm dist/jetpac.wasm; \
 	elif [ -f ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm ]; then \
-		cp ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm dist/jetpac_wasm.wasm; \
-	else \
+		cp ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm dist/jetpac.wasm; \
+	fi
+
 		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi
 	cp index.html dist/

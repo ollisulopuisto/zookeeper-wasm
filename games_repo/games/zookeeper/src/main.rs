@@ -125,16 +125,28 @@ impl Board {
     }
 
     fn fill_initial(&mut self) {
-        for y in 0..ROWS {
-            for x in 0..COLS {
-                loop {
-                    let tile = (qrand::rand() % TILE_TYPES as u32) as u8;
-                    self.grid[y][x] = Some(tile);
-                    if !self.has_match_at(x, y) {
-                        break;
+        let mut attempts = 0;
+        loop {
+            for y in 0..ROWS {
+                for x in 0..COLS {
+                    loop {
+                        let tile = (qrand::rand() % TILE_TYPES as u32) as u8;
+                        self.grid[y][x] = Some(tile);
+                        if !self.has_match_at(x, y) {
+                            break;
+                        }
                     }
                 }
             }
+            
+            // Nudge: Ensure at least 3 possible moves for a better start, 
+            // but fallback to 1 if we're struggling to generate.
+            let min_moves = if attempts < 10 { 3 } else { 1 };
+            if self.count_available_moves() >= min_moves {
+                break;
+            }
+            attempts += 1;
+            if attempts > 100 { break; } // Safety break
         }
     }
 
@@ -204,27 +216,26 @@ impl Board {
         self.grid[y2][x2] = tmp;
     }
 
-    /// Simulates all possible swaps to see if any move is legally available.
-    fn can_make_move(&mut self) -> bool {
+    /// Counts how many legal moves (swaps that result in a match) are available.
+    fn count_available_moves(&mut self) -> usize {
+        let mut count = 0;
         for y in 0..ROWS {
             for x in 0..COLS {
                 // Try Right
                 if x + 1 < COLS {
                     self.swap(x, y, x + 1, y);
-                    let found = self.has_match_at(x, y) || self.has_match_at(x + 1, y);
+                    if self.has_match_at(x, y) || self.has_match_at(x + 1, y) { count += 1; }
                     self.swap(x, y, x + 1, y);
-                    if found { return true; }
                 }
                 // Try Down
                 if y + 1 < ROWS {
                     self.swap(x, y, x, y + 1);
-                    let found = self.has_match_at(x, y) || self.has_match_at(x, y + 1);
+                    if self.has_match_at(x, y) || self.has_match_at(x, y + 1) { count += 1; }
                     self.swap(x, y, x, y + 1);
-                    if found { return true; }
                 }
             }
         }
-        false
+        count
     }
 }
 
@@ -391,7 +402,7 @@ async fn main() {
         match board.state.clone() {
             GameState::Idle => {
                 board.combo_count = 0;
-                if !board.can_make_move() {
+                if board.count_available_moves() == 0 {
                     board.state = GameState::NoMoreMoves { timer: 0.0 };
                     if !settings.muted {
                         if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
@@ -490,6 +501,7 @@ async fn main() {
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, mut name } => {
+                let mut submitted = false;
                 while let Some(c) = get_char_pressed() {
                     if c.is_alphanumeric() || c == ' ' {
                         if name.len() < 10 { name.push(c); }
@@ -502,17 +514,21 @@ async fn main() {
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
                 
-                if is_key_pressed(KeyCode::Enter) {
+                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
                     board.add_to_leaderboard(name.clone(), score);
                     board.state = GameState::GameOver;
+                    submitted = true;
                 }
-                if is_mouse_button_pressed(MouseButton::Left) {
+                if !submitted && is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
                         board.add_to_leaderboard(name.clone(), score);
                         board.state = GameState::GameOver;
+                        submitted = true;
                     }
                 }
-                board.state = GameState::EnteringName { score, name };
+                if !submitted {
+                    board.state = GameState::EnteringName { score, name };
+                }
             }
             GameState::GameOver => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {

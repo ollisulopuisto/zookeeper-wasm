@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "games_repo/games/jetpac_wasm",
+    "games_repo/games/jetpac",
     "games_repo/games/zookeeper",
 ]
 resolver = "2"

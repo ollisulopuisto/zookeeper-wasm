@@ -27,17 +27,42 @@ impl Player {
 
     pub fn update(&mut self, dt: f32, lasers: &mut Vec<Laser>) -> bool {
         let mut fired = false;
-        self.is_jetting = is_key_down(KeyCode::Up);
+        
+        let mut touch_left = false;
+        let mut touch_right = false;
+        let mut touch_up = false;
+        let mut touch_space = false;
+
+        for touch in touches() {
+            let x = touch.position.x / screen_width() * SCREEN_WIDTH;
+            let y = touch.position.y / screen_height() * SCREEN_HEIGHT;
+
+            if x < SCREEN_WIDTH / 2.0 {
+                if x < SCREEN_WIDTH / 4.0 {
+                    touch_left = true;
+                } else {
+                    touch_right = true;
+                }
+            } else {
+                if y < SCREEN_HEIGHT / 2.0 {
+                    touch_up = true;
+                } else {
+                    touch_space = true;
+                }
+            }
+        }
+
+        self.is_jetting = is_key_down(KeyCode::Up) || is_key_down(KeyCode::W) || touch_up;
         
         if self.is_jetting {
             const THRUST: f32 = 800.0;
             self.entity.vy -= THRUST * dt;
         }
 
-        if is_key_down(KeyCode::Left) {
+        if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) || touch_left {
             self.entity.vx = -300.0;
             self.facing_right = false;
-        } else if is_key_down(KeyCode::Right) {
+        } else if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) || touch_right {
             self.entity.vx = 300.0;
             self.facing_right = true;
         } else {
@@ -48,7 +73,7 @@ impl Player {
             self.shoot_cooldown -= dt;
         }
 
-        if is_key_down(KeyCode::Space) && self.shoot_cooldown <= 0.0 {
+        if (is_key_down(KeyCode::Space) || is_key_down(KeyCode::Enter) || touch_space) && self.shoot_cooldown <= 0.0 {
             let laser_x = if self.facing_right { self.entity.x + self.entity.width } else { self.entity.x - 20.0 };
             let laser_vx = if self.facing_right { 600.0 } else { -600.0 };
             lasers.push(Laser::new(laser_x, self.entity.y + 20.0, laser_vx));

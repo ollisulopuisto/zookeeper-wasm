@@ -5,7 +5,7 @@ This project is a monorepo for WASM-based games written in Rust.
 ## Workspaces
 
 Managed by root `Cargo.toml`:
-- `games_repo/games/jetpac_wasm/`: A WASM implementation of Jetpac.
+- `games_repo/games/jetpac/`: A WASM implementation of Jetpac.
 - `games_repo/games/zookeeper/`: A match-3 style game.
 
 ## Key Files
