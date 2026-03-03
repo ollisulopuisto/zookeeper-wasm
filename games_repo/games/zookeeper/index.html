@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Zookeeper WASM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            overflow: hidden;
+            touch-action: none; /* Prevent scroll on touch devices */
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" tabindex='1'></canvas>
+    <!-- Macroquad JS shim -->
+    <script src="mq_js_bundle.js"></script>
+    <script>
+        // iOS Audio Unlocker
+        const resumeAudio = () => {
+            if (typeof (miniquad_audio_context) !== "undefined" && miniquad_audio_context !== null) {
+                if (miniquad_audio_context.state === 'suspended') {
+                    miniquad_audio_context.resume();
+                }
+            }
+            // Also create and resume a temporary context just in case Macroquad hasn't initialized yet
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            if (ctx.state === 'suspended') ctx.resume();
+            
+            console.log("AudioContext attempt resume");
+            window.removeEventListener('click', resumeAudio);
+            window.removeEventListener('touchstart', resumeAudio);
+        };
+        window.addEventListener('click', resumeAudio);
+        window.addEventListener('touchstart', resumeAudio);
+
+        load("zookeeper_wasm.wasm");
+    </script>
+</body>
+</html>
