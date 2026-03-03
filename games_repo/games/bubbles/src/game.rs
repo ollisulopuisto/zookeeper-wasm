@@ -409,12 +409,6 @@ impl Game {
         if self.players.len() > 1 {
             draw_text(&format!("P2: {:06}", self.players[1].score), vx + 160.0 * scale, vy + 15.0 * scale, font_size as f32, BLUE);
         }
-
-        if self.game_over {
-            let go_size = (40.0 * scale) as u16;
-            draw_text("GAME OVER", vx + 80.0 * scale, vy + 100.0 * scale, go_size as f32, RED);
-            draw_text("PRESS ANY KEY", vx + 85.0 * scale, vy + 130.0 * scale, font_size as f32, WHITE);
-        }
     }
 }
 

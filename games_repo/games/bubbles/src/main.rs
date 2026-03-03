@@ -67,7 +67,7 @@ async fn main() {
                     audio.stop_music();
                     // Save high scores
                     for p in &game.players {
-                        storage::add_score("BUB".to_string(), p.score);
+                        storage::add_score(if p.id == 0 { "BUB".to_string() } else { "BOB".to_string() }, p.score);
                     }
                 }
             }
@@ -102,10 +102,27 @@ async fn main() {
                 draw_text("2: 2 PLAYERS", vx + 80.0 * scale, vy + 120.0 * scale, text_size, WHITE);
                 draw_text("TOUCH TO START", vx + 75.0 * scale, vy + 160.0 * scale, text_size, YELLOW);
             }
-            AppState::Playing | AppState::GameOver => {
+            AppState::Playing => {
                 game.draw(&gfx, vx, vy, scale);
                 if !two_player && touch_detected {
                     input.draw_debug_touch_regions(vx, vy, scale, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+                }
+            }
+            AppState::GameOver => {
+                let title_size = 40.0 * scale;
+                let text_size = 25.0 * scale;
+                let sub_size = 15.0 * scale;
+                
+                draw_text("GAME OVER", vx + 45.0 * scale, vy + 60.0 * scale, title_size, RED);
+                
+                draw_text(&format!("P1 SCORE: {:06}", game.players[0].score), vx + 40.0 * scale, vy + 100.0 * scale, text_size, GREEN);
+                if game.players.len() > 1 {
+                    draw_text(&format!("P2 SCORE: {:06}", game.players[1].score), vx + 40.0 * scale, vy + 135.0 * scale, text_size, BLUE);
+                }
+                
+                let blink = (get_time() * 2.0) as i32 % 2 == 0;
+                if blink {
+                    draw_text("PRESS ANY KEY TO CONTINUE", vx + 35.0 * scale, vy + 190.0 * scale, sub_size, YELLOW);
                 }
             }
             AppState::Leaderboard => {
