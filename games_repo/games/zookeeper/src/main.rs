@@ -19,13 +19,7 @@ const ANIM_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
 
-/// Leaderboard data stored in global storage.
-/// All games in this monorepo can use this same struct to share the same localStorage slot.
-struct GlobalLeaderboard {
-    zookeeper: Vec<(String, u32)>,
-}
-
-/// Persistent user settings.
+/// Persistent user settings stored in Macroquad's type-indexed storage.
 struct Settings {
     muted: bool,
 }
@@ -78,7 +72,7 @@ struct Board {
     new_record: bool,
     combo_count: u32,
     level: u32,
-    level_points: u32,
+    level_tiles_cleared: u32,
     level_goal: u32,
 }
 
@@ -90,25 +84,37 @@ impl Board {
             score: 0,
             time_left: 60.0,
             selected: None,
-            high_scores: Self::load_high_scores(),
+            high_scores: Self::load_high_scores_from_js(),
             new_record: false,
             combo_count: 0,
             level: 1,
-            level_points: 0,
-            level_goal: 500,
+            level_tiles_cleared: 0,
+            level_goal: 50, // Clear 50 tiles to advance
         };
         board.fill_initial();
         board
     }
 
-    fn load_high_scores() -> Vec<(String, u32)> {
-        let lb = storage::get_mut::<GlobalLeaderboard>();
-        lb.zookeeper.clone()
+    /// Loads high scores using the centralized JS leaderboard system.
+    fn load_high_scores_from_js() -> Vec<(String, u32)> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use miniquad::window::js_eval;
+            let json = js_eval("window.get_leaderboard('zookeeper')");
+            if let Ok(entries) = serde_json::from_str::<Vec<HighUint>>(&json) {
+                return entries.into_iter().map(|e| (e.name, e.score)).collect();
+            }
+        }
+        vec![("---".to_string(), 0); MAX_HIGH_SCORES]
     }
 
-    fn save_high_scores(&self) {
-        let mut lb = storage::get_mut::<GlobalLeaderboard>();
-        lb.zookeeper = self.high_scores.clone();
+    /// Saves high scores using the centralized JS leaderboard system.
+    fn save_score_to_js(name: &str, score: u32) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            use miniquad::window::js_eval;
+            js_eval(&format!("window.save_score('zookeeper', '{}', {})", name, score));
+        }
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -116,12 +122,10 @@ impl Board {
     }
 
     fn add_to_leaderboard(&mut self, name: String, score: u32) {
-        let name = if name.trim().is_empty() { "ANON".to_string() } else { name };
+        let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
         self.new_record = self.high_scores.first().map_or(true, |(_, best)| score > *best);
-        self.high_scores.push((name, score));
-        self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
-        self.high_scores.truncate(MAX_HIGH_SCORES);
-        self.save_high_scores();
+        Self::save_score_to_js(&name, score);
+        self.high_scores = Self::load_high_scores_from_js();
     }
 
     fn fill_initial(&mut self) {
@@ -175,8 +179,10 @@ impl Board {
         let matches = self.find_matches();
         let match_points = matches.len() as u32 * 10 * self.combo_count;
         self.score += match_points;
-        self.level_points += match_points;
-        self.time_left = (self.time_left + matches.len() as f32 * 0.5).min(60.0);
+        self.level_tiles_cleared += matches.len() as u32;
+        // In the requested refinement, time only resets on level clear.
+        // We could still add a tiny bit of time per match to reward fast play,
+        // but let's stick to the "timer only resets on level clear" for now.
         for &(x, y) in &matches {
             self.grid[y][x] = None;
         }
@@ -204,6 +210,13 @@ impl Board {
         self.grid[y1][x1] = self.grid[y2][x2];
         self.grid[y2][x2] = tmp;
     }
+}
+
+/// Helper for JSON deserialization of high scores.
+#[derive(serde::Deserialize)]
+struct HighUint {
+    name: String,
+    score: u32,
 }
 
 /// Minimal WAV generator for blips and blops
@@ -258,8 +271,7 @@ fn window_conf() -> Conf {
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
-    // Initialize centralized high score and settings storage
-    storage::store(GlobalLeaderboard { zookeeper: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
+    // Initialize persistent settings
     storage::store(Settings { muted: false });
 
     let textures = [
@@ -405,7 +417,7 @@ async fn main() {
                 timer += get_frame_time();
                 if timer >= ANIM_DURATION {
                     board.clear_matches();
-                    if board.level_points >= board.level_goal {
+                    if board.level_tiles_cleared >= board.level_goal {
                         board.state = GameState::LevelUp { timer: 0.0 };
                         if !settings.muted {
                             if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
@@ -442,55 +454,45 @@ async fn main() {
                 timer += get_frame_time();
                 if timer >= 2.0 {
                     board.level += 1;
-                    board.level_points = 0;
-                    board.level_goal = 500 + board.level * 250;
-                    board.time_left = (board.time_left + 20.0).min(60.0);
+                    board.level_tiles_cleared = 0;
+                    board.level_goal = 50 + board.level * 25;
+                    board.time_left = 60.0; // Timer resets on level clear
                     board.state = GameState::Idle;
                 } else {
                     board.state = GameState::LevelUp { timer };
                 }
             }
             GameState::EnteringName { score, mut name } => {
-                // Keyboard Input
                 while let Some(c) = get_char_pressed() {
                     if c.is_alphanumeric() || c == ' ' {
-                        if name.len() < 10 {
-                            name.push(c);
-                        }
+                        if name.len() < 10 { name.push(c); }
                     }
                 }
-                if is_key_pressed(KeyCode::Backspace) {
-                    name.pop();
-                }
+                if is_key_pressed(KeyCode::Backspace) { name.pop(); }
                 if is_key_pressed(KeyCode::Enter) {
                     board.add_to_leaderboard(name.clone(), score);
                     board.state = GameState::GameOver;
                 }
 
-                // Touch/Mobile handling
                 if is_mouse_button_pressed(MouseButton::Left) {
-                    // Tap to use native prompt
-                    let prompt_y = sh * 0.5;
-                    if my >= prompt_y - 50.0 && my <= prompt_y + 50.0 {
-                        // JavaScript bridge call
-                        let new_name = unsafe {
-                            // On non-WASM this will do nothing, on WASM it triggers the helper
-                            let js = "window.ask_name()";
-                            // We can't easily get the return value back synchronously without more boilerplate,
-                            // but we can assume the user typed it or we use a more complex async bridge.
-                            // For simplicity, let's just use the in-game display and provide a button.
-                            "".to_string() 
-                        };
-                        // Actually, let's just make the "OK" button work for touch
-                    }
-
-                    // OK Button
                     let ok_w = sw * 0.3;
                     let ok_x = sw / 2.0 - ok_w / 2.0;
                     let ok_y = sh * 0.7;
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + sh * 0.1 {
                         board.add_to_leaderboard(name.clone(), score);
                         board.state = GameState::GameOver;
+                    }
+                    
+                    let input_y = sh * 0.5;
+                    if my >= input_y - 50.0 && my <= input_y + 50.0 {
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            use miniquad::window::js_eval;
+                            let prompt_name = js_eval("window.ask_name()");
+                            if !prompt_name.is_empty() {
+                                name = prompt_name;
+                            }
+                        }
                     }
                 }
                 board.state = GameState::EnteringName { score, name };
@@ -577,10 +579,10 @@ async fn main() {
         // Progress Bar
         let bar_w = board_size;
         let bar_h = 10.0;
-        let progress = (board.level_points as f32 / board.level_goal as f32).min(1.0);
+        let progress = (board.level_tiles_cleared as f32 / board.level_goal as f32).min(1.0);
         draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w, bar_h, GRAY);
         draw_rectangle(offset_x, offset_y + board_size + 5.0, bar_w * progress, bar_h, SKYBLUE);
-        draw_text(&format!("LEVEL {} - GOAL: {}/{}", board.level, board.level_points, board.level_goal), offset_x, offset_y + board_size + 35.0, font_size * 0.5, WHITE);
+        draw_text(&format!("LEVEL {} - TILES: {}/{}", board.level, board.level_tiles_cleared, board.level_goal), offset_x, offset_y + board_size + 35.0, font_size * 0.5, WHITE);
 
         if board.combo_count > 1 {
             let combo_text = format!("COMBO X{}", board.combo_count);
@@ -638,7 +640,6 @@ async fn main() {
             let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
             draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
 
-            // Name display
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
             let nw = measure_text(&display_name, None, font_size as _, 1.0).width;
             draw_text(&display_name, sw / 2.0 - nw / 2.0, sh * 0.5, font_size, WHITE);
