@@ -598,30 +598,51 @@ async fn main() {
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, combo, mut name, mut notified } => {
+                // On WASM, we can optionally trigger a JS prompt once, 
+                // but we also allow direct keyboard entry in the loop below.
+                #[cfg(target_arch = "wasm32")]
                 if !notified {
-                    let mut buffer = [0u8; 16];
-                    let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
-                    if len > 0 {
-                        if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
-                            name = js_name.trim().to_string();
-                        }
-                    }
+                    // We only trigger JS prompt if it's likely a mobile device (no physical keyboard)
+                    // For now, let's just make it a manual trigger or only if name is still empty after some time.
+                    // Actually, let's just allow direct typing and only use prompt as a "fallback" button if needed.
+                    // For simplicity, let's REMOVE the auto-popup and let users type.
                     notified = true;
                 }
 
                 let mut submitted = false;
                 while let Some(c) = get_char_pressed() {
-                    if c.is_alphanumeric() || c == ' ' {
-                        if name.len() < 10 { name.push(c); }
+                    if (c.is_alphanumeric() || c == ' ') && name.len() < 10 {
+                        name.push(c);
                     }
                 }
                 if is_key_pressed(KeyCode::Backspace) { name.pop(); }
-                
+
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
-                
+
+                // Also allow triggering JS prompt via a button for mobile users who can't trigger the virtual keyboard
+                let prompt_w = sw * 0.4;
+                let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                let prompt_y = sh * 0.6;
+                let prompt_h = sh * 0.06;
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                    draw_text_centered("TAP FOR POPUP", prompt_y + prompt_h * 0.7, font_size * 0.4, WHITE);
+                    if is_mouse_button_pressed(MouseButton::Left) && mx >= prompt_x && mx <= prompt_x + prompt_w && my >= prompt_y && my <= prompt_y + prompt_h {
+                        let mut buffer = [0u8; 16];
+                        let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
+                        if len > 0 {
+                            if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
+                                name = js_name.trim().to_string();
+                            }
+                        }
+                    }
+                }
+
                 if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
                     board.add_to_leaderboard(name.clone(), score, combo);
                     board.state = GameState::GameOver;
@@ -637,8 +658,7 @@ async fn main() {
                 if !submitted {
                     board.state = GameState::EnteringName { score, combo, name, notified };
                 }
-            }
-            GameState::GameOver => {
+            }            GameState::GameOver => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     board = Board::new();
                     board.state = GameState::Idle;
@@ -813,6 +833,17 @@ async fn main() {
             draw_text_centered("Type your name", sh * 0.35, font_size * 0.6, GRAY);
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
             draw_text_centered(&display_name, sh * 0.5, font_size, WHITE);
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                let prompt_w = sw * 0.4;
+                let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                let prompt_y = sh * 0.6;
+                let prompt_h = sh * 0.06;
+                draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                draw_text_centered("TAP FOR POPUP", prompt_y + prompt_h * 0.7, font_size * 0.4, WHITE);
+            }
+
             let ok_text = "OK";
             let ok_w = sw * 0.3;
             let ok_x = sw / 2.0 - ok_w / 2.0;
