@@ -1,4 +1,4 @@
-use macroquad::audio::{load_sound_from_bytes, Sound, play_sound, PlaySoundParams};
+use macroquad::audio::{load_sound_from_bytes, Sound, play_sound, stop_sound, PlaySoundParams};
 
 pub struct AudioManager {
     pub laser: Sound,
@@ -29,9 +29,12 @@ impl AudioManager {
         play_sound(&self.explosion, PlaySoundParams { looped: false, volume: 0.5 });
     }
 
-    pub fn play_jet(&self) {
-        // Jet is usually played while jetting, maybe handled externally or with volume modulation
-        play_sound(&self.jet, PlaySoundParams { looped: false, volume: 0.2 });
+    pub fn start_jet(&self) {
+        play_sound(&self.jet, PlaySoundParams { looped: true, volume: 0.2 });
+    }
+
+    pub fn stop_jet(&self) {
+        stop_sound(&self.jet);
     }
 
     pub fn play_pickup(&self) {
@@ -67,15 +70,18 @@ fn create_wav_header(data_size: u32, sample_rate: u32) -> Vec<u8> {
 
 fn generate_laser_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 0.15;
+    let duration = 0.2;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let freq = 1000.0 * (1.0 - t / duration); // Pitch drop
-        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin();
-        let amplitude = 1.0 - (t / duration); // Fade out
+        let progress = t / duration;
+        // Frequency sweep from high to low
+        let freq = 1200.0 * (1.0 - progress.powi(2)); 
+        // Square wave for that 16-bit grit
+        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.5 } else { -0.5 };
+        let amplitude = (1.0 - progress).powi(2);
         samples.push((sample * amplitude * 16383.0) as i16);
     }
 
@@ -88,21 +94,24 @@ fn generate_laser_wav() -> Vec<u8> {
 
 fn generate_explosion_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 0.4;
+    let duration = 0.5;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
-    let mut seed = 12345u32;
+    let mut seed = 0xACE1u32;
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        // Simple Xorshift random for noise
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
+        let progress = t / duration;
+        
+        // LFSR-like noise
+        seed = (seed >> 1) ^ (u32::from(0u32.wrapping_sub(seed & 1u32)) & 0xB0000000u32);
         let noise = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
         
-        let amplitude = (1.0 - t / duration).powi(2); // Sharp decay
-        samples.push((noise * amplitude * 16383.0) as i16);
+        // Low-frequency rumble
+        let rumble = (t * 40.0 * 2.0 * std::f32::consts::PI).sin() * 0.5;
+        
+        let amplitude = (1.0 - progress).powi(3);
+        samples.push(((noise + rumble) * 0.5 * amplitude * 16383.0) as i16);
     }
 
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
@@ -114,22 +123,20 @@ fn generate_explosion_wav() -> Vec<u8> {
 
 fn generate_jet_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 0.1;
+    let duration = 0.15;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
-    let mut seed = 54321u32;
+    let mut seed = 0x1234u32;
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        let noise = (seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+        let noise = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
         
-        let freq = 50.0;
-        let hum = (t * freq * 2.0 * std::f32::consts::PI).sin();
+        // 50Hz hum combined with white noise for engine effect
+        let hum = if (t * 60.0 * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.3 } else { -0.3 };
         
-        let sample = (noise * 0.5 + hum * 0.5) * 0.3;
+        let sample = (noise * 0.7 + hum * 0.3) * 0.2;
         samples.push((sample * 16383.0) as i16);
     }
 
@@ -142,15 +149,17 @@ fn generate_jet_wav() -> Vec<u8> {
 
 fn generate_pickup_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 0.2;
+    let duration = 0.25;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let freq = 440.0 * (1.0 + t / duration); // Pitch slide up
-        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin();
-        let amplitude = 1.0 - (t / duration);
+        let progress = t / duration;
+        // Two-tone arpeggio for Amiga style
+        let freq = if progress < 0.5 { 880.0 } else { 1320.0 };
+        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.4 } else { -0.4 };
+        let amplitude = 1.0 - progress;
         samples.push((sample * amplitude * 16383.0) as i16);
     }
 
@@ -163,18 +172,19 @@ fn generate_pickup_wav() -> Vec<u8> {
 
 fn generate_win_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 1.0;
+    let duration = 1.5;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let note_index = (t * 8.0) as usize;
-        let notes = [440.0, 554.37, 659.25, 880.0, 440.0, 554.37, 659.25, 880.0];
-        let freq = notes[note_index % 8];
+        let note_timer = (t * 10.0) as usize;
+        let melody = [440.0, 554.37, 659.25, 880.0, 659.25, 880.0, 1108.73, 1318.51];
+        let freq = melody[note_timer % 8];
         
-        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin();
-        let amplitude = 0.5;
+        // Pulse wave
+        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.4 { 0.4 } else { -0.4 };
+        let amplitude = 0.5 * (1.0 - t / duration);
         samples.push((sample * amplitude * 16383.0) as i16);
     }
 
@@ -187,16 +197,21 @@ fn generate_win_wav() -> Vec<u8> {
 
 fn generate_game_over_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let duration = 0.8;
+    let duration = 1.2;
     let num_samples = (sample_rate as f32 * duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let freq = 220.0 * (1.0 - (t / duration).powi(2));
-        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin();
-        let amplitude = 1.0 - t / duration;
-        samples.push((sample * amplitude * 16383.0) as i16);
+        let progress = t / duration;
+        // Dissonant descending tone
+        let freq1 = 200.0 * (1.0 - progress);
+        let freq2 = 195.0 * (1.0 - progress);
+        let s1 = if (t * freq1 * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.3 } else { -0.3 };
+        let s2 = if (t * freq2 * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.3 } else { -0.3 };
+        
+        let amplitude = (1.0 - progress).powi(2);
+        samples.push(((s1 + s2) * 0.5 * amplitude * 16383.0) as i16);
     }
 
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);

@@ -21,7 +21,7 @@ const MAX_HIGH_SCORES: usize = 5;
 
 /// Leaderboard data stored in global storage.
 struct Leaderboard {
-    entries: Vec<(String, u32)>,
+    entries: Vec<(String, u32, u32)>, // name, score, max_combo
 }
 
 /// Persistent user settings.
@@ -57,6 +57,7 @@ enum GameState {
     /// New High Score name entry.
     EnteringName {
         score: u32,
+        combo: u32,
         name: String,
     },
     /// The board is being refilled after a shuffle or level up.
@@ -80,9 +81,10 @@ struct Board {
     score: u32,
     time_left: f32,
     selected: Option<(usize, usize)>,
-    high_scores: Vec<(String, u32)>,
+    high_scores: Vec<(String, u32, u32)>,
     new_record: bool,
     combo_count: u32,
+    max_combo: u32,
     level: u32,
     level_tiles_cleared: u32,
     level_goal: u32,
@@ -114,6 +116,7 @@ impl Board {
             high_scores: Self::load_high_scores(),
             new_record: false,
             combo_count: 0,
+            max_combo: 0,
             level: 1,
             level_tiles_cleared: 0,
             level_goal: 50,
@@ -122,7 +125,7 @@ impl Board {
         board
     }
 
-    fn load_high_scores() -> Vec<(String, u32)> {
+    fn load_high_scores() -> Vec<(String, u32, u32)> {
         let lb = storage::get_mut::<Leaderboard>();
         lb.entries.clone()
     }
@@ -133,13 +136,13 @@ impl Board {
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
-        self.high_scores.iter().any(|(_, s)| self.score > *s) || self.high_scores.len() < MAX_HIGH_SCORES
+        self.high_scores.iter().any(|(_, s, _)| self.score > *s) || self.high_scores.len() < MAX_HIGH_SCORES
     }
 
-    fn add_to_leaderboard(&mut self, name: String, score: u32) {
+    fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32) {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
-        self.new_record = self.high_scores.first().map_or(true, |(_, best)| score > *best);
-        self.high_scores.push((name, score));
+        self.new_record = self.high_scores.first().map_or(true, |(_, best, _)| score > *best);
+        self.high_scores.push((name, score, combo));
         self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
         self.high_scores.truncate(MAX_HIGH_SCORES);
         self.save_high_scores();
@@ -321,7 +324,7 @@ async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
     // Initialize high score and settings storage
-    storage::store(Leaderboard { entries: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
+    storage::store(Leaderboard { entries: vec![("---".to_string(), 0, 0); MAX_HIGH_SCORES] });
     storage::store(Settings { muted: false, slow_mode: false });
 
     let textures = [
@@ -382,7 +385,7 @@ async fn main() {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, name: "".to_string() };
+                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string() };
                 } else {
                     board.state = GameState::GameOver;
                 }
@@ -488,6 +491,7 @@ async fn main() {
                         let matches = board.find_matches();
                         if !matches.is_empty() {
                             board.combo_count += 1;
+                            board.max_combo = board.max_combo.max(board.combo_count);
                             let mut match_arr = [(0, 0); COLS * ROWS];
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
@@ -555,7 +559,7 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, mut name } => {
+            GameState::EnteringName { score, combo, mut name } => {
                 let mut submitted = false;
                 while let Some(c) = get_char_pressed() {
                     if c.is_alphanumeric() || c == ' ' {
@@ -570,19 +574,19 @@ async fn main() {
                 let ok_h = sh * 0.1;
                 
                 if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-                    board.add_to_leaderboard(name.clone(), score);
+                    board.add_to_leaderboard(name.clone(), score, combo);
                     board.state = GameState::GameOver;
                     submitted = true;
                 }
                 if !submitted && is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
-                        board.add_to_leaderboard(name.clone(), score);
+                        board.add_to_leaderboard(name.clone(), score, combo);
                         board.state = GameState::GameOver;
                         submitted = true;
                     }
                 }
                 if !submitted {
-                    board.state = GameState::EnteringName { score, name };
+                    board.state = GameState::EnteringName { score, combo, name };
                 }
             }
             GameState::GameOver => {
@@ -682,6 +686,7 @@ async fn main() {
 
         // 2. Score and Level Info
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - pad_y, font_size, WHITE);
+        draw_text(&format!("MAX COMBO: X{}", board.max_combo), offset_x + board_size / 2.0 - 50.0, offset_y - pad_y, font_size * 0.6, YELLOW);
         let level_text = format!("LEVEL {}", board.level);
         let ltw = measure_text(&level_text, None, (font_size * 0.8) as _, 1.0).width;
         draw_text(&level_text, offset_x + board_size - ltw, offset_y - pad_y, font_size * 0.8, WHITE);
@@ -722,10 +727,10 @@ async fn main() {
         if board.state == GameState::GameOver {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
             draw_text("GAME OVER", sw / 2.0 - measure_text("GAME OVER", None, font_size as _, 1.0).width / 2.0, sh * 0.15, font_size, RED);
-            draw_text("TOP SCORES:", sw * 0.2, sh * 0.3, font_size * 0.7, WHITE);
-            for (i, (name, score)) in board.high_scores.iter().enumerate() {
+            draw_text("TOP SCORES:", sw * 0.2, sh * 0.25, font_size * 0.7, WHITE);
+            for (i, (name, score, combo)) in board.high_scores.iter().enumerate() {
                 let color = if *score == board.score && board.score > 0 { YELLOW } else { GRAY };
-                draw_text(&format!("{}. {}  {}", i + 1, name, score), sw * 0.25, sh * 0.38 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
+                draw_text(&format!("{}. {}  {} (X{})", i + 1, name, score, combo), sw * 0.25, sh * 0.32 + (i as f32 * font_size * 0.8), font_size * 0.6, color);
             }
             draw_text("Tap to restart", sw / 2.0 - measure_text("Tap to restart", None, (font_size * 0.6) as _, 1.0).width / 2.0, sh * 0.85, font_size * 0.6, WHITE);
         }
@@ -747,14 +752,19 @@ async fn main() {
             draw_text(lu_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size * 1.5, SKYBLUE);
         }
 
-        if let GameState::EnteringName { score: _, ref name } = board.state {
+        if let GameState::EnteringName { score, combo, ref name } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             let title = "NEW HIGH SCORE!";
             let tw = measure_text(title, None, font_size as _, 1.0).width;
-            draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.2, font_size, YELLOW);
+            draw_text(title, sw / 2.0 - tw / 2.0, sh * 0.15, font_size, YELLOW);
+            
+            let stats = format!("SCORE: {}  COMBO: X{}", score, combo);
+            let sw_width = measure_text(&stats, None, (font_size * 0.6) as _, 1.0).width;
+            draw_text(&stats, sw / 2.0 - sw_width / 2.0, sh * 0.25, font_size * 0.6, WHITE);
+
             let sub = "Type your name";
             let stw = measure_text(sub, None, (font_size * 0.6) as _, 1.0).width;
-            draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.3, font_size * 0.6, WHITE);
+            draw_text(sub, sw / 2.0 - stw / 2.0, sh * 0.35, font_size * 0.6, GRAY);
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
             let nw = measure_text(&display_name, None, font_size as _, 1.0).width;
             draw_text(&display_name, sw / 2.0 - nw / 2.0, sh * 0.5, font_size, WHITE);

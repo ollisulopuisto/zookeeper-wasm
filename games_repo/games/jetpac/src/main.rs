@@ -170,8 +170,12 @@ async fn main() {
             GameState::Playing => {
                 let dt = get_frame_time();
 
-                // Build a virtual camera to keep the 800x600 game logic intact
-                let camera = Camera2D::from_display_rect(Rect::new(0.0, 0.0, SCREEN_WIDTH, SCREEN_HEIGHT));
+                // Use a manual Camera2D to avoid automatic Y-flipping issues
+                let camera = Camera2D {
+                    target: vec2(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0),
+                    zoom: vec2(2.0 / SCREEN_WIDTH, 2.0 / SCREEN_HEIGHT),
+                    ..Default::default()
+                };
                 set_camera(&camera);
 
                 // Update
@@ -284,6 +288,22 @@ async fn main() {
 
                 // Drawing
                 clear_background(BLACK);
+
+                // Amiga-style "Copper" background gradient (subtle)
+                for i in 0..20 {
+                    let y = i as f32 * (SCREEN_HEIGHT / 20.0);
+                    let intensity = 0.05 + (i as f32 / 20.0) * 0.1;
+                    draw_rectangle(0.0, y, SCREEN_WIDTH, SCREEN_HEIGHT / 20.0, Color::new(0.0, 0.0, intensity, 1.0));
+                }
+
+                // Simple scrolling stars
+                let t = get_time() as f32;
+                for i in 0..50 {
+                    let x = ((i as f32 * 791.0 + t * 50.0) % SCREEN_WIDTH).abs();
+                    let y = (i as f32 * 617.0) % SCREEN_HEIGHT;
+                    let size = if i % 10 == 0 { 2.0 } else { 1.0 };
+                    draw_rectangle(x, y, size, size, Color::new(0.8, 0.8, 1.0, 0.5));
+                }
                 
                 for platform in &platforms {
                     platform.draw();

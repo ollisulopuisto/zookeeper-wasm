@@ -93,21 +93,72 @@ impl Player {
     }
 
     pub fn draw(&self) {
-        let color = if self.is_jetting { YELLOW } else { RED };
-        draw_rectangle(self.entity.x, self.entity.y, self.entity.width, self.entity.height, color);
+        let color_main = if self.is_jetting { YELLOW } else { RED };
+        let color_shadow = if self.is_jetting { ORANGE } else { MAROON };
         
-        // Draw "eye" to show direction
-        let eye_x = if self.facing_right { self.entity.x + 20.0 } else { self.entity.x + 4.0 };
-        draw_rectangle(eye_x, self.entity.y + 10.0, 8.0, 8.0, WHITE);
+        // Body with gradient/shading
+        draw_rectangle(self.entity.x, self.entity.y, self.entity.width, self.entity.height, color_shadow);
+        draw_rectangle(self.entity.x + 2.0, self.entity.y + 2.0, self.entity.width - 4.0, self.entity.height - 4.0, color_main);
+        
+        // Glass visor (Amiga style highlight)
+        draw_rectangle(self.entity.x + 10.0, self.entity.y + 8.0, self.entity.width - 14.0, 12.0, SKYBLUE);
+        draw_rectangle(self.entity.x + 12.0, self.entity.y + 10.0, self.entity.width - 18.0, 4.0, WHITE); // Highlight
+
+        // Directional "eye" or visor detail
+        let visor_x = if self.facing_right { self.entity.x + 20.0 } else { self.entity.x + 4.0 };
+        draw_rectangle(visor_x, self.entity.y + 8.0, 8.0, 12.0, DARKBLUE);
+
+        // Jetpack on back
+        let pack_x = if self.facing_right { self.entity.x - 6.0 } else { self.entity.x + self.entity.width - 2.0 };
+        draw_rectangle(pack_x, self.entity.y + 10.0, 8.0, 24.0, GRAY);
+        if self.is_jetting {
+            // Flame effect
+            let flame_y = self.entity.y + 34.0;
+            draw_triangle(
+                vec2(pack_x, flame_y),
+                vec2(pack_x + 8.0, flame_y),
+                vec2(pack_x + 4.0, flame_y + 15.0 + rand::gen_range(0.0, 10.0)),
+                ORANGE
+            );
+        }
 
         // Draw held part
         if let Some(part_type) = self.holding_part {
-            let part_color = match part_type {
-                PartType::Base => DARKGRAY,
-                PartType::Middle => GRAY,
-                PartType::Top => LIGHTGRAY,
-            };
-            draw_rectangle(self.entity.x - 4.0, self.entity.y + self.entity.height, 40.0, 10.0, part_color);
+            draw_part_at(self.entity.x - 4.0, self.entity.y + self.entity.height, part_type);
+        }
+    }
+}
+
+fn draw_part_at(x: f32, y: f32, part_type: PartType) {
+    match part_type {
+        PartType::Base => {
+            // Red, ribbed/wide base
+            draw_rectangle(x, y, 40.0, 20.0, MAROON);
+            draw_rectangle(x + 2.0, y + 2.0, 36.0, 16.0, RED);
+            for i in 0..4 {
+                draw_line(x + 8.0 + i as f32 * 8.0, y + 2.0, x + 8.0 + i as f32 * 8.0, y + 18.0, 2.0, MAROON);
+            }
+        }
+        PartType::Middle => {
+            // Blue, smooth cylindrical section
+            draw_rectangle(x + 5.0, y, 30.0, 20.0, DARKBLUE);
+            draw_rectangle(x + 7.0, y + 2.0, 26.0, 16.0, BLUE);
+            draw_rectangle(x + 10.0, y + 4.0, 4.0, 12.0, SKYBLUE); // Shine
+        }
+        PartType::Top => {
+            // Gold, pointed nose cone
+            draw_triangle(
+                vec2(x + 20.0, y),
+                vec2(x, y + 20.0),
+                vec2(x + 40.0, y + 20.0),
+                GOLD
+            );
+            draw_triangle(
+                vec2(x + 20.0, y + 4.0),
+                vec2(x + 10.0, y + 18.0),
+                vec2(x + 30.0, y + 18.0),
+                YELLOW
+            );
         }
     }
 }
@@ -142,7 +193,10 @@ pub struct Platform {
 
 impl Platform {
     pub fn draw(&self) {
-        draw_rectangle(self.x, self.y, self.width, 10.0, GREEN);
+        // Metallic platform with top highlight
+        draw_rectangle(self.x, self.y, self.width, 10.0, DARKGREEN);
+        draw_rectangle(self.x, self.y, self.width, 3.0, GREEN);
+        draw_rectangle(self.x + 5.0, self.y + 1.0, self.width - 10.0, 1.0, LIME);
     }
 
     pub fn check_collision(&self, entity: &mut Entity) {
@@ -178,7 +232,14 @@ impl Enemy {
     }
 
     pub fn draw(&self) {
-        draw_circle(self.entity.x + 12.0, self.entity.y + 12.0, 12.0, PURPLE);
+        let t = get_time() * 10.0;
+        let wobble = (t.sin() * 2.0) as f32;
+        // Spiky "Amiga" alien
+        draw_circle(self.entity.x + 12.0, self.entity.y + 12.0, 10.0 + wobble, PURPLE);
+        draw_circle(self.entity.x + 12.0, self.entity.y + 12.0, 6.0, MAGENTA);
+        // Eyes
+        draw_circle(self.entity.x + 8.0, self.entity.y + 10.0, 2.0, WHITE);
+        draw_circle(self.entity.x + 16.0, self.entity.y + 10.0, 2.0, WHITE);
     }
 }
 
@@ -201,7 +262,13 @@ impl Item {
 
     pub fn draw(&self) {
         if !self.collected {
-            draw_rectangle(self.entity.x, self.entity.y, 20.0, 20.0, BLUE);
+            // Golden star/fuel pod
+            let t = get_time() * 5.0;
+            let scale = 1.0 + (t.sin() * 0.2) as f32;
+            let x = self.entity.x + 10.0;
+            let y = self.entity.y + 10.0;
+            draw_poly(x, y, 5, 10.0 * scale, t as f32 * 10.0, GOLD);
+            draw_poly(x, y, 5, 6.0 * scale, t as f32 * 10.0, YELLOW);
         }
     }
 }
@@ -237,13 +304,8 @@ impl RocketPart {
     }
 
     pub fn draw(&self) {
-        if !self.is_attached {
-            let color = match self.part_type {
-                PartType::Base => DARKGRAY,
-                PartType::Middle => GRAY,
-                PartType::Top => LIGHTGRAY,
-            };
-            draw_rectangle(self.entity.x, self.entity.y, self.entity.width, self.entity.height, color);
+        if !self.is_attached && !self.is_held {
+            draw_part_at(self.entity.x, self.entity.y, self.part_type);
         }
     }
 }
@@ -267,18 +329,19 @@ impl Rocket {
 
     pub fn draw(&self) {
         for (i, part) in self.parts_attached.iter().enumerate() {
-            let color = match part {
-                PartType::Base => DARKGRAY,
-                PartType::Middle => GRAY,
-                PartType::Top => LIGHTGRAY,
-            };
-            draw_rectangle(self.x, self.y - (i as f32 * 20.0), 40.0, 20.0, color);
+            draw_part_at(self.x, self.y - (i as f32 * 20.0), *part);
         }
 
         // Draw fuel bar if fully assembled
         if self.parts_attached.len() == 3 {
-            draw_rectangle(self.x + 45.0, self.y - 40.0, 10.0, 60.0, DARKBLUE);
-            draw_rectangle(self.x + 45.0, self.y + 20.0 - (self.fuel_level * 60.0), 10.0, self.fuel_level * 60.0, SKYBLUE);
+            // Glass tube container
+            draw_rectangle(self.x + 45.0, self.y - 40.0, 12.0, 60.0, DARKGRAY);
+            draw_rectangle(self.x + 47.0, self.y - 38.0, 8.0, 56.0, BLACK);
+            
+            // Pulsing fuel
+            let fuel_h = self.fuel_level * 56.0;
+            let fuel_color = if (get_time() * 5.0) as i32 % 2 == 0 { SKYBLUE } else { BLUE };
+            draw_rectangle(self.x + 47.0, self.y + 18.0 - fuel_h, 8.0, fuel_h, fuel_color);
         }
     }
 }
