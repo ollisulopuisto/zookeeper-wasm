@@ -351,7 +351,7 @@ async fn main() {
             } else if over_snail && is_mouse_button_pressed(MouseButton::Left) {
                 settings.slow_mode = !settings.slow_mode;
             } else if over_pause || is_key_pressed(KeyCode::Space) {
-
+                match board.state.clone() {
                     GameState::Paused { previous_state } => board.state = *previous_state,
                     GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } => {}
                     other => board.state = GameState::Paused { previous_state: Box::new(other) },
