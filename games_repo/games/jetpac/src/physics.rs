@@ -21,6 +21,22 @@ impl RectCollider {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rect_overlaps() {
+        let r1 = RectCollider::new(0.0, 0.0, 10.0, 10.0);
+        let r2 = RectCollider::new(5.0, 5.0, 10.0, 10.0);
+        let r3 = RectCollider::new(20.0, 20.0, 10.0, 10.0);
+        
+        assert!(r1.overlaps(&r2));
+        assert!(r2.overlaps(&r1));
+        assert!(!r1.overlaps(&r3));
+    }
+}
+
 pub struct Entity {
     pub collider: RectCollider,
     pub vy: f32,
