@@ -4,8 +4,10 @@ build:
 	@echo "Building Jetpac WASM..."
 	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
-	@if [ -f ../../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm ]; then \
-		cp ../../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm dist/; \
+	@if [ -f ../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/jetpac_wasm.wasm dist/jetpac_wasm.wasm; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm dist/jetpac_wasm.wasm; \
 	else \
 		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi
@@ -13,6 +15,7 @@ build:
 	@if [ ! -f dist/mq_js_bundle.js ]; then \
 		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js dist/; \
 	fi
+
 
 serve: build
 	@echo "Serving Jetpac WASM at http://localhost:8000"

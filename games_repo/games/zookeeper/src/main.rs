@@ -101,19 +101,13 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries.clone()
-        } else {
-            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
-            storage::store(Leaderboard { entries: initial.clone() });
-            initial
-        }
+        let lb = storage::get_mut::<Leaderboard>();
+        lb.entries.clone()
     }
 
     fn save_high_scores(&self) {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries = self.high_scores.clone();
-        }
+        let mut lb = storage::get_mut::<Leaderboard>();
+        lb.entries = self.high_scores.clone();
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
