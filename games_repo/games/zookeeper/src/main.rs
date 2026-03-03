@@ -99,7 +99,7 @@ impl Board {
     fn load_high_scores_from_js() -> Vec<(String, u32)> {
         #[cfg(target_arch = "wasm32")]
         {
-            use miniquad::window::js_eval;
+            use sapp_jsutils::js_eval;
             let json = js_eval("window.get_leaderboard('zookeeper')");
             if let Ok(entries) = serde_json::from_str::<Vec<HighUint>>(&json) {
                 return entries.into_iter().map(|e| (e.name, e.score)).collect();
@@ -112,7 +112,7 @@ impl Board {
     fn save_score_to_js(name: &str, score: u32) {
         #[cfg(target_arch = "wasm32")]
         {
-            use miniquad::window::js_eval;
+            use sapp_jsutils::js_eval;
             js_eval(&format!("window.save_score('zookeeper', '{}', {})", name, score));
         }
     }
@@ -487,7 +487,7 @@ async fn main() {
                     if my >= input_y - 50.0 && my <= input_y + 50.0 {
                         #[cfg(target_arch = "wasm32")]
                         {
-                            use miniquad::window::js_eval;
+                            use sapp_jsutils::js_eval;
                             let prompt_name = js_eval("window.ask_name()");
                             if !prompt_name.is_empty() {
                                 name = prompt_name;

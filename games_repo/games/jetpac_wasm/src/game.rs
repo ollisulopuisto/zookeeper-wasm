@@ -12,6 +12,8 @@ pub struct Player {
     pub holding_part: Option<PartType>,
 }
 
+use macroquad::prelude::*;
+
 impl Player {
     pub fn new() -> Self {
         Self {
