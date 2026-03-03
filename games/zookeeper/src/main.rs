@@ -3,7 +3,7 @@
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
 //! It handles the 8x8 game board, animal matching logic, animations, high scores, persistent settings, and combo systems.
 
-use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams, Sound};
+use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
@@ -94,19 +94,13 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<(String, u32)> {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries.clone()
-        } else {
-            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
-            storage::store(Leaderboard { entries: initial.clone() });
-            initial
-        }
+        let lb = storage::get_mut::<Leaderboard>();
+        lb.entries.clone()
     }
 
     fn save_high_scores(&self) {
-        if let Some(lb) = storage::get_mut::<Leaderboard>() {
-            lb.entries = self.high_scores.clone();
-        }
+        let mut lb = storage::get_mut::<Leaderboard>();
+        lb.entries = self.high_scores.clone();
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
