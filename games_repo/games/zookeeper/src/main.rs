@@ -202,6 +202,10 @@ impl Board {
         let match_points = matches.len() as u32 * 10 * self.combo_count;
         self.score += match_points;
         self.level_tiles_cleared += matches.len() as u32;
+        
+        // Give some time back for matches (0.5s per tile)
+        self.time_left = (self.time_left + matches.len() as f32 * 0.5).min(60.0);
+
         for &(x, y) in &matches {
             self.grid[y][x] = None;
         }
@@ -508,7 +512,8 @@ async fn main() {
                 if timer >= 2.0 {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
-                    board.level_goal = 50 + board.level * 25;
+                    // More gradual goal increase (15 tiles per level instead of 25)
+                    board.level_goal = 50 + board.level * 15;
                     board.time_left = 60.0;
                     board.fill_initial(GenerationRules::default());
                     board.state = GameState::Idle;

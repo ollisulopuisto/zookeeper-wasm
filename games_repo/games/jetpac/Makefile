@@ -6,10 +6,7 @@ build:
 	@mkdir -p dist
 	@if [ -f ../../target/wasm32-unknown-unknown/release/jetpac.wasm ]; then \
 		cp ../../target/wasm32-unknown-unknown/release/jetpac.wasm dist/jetpac.wasm; \
-	elif [ -f ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm ]; then \
-		cp ../../target/wasm32-unknown-unknown/release/jetpac-wasm.wasm dist/jetpac.wasm; \
-	fi
-
+	else \
 		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi
 	cp index.html dist/
