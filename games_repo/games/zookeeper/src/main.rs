@@ -381,7 +381,7 @@ async fn main() {
             } else if over_pause || is_key_pressed(KeyCode::Space) {
                 match board.state.clone() {
                     GameState::Paused { previous_state } => board.state = *previous_state,
-                    GameState::GameOver | GameState::WaitingToStart | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } => {}
+                    GameState::GameOver | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } => {}
                     other => board.state = GameState::Paused { previous_state: Box::new(other) },
                 }
             }
