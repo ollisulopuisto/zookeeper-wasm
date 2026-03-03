@@ -1,5 +1,4 @@
-VERSION=26.3.3.25
-
+VERSION=26.3.3.26
 
 .PHONY: setup assets test lint build serve
 
@@ -13,7 +12,6 @@ assets:
 	cd scripts && uv run download_assets.py
 
 test:
-	@echo "Running Rust tests..."
 	cargo test
 	@echo "Running Python tests using uv/pytest..."
 	cd scripts && uv run pytest
@@ -28,7 +26,14 @@ build: assets
 	@echo "Building Zookeeper WASM for version $(VERSION)..."
 	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
-	cp ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm dist/
+	@# Try both underscored and hyphenated names as Cargo behavior can vary
+	@if [ -f ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm dist/; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm dist/zookeeper_wasm.wasm; \
+	else \
+		echo "Error: WASM binary not found in target directory"; exit 1; \
+	fi
 	cp index.html dist/
 	@if [ ! -f dist/mq_js_bundle.js ]; then \
 		curl -sO https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js && mv mq_js_bundle.js dist/; \

@@ -1,6 +1,6 @@
 GAMES := $(patsubst games/%/,%,$(dir $(wildcard games/*/Makefile)))
 
-.PHONY: all setup build test lint $(GAMES)
+.PHONY: all setup build test lint clean rename $(GAMES)
 
 all: build
 
@@ -11,8 +11,9 @@ setup:
 	done
 
 build:
-	@mkdir -p docs
+	@mkdir -p docs/assets
 	cp index.html docs/
+	cp assets/icon.png docs/assets/icon.png
 	@for game in $(GAMES); do \
 		echo "Building $$game..."; \
 		$(MAKE) -C games/$$game build; \
@@ -39,3 +40,9 @@ clean:
 		rm -rf games/$$game/dist; \
 	done
 	rm -rf docs
+
+rename:
+	@echo "Renaming repository to 'games'..."
+	gh repo edit ollisulopuisto/zookeeper-wasm --name games
+	git remote set-url origin https://github.com/ollisulopuisto/games.git
+	@echo "Repository renamed. Please update any hardcoded URLs."

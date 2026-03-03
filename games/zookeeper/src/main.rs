@@ -305,10 +305,10 @@ async fn main() {
         let pause_y = pad;
         let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
 
-        if is_mouse_button_pressed(MouseButton::Left) {
-            if over_mute {
+        if is_mouse_button_pressed(MouseButton::Left) || is_key_pressed(KeyCode::Space) {
+            if over_mute && is_mouse_button_pressed(MouseButton::Left) {
                 settings.muted = !settings.muted;
-            } else if over_pause {
+            } else if over_pause || is_key_pressed(KeyCode::Space) {
                 match board.state.clone() {
                     GameState::Paused { previous_state } => {
                         board.state = *previous_state;

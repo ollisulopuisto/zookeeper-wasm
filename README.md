@@ -3,10 +3,10 @@
 A collection of self-contained, 60 FPS WASM games built with Rust and Macroquad.
 
 ## 🎮 Play Games
-**[Main Portal on GitHub Pages](https://ollisulopuisto.github.io/zookeeper-wasm/)**
+**[Main Portal on GitHub Pages](https://ollisulopuisto.github.io/games/)**
 
 Available Games:
-- **[Zookeeper Clone](https://ollisulopuisto.github.io/zookeeper-wasm/zookeeper/)**
+- **[Zookeeper Clone](https://ollisulopuisto.github.io/games/zookeeper/)**
 
 ## 🚀 Features
 - **Monorepo Architecture:** Powered by Cargo Workspaces.

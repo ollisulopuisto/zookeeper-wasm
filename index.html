@@ -6,38 +6,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body {
-            font-family: sans-serif;
-            background: #111;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
             color: #eee;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             min-height: 100vh;
             margin: 0;
+            padding: 2rem;
         }
-        h1 { color: #fff; }
-        ul { list-style: none; padding: 0; }
-        li { margin: 1rem 0; }
-        a {
-            color: #4af;
+        h1 { margin-bottom: 3rem; font-size: 2.5rem; letter-spacing: 2px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            width: 100%;
+            max-width: 1000px;
+        }
+        .card {
+            background: #2a2a2a;
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             text-decoration: none;
-            font-size: 1.5rem;
-            border: 1px solid #4af;
-            padding: 0.5rem 1.5rem;
-            border-radius: 8px;
-            transition: background 0.2s;
+            color: inherit;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+            border: 1px solid #333;
         }
-        a:hover {
-            background: #4af;
-            color: #111;
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            background: #333;
+            border-color: #4af;
+        }
+        .card img {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+        }
+        .card span {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #4af;
         }
     </style>
 </head>
 <body>
-    <h1>🕹️ WASM Games Portal</h1>
-    <ul>
-        <li><a href="zookeeper/">Zookeeper Clone</a></li>
-    </ul>
+    <h1>🕹️ WASM GAMES</h1>
+    <div class="grid">
+        <a href="zookeeper/" class="card">
+            <img src="assets/icon.png" alt="Zookeeper">
+            <span>Zookeeper</span>
+        </a>
+    </div>
 </body>
 </html>
