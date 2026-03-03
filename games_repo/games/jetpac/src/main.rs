@@ -49,27 +49,29 @@ async fn main() {
 
     loop {
         frame_count += 1;
-        let camera = Camera2D {
-            target: vec2(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0),
-            zoom: vec2(2.0 / SCREEN_WIDTH, -2.0 / SCREEN_HEIGHT),
-            ..Default::default()
-        };
+        let sw = screen_width();
+        let sh = screen_height();
 
         match state {
             GameState::Menu => {
-                // Input polling (with default camera for reliability)
+                // Input polling (with 5-frame delay to prevent accidental start)
                 let start_keyed = is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::Enter);
-                let start_clicked = is_mouse_button_pressed(MouseButton::Left) || (frame_count > 60 && is_mouse_button_down(MouseButton::Left));
-                let start_touched = touches().iter().any(|t| t.phase == TouchPhase::Started);
+                let start_clicked = frame_count > 5 && is_mouse_button_pressed(MouseButton::Left);
+                let start_touched = frame_count > 5 && touches().iter().any(|t| t.phase == TouchPhase::Started);
 
                 if start_keyed || start_clicked || start_touched {
                     state = GameState::Playing;
                 }
 
-                // Drawing (with world camera)
-                set_camera(&camera);
+                // Drawing
                 clear_background(BLACK);
-                draw_text("JETPAC", SCREEN_WIDTH / 2.0 - 60.0, 80.0, 50.0, YELLOW);
+                let font_title = sh * 0.08;
+                let font_instr = sh * 0.035;
+                let font_sub = sh * 0.025;
+
+                let title = "JETPAC";
+                let t_w = measure_text(title, None, font_title as u16, 1.0).width;
+                draw_text(title, sw / 2.0 - t_w / 2.0, sh * 0.15, font_title, YELLOW);
                 
                 let instr = [
                     "INSTRUCTIONS",
@@ -82,17 +84,22 @@ async fn main() {
                     "Fly into fueled rocket to launch!",
                 ];
 
-                let start_y = 150.0;
+                let start_y = sh * 0.25;
+                let spacing = sh * 0.06;
                 for (i, line) in instr.iter().enumerate() {
-                    let size = if i == 0 { 30.0 } else if line.starts_with("(") { 16.0 } else { 20.0 };
+                    let size = if i == 0 { font_instr * 1.2 } else if line.starts_with("(") { font_sub } else { font_instr };
                     let color = if i == 0 { WHITE } else if line.starts_with("(") { GRAY } else { LIGHTGRAY };
                     let t_measure = measure_text(line, None, size as u16, 1.0);
-                    draw_text(line, SCREEN_WIDTH / 2.0 - t_measure.width / 2.0, start_y + i as f32 * 35.0, size, color);
+                    draw_text(line, sw / 2.0 - t_measure.width / 2.0, start_y + i as f32 * spacing, size, color);
                 }
 
-                let start_text = "Press SPACE or TAP to START";
-                let t_width = measure_text(start_text, None, 30, 1.0).width;
-                draw_text(start_text, SCREEN_WIDTH / 2.0 - t_width / 2.0, 500.0, 30.0, GREEN);
+                let start_text = "TAP TO START";
+                let st_size = font_instr * 1.5;
+                let st_w = measure_text(start_text, None, st_size as u16, 1.0).width;
+                let blink = (get_time() * 3.0) as i32 % 2 == 0;
+                if blink {
+                    draw_text(start_text, sw / 2.0 - st_w / 2.0, sh * 0.85, st_size, GREEN);
+                }
             }
             GameState::Victory => {
                 // Input polling
@@ -117,15 +124,15 @@ async fn main() {
                 }
 
                 // Drawing
-                set_camera(&camera);
                 clear_background(BLACK);
                 let msg = "ROCKET LAUNCHED!";
-                let m_width = measure_text(msg, None, 40, 1.0).width;
-                draw_text(msg, SCREEN_WIDTH / 2.0 - m_width / 2.0, SCREEN_HEIGHT / 2.0, 40.0, GREEN);
+                let font_size = sh * 0.07;
+                let m_width = measure_text(msg, None, font_size as u16, 1.0).width;
+                draw_text(msg, sw / 2.0 - m_width / 2.0, sh / 2.0, font_size, GREEN);
                 
-                let sub = "Press R or TAP to play again";
-                let s_width = measure_text(sub, None, 20, 1.0).width;
-                draw_text(sub, SCREEN_WIDTH / 2.0 - s_width / 2.0, SCREEN_HEIGHT / 2.0 + 40.0, 20.0, WHITE);
+                let sub = "TAP TO PLAY AGAIN";
+                let s_width = measure_text(sub, None, (font_size * 0.5) as u16, 1.0).width;
+                draw_text(sub, sw / 2.0 - s_width / 2.0, sh / 2.0 + sh * 0.1, font_size * 0.5, WHITE);
             }
             GameState::GameOver => {
                 // Input polling
@@ -150,28 +157,31 @@ async fn main() {
                 }
 
                 // Drawing
-                set_camera(&camera);
                 clear_background(BLACK);
                 let msg = "GAME OVER";
-                let m_width = measure_text(msg, None, 40, 1.0).width;
-                draw_text(msg, SCREEN_WIDTH / 2.0 - m_width / 2.0, SCREEN_HEIGHT / 2.0, 40.0, RED);
+                let font_size = sh * 0.08;
+                let m_width = measure_text(msg, None, font_size as u16, 1.0).width;
+                draw_text(msg, sw / 2.0 - m_width / 2.0, sh / 2.0, font_size, RED);
                 
-                let sub = "Press R or TAP to restart";
-                let s_width = measure_text(sub, None, 20, 1.0).width;
-                draw_text(sub, SCREEN_WIDTH / 2.0 - s_width / 2.0, SCREEN_HEIGHT / 2.0 + 40.0, 20.0, WHITE);
+                let sub = "TAP TO RESTART";
+                let s_width = measure_text(sub, None, (font_size * 0.5) as u16, 1.0).width;
+                draw_text(sub, sw / 2.0 - s_width / 2.0, sh / 2.0 + sh * 0.1, font_size * 0.5, WHITE);
             }
             GameState::Playing => {
                 let dt = get_frame_time();
 
-                // Update (Input polling)
+                // Build a virtual camera to keep the 800x600 game logic intact
+                let camera = Camera2D::from_display_rect(Rect::new(0.0, 0.0, SCREEN_WIDTH, SCREEN_HEIGHT));
+                set_camera(&camera);
+
+                // Update
                 if player.update(dt, &mut lasers) {
                     audio.play_laser();
                 }
                 if player.is_jetting {
                     audio.play_jet();
                 }
-                
-                // ... (rest of update logic)
+
                 item.update(dt);
                 
                 for platform in &platforms {
@@ -273,7 +283,6 @@ async fn main() {
                 });
 
                 // Drawing
-                set_camera(&camera);
                 clear_background(BLACK);
                 
                 for platform in &platforms {
@@ -307,11 +316,11 @@ async fn main() {
                     }
                 }
 
+                set_default_camera();
                 draw_text(&format!("FPS: {}", get_fps()), 10.0, 20.0, 20.0, WHITE);
             }
         }
         
-        set_default_camera();
         next_frame().await;
     }
 }
