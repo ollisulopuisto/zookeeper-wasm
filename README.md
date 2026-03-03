@@ -13,6 +13,7 @@ Available Games:
 - **High Performance:** 60 FPS WebGL rendering via Rust and Macroquad.
 - **Mobile Optimized:** Responsive layouts with touch controls.
 - **Unified CI/CD:** Automated builds and deployments for all games.
+- **CalVer Versioning:** Uses date-based versioning (e.g., `26.3.3.x`).
 
 ## 🛠 Tech Stack
 - **Workspace:** [Cargo Workspaces](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html)
