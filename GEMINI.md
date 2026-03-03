@@ -4,21 +4,16 @@ This project is a monorepo for WASM-based games written in Rust.
 
 ## Workspaces
 
-- **Root Workspace**:
-  - `jetpac_wasm/`: A WASM implementation of Jetpac.
-  - Managed by root `Cargo.toml`.
-
-- **Games Repository (`games_repo/`)**:
-  - A nested workspace (potentially a submodule or separate repo) for various games.
-  - `games/zookeeper/`: A match-3 style game.
-  - Managed by `games_repo/Cargo.toml`.
+Managed by root `Cargo.toml`:
+- `games_repo/games/jetpac_wasm/`: A WASM implementation of Jetpac.
+- `games_repo/games/zookeeper/`: A match-3 style game.
 
 ## Key Files
-- `assets/`: Shared or project-specific assets (partially mirrored in sub-projects).
-- `.github/workflows/deploy.yml`: Root deployment workflow.
-- `scripts/`: Project-wide utility scripts (e.g., `bump_version.py`).
+- `games_repo/index.html`: The main games portal.
+- `.github/workflows/deploy.yml`: Root deployment workflow for all games and the portal.
+- `scripts/`: Project-wide utility scripts.
 
 ## Tech Stack
 - **Language**: Rust
 - **Target**: WebAssembly (WASM)
-- **Deployment**: GitHub Pages (likely, based on `deploy.yml`)
+- **Deployment**: GitHub Pages (automatically via GH Actions)

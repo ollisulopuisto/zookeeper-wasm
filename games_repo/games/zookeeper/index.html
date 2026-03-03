@@ -46,6 +46,29 @@
         window.addEventListener('click', resumeAudio);
         window.addEventListener('touchstart', resumeAudio);
 
+        // Centralized Leaderboard System
+        window.get_leaderboard = function(gameId) {
+            const data = localStorage.getItem("WASM_GAMES_LEADERBOARD");
+            const leaderboard = data ? JSON.parse(data) : {};
+            return JSON.stringify(leaderboard[gameId] || []);
+        };
+
+        window.save_score = function(gameId, name, score) {
+            const data = localStorage.getItem("WASM_GAMES_LEADERBOARD");
+            const leaderboard = data ? JSON.parse(data) : {};
+            if (!leaderboard[gameId]) leaderboard[gameId] = [];
+            leaderboard[gameId].push({ name, score });
+            leaderboard[gameId].sort((a, b) => b.score - a.score);
+            leaderboard[gameId] = leaderboard[gameId].slice(0, 5);
+            localStorage.setItem("WASM_GAMES_LEADERBOARD", JSON.stringify(leaderboard));
+        };
+
+        // Mobile Name Input Helper
+        window.ask_name = function() {
+            const name = prompt("Enter your initials:", "");
+            return name || "";
+        };
+
         load("zookeeper_wasm.wasm");
     </script>
 </body>
