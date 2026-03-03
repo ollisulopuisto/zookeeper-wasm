@@ -15,6 +15,7 @@ pub struct Player {
     pub vel: Vec2,
     pub dir: Direction,
     pub grounded: bool,
+    #[allow(dead_code)]
     pub jump_timer: f32,
     pub dead: bool,
     pub score: u32,
@@ -43,6 +44,7 @@ impl Player {
 pub struct Enemy {
     pub pos: Vec2,
     pub vel: Vec2,
+    #[allow(dead_code)]
     pub dir: Direction,
     pub trapped: bool,
     pub trap_timer: f32,
@@ -75,6 +77,7 @@ pub struct Bubble {
 
 pub struct Fruit {
     pub pos: Vec2,
+    #[allow(dead_code)]
     pub vel: Vec2,
     pub score_val: u32,
     pub timer: f32,

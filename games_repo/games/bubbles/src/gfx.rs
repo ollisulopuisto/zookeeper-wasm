@@ -6,6 +6,7 @@ pub struct SpriteManager {
     pub zen_chan: Texture2D,
     pub bubble: Texture2D,
     pub apple: Texture2D,
+    #[allow(dead_code)]
     pub banana: Texture2D,
     pub tile: Texture2D,
 }
