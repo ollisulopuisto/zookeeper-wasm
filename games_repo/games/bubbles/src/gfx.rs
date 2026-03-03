@@ -318,3 +318,25 @@ const TILE_PIXELS: [u8; 256] = [
     10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,11,
     11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sprite_sizes() {
+        assert_eq!(BUB_IDLE.len(), 256);
+        assert_eq!(BUB_WALK_1.len(), 256);
+        assert_eq!(BUB_WALK_2.len(), 256);
+        assert_eq!(BUB_BLOW.len(), 256);
+        assert_eq!(BOB_IDLE.len(), 256);
+        assert_eq!(BOB_WALK_1.len(), 256);
+        assert_eq!(BOB_WALK_2.len(), 256);
+        assert_eq!(BOB_BLOW.len(), 256);
+        assert_eq!(ZEN_WALK_1.len(), 256);
+        assert_eq!(ZEN_WALK_2.len(), 256);
+        assert_eq!(BUBBLE_PIXELS.len(), 256);
+        assert_eq!(APPLE_PIXELS.len(), 256);
+        assert_eq!(TILE_PIXELS.len(), 256);
+    }
+}
