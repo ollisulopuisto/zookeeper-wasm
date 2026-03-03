@@ -264,6 +264,7 @@ async fn main() {
                 board.state = GameState::GameOver;
                 board.update_leaderboard();
                 if !settings.muted {
+                    info!("SND: Game Over");
                     play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
                 }
             }
@@ -305,6 +306,7 @@ async fn main() {
             GameState::WaitingToStart => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if !settings.muted {
+                        info!("SND: iOS Audio Context Unlock");
                         play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01 });
                     }
                     board.state = GameState::Idle;
@@ -329,6 +331,7 @@ async fn main() {
                                     board.combo_count = 1;
                                 }
                                 if !settings.muted {
+                                    info!("SND: Swap");
                                     play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
                                 }
                             }
@@ -354,6 +357,7 @@ async fn main() {
                         for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                         if !settings.muted {
+                            info!("SND: Match (Combo {})", board.combo_count);
                             play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
                         }
                     }
@@ -376,6 +380,7 @@ async fn main() {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
                         if !settings.muted {
+                            info!("SND: Fall");
                             play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
                         }
                     } else {
@@ -386,6 +391,7 @@ async fn main() {
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                             if !settings.muted {
+                                info!("SND: Match Cascade (Combo {})", board.combo_count);
                                 play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
                             }
                         } else {
@@ -451,7 +457,6 @@ async fn main() {
                                 let t = timer / ANIM_DURATION;
                                 scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
                                 alpha = 1.0 - t;
-                                // Add "frantic" vibration to clearing tiles
                                 if board.combo_count > 1 {
                                     draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
                                     draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
@@ -484,21 +489,18 @@ async fn main() {
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
 
-        // Draw Combo Text
         if board.combo_count > 1 {
             let combo_text = format!("COMBO X{}", board.combo_count);
             let tw = measure_text(&combo_text, None, (font_size * 1.2) as _, 1.0).width;
             draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
         }
 
-        // Draw Mute Toggle
         draw_texture_ex(
             if settings.muted { &tex_mute_on } else { &tex_mute_off },
             mute_x, mute_y, WHITE,
             DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
-        // Draw Pause Toggle
         if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver) {
             draw_texture_ex(
                 if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause },
