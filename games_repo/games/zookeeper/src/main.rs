@@ -19,7 +19,12 @@ const ANIM_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
 
-/// Persistent user settings stored in Macroquad's type-indexed storage.
+/// Leaderboard data stored in global storage.
+struct Leaderboard {
+    entries: Vec<(String, u32)>,
+}
+
+/// Persistent user settings.
 struct Settings {
     muted: bool,
 }
@@ -48,7 +53,7 @@ enum GameState {
     },
     /// Empty spaces are being filled by tiles falling from above.
     Falling { timer: f32 },
-    /// New High Score name entry using standard keyboard input.
+    /// New High Score name entry.
     EnteringName {
         score: u32,
         name: String,
@@ -84,34 +89,30 @@ impl Board {
             score: 0,
             time_left: 60.0,
             selected: None,
-            high_scores: Self::load_high_scores_from_js(),
+            high_scores: Self::load_high_scores(),
             new_record: false,
             combo_count: 0,
             level: 1,
             level_tiles_cleared: 0,
-            level_goal: 50, // Clear 50 tiles to advance
+            level_goal: 50,
         };
         board.fill_initial();
         board
     }
 
-    /// Loads high scores using the centralized JS leaderboard system.
-    fn load_high_scores_from_js() -> Vec<(String, u32)> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let json = sapp_jsutils::js_eval("window.get_leaderboard('zookeeper')");
-            if let Ok(entries) = serde_json::from_str::<Vec<HighUint>>(&json) {
-                return entries.into_iter().map(|e| (e.name, e.score)).collect();
-            }
+    fn load_high_scores() -> Vec<(String, u32)> {
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries.clone()
+        } else {
+            let initial = vec![("---".to_string(), 0); MAX_HIGH_SCORES];
+            storage::store(Leaderboard { entries: initial.clone() });
+            initial
         }
-        vec![("---".to_string(), 0); MAX_HIGH_SCORES]
     }
 
-    /// Saves high scores using the centralized JS leaderboard system.
-    fn save_score_to_js(name: &str, score: u32) {
-        #[cfg(target_arch = "wasm32")]
-        {
-            sapp_jsutils::js_eval(&format!("window.save_score('zookeeper', '{}', {})", name, score));
+    fn save_high_scores(&self) {
+        if let Some(lb) = storage::get_mut::<Leaderboard>() {
+            lb.entries = self.high_scores.clone();
         }
     }
 
@@ -122,8 +123,10 @@ impl Board {
     fn add_to_leaderboard(&mut self, name: String, score: u32) {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
         self.new_record = self.high_scores.first().map_or(true, |(_, best)| score > *best);
-        Self::save_score_to_js(&name, score);
-        self.high_scores = Self::load_high_scores_from_js();
+        self.high_scores.push((name, score));
+        self.high_scores.sort_by(|a, b| b.1.cmp(&a.1));
+        self.high_scores.truncate(MAX_HIGH_SCORES);
+        self.save_high_scores();
     }
 
     fn fill_initial(&mut self) {
@@ -178,9 +181,6 @@ impl Board {
         let match_points = matches.len() as u32 * 10 * self.combo_count;
         self.score += match_points;
         self.level_tiles_cleared += matches.len() as u32;
-        // In the requested refinement, time only resets on level clear.
-        // We could still add a tiny bit of time per match to reward fast play,
-        // but let's stick to the "timer only resets on level clear" for now.
         for &(x, y) in &matches {
             self.grid[y][x] = None;
         }
@@ -208,13 +208,6 @@ impl Board {
         self.grid[y1][x1] = self.grid[y2][x2];
         self.grid[y2][x2] = tmp;
     }
-}
-
-/// Helper for JSON deserialization of high scores.
-#[derive(serde::Deserialize)]
-struct HighUint {
-    name: String,
-    score: u32,
 }
 
 /// Minimal WAV generator for blips and blops
@@ -269,7 +262,8 @@ fn window_conf() -> Conf {
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
 
-    // Initialize persistent settings
+    // Initialize high score and settings storage
+    storage::store(Leaderboard { entries: vec![("---".to_string(), 0); MAX_HIGH_SCORES] });
     storage::store(Settings { muted: false });
 
     let textures = [
@@ -454,7 +448,7 @@ async fn main() {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
                     board.level_goal = 50 + board.level * 25;
-                    board.time_left = 60.0; // Timer resets on level clear
+                    board.time_left = 60.0;
                     board.state = GameState::Idle;
                 } else {
                     board.state = GameState::LevelUp { timer };
@@ -480,14 +474,6 @@ async fn main() {
                         board.add_to_leaderboard(name.clone(), score);
                         board.state = GameState::GameOver;
                     }
-                    
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            let prompt_name = sapp_jsutils::js_eval("window.ask_name()");
-                            if !prompt_name.is_empty() {
-                                name = prompt_name;
-                            }
-                        }
                 }
                 board.state = GameState::EnteringName { score, name };
             }
@@ -570,7 +556,6 @@ async fn main() {
         draw_text(&format!("SCORE: {}", board.score), offset_x, offset_y - font_size, font_size, WHITE);
         draw_text(&format!("TIME: {:.0}", board.time_left.max(0.0)), offset_x + board_size - font_size * 5.0, offset_y - font_size, font_size, WHITE);
 
-        // Progress Bar
         let bar_w = board_size;
         let bar_h = 10.0;
         let progress = (board.level_tiles_cleared as f32 / board.level_goal as f32).min(1.0);

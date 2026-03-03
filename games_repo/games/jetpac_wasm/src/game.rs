@@ -12,7 +12,7 @@ pub struct Player {
     pub holding_part: Option<PartType>,
 }
 
-use macroquad::prelude::*;
+use macroquad::color::SKYBLUE;
 
 impl Player {
     pub fn new() -> Self {
@@ -105,7 +105,7 @@ impl Laser {
     }
 
     pub fn draw(&self) {
-        draw_line(self.x, self.y, self.x + 10.0 * self.vx.signum(), self.y, 2.0, CYAN);
+        draw_line(self.x, self.y, self.x + 10.0 * self.vx.signum(), self.y, 2.0, SKYBLUE);
     }
 }
 
