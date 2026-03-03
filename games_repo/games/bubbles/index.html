@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Bubbles</title>
+    <meta name="description" content="A Bubble Bobble clone written in Rust/WASM. Trap enemies and pop bubbles!">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            image-rendering: pixelated;
+        }
+        #start-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: #fff;
+            text-align: center;
+        }
+        #start-button {
+            padding: 1.5rem 3rem;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #000;
+            background: #0f0;
+            border: 4px solid #fff;
+            border-radius: 0;
+            cursor: pointer;
+            box-shadow: 8px 8px 0px #444;
+            margin-top: 20px;
+        }
+        #start-button:active {
+            box-shadow: 2px 2px 0px #444;
+            transform: translate(6px, 6px);
+        }
+        h1 { font-size: 4rem; margin: 0; color: #0ff; text-shadow: 4px 4px #f0f; }
+        p { font-size: 1.2rem; color: #fff; }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" tabindex='1'></canvas>
+    <div id="start-overlay">
+        <h1>BUBBLES</h1>
+        <p>16-BIT ARCADE ACTION</p>
+        <button id="start-button" onclick="startGame()">START GAME</button>
+    </div>
+    
+    <script src="mq_js_bundle.js"></script>
+    <script>
+        miniquad_add_plugin({
+            register_plugin: function (importObject) {
+                importObject.env.js_load_leaderboard = function (ptr, max_len) {
+                    const data = localStorage.getItem("WASM_GAMES_BUBBLES_HISCORES") || "[]";
+                    const bytes = new TextEncoder().encode(data);
+                    const len = Math.min(bytes.length, max_len);
+                    const heap = new Uint8Array(importObject.env.memory.buffer);
+                    heap.set(bytes.subarray(0, len), ptr);
+                    return len;
+                };
+                importObject.env.js_save_leaderboard = function (ptr, len) {
+                    const heap = new Uint8Array(importObject.env.memory.buffer);
+                    const data = new TextDecoder().decode(heap.subarray(ptr, ptr + len));
+                    localStorage.setItem("WASM_GAMES_BUBBLES_HISCORES", data);
+                };
+            }
+        });
+
+        window.ask_name = function() {
+            return prompt("ENTER INITIALS:", "BUB") || "BUB";
+        };
+
+        let started = false;
+        function startGame() {
+            if (started) return;
+            started = true;
+            
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                const ctx = new AudioContext();
+                ctx.resume();
+            }
+
+            document.getElementById('start-overlay').style.display = 'none';
+            document.getElementById('glcanvas').focus();
+
+            load("bubbles.wasm");
+        }
+    </script>
+</body>
+</html>

@@ -13,6 +13,10 @@ pub enum TileType {
     NormalBrick,
     SolidBrick,
     Ladder,
+    UpLadder,
+    Spikes,
+    EnergyCharger,
+    EnergyDrain,
 }
 
 pub struct PhasedBrick {
@@ -34,10 +38,11 @@ pub struct Collectible {
     pub active: bool,
 }
 
-pub struct Portal {
+pub struct ExitDoor {
     pub col: usize,
     pub row: usize,
     pub active: bool,
+    pub opening_progress: f32, // 0.0 (closed) to 1.0 (fully open)
 }
 
 pub struct Player {
@@ -49,16 +54,24 @@ pub struct Player {
     pub phase_cooldown: f32,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum EnemyType {
+    Trackbot,
+    SteelBall,
+    Spring,
+}
+
 pub struct Enemy {
     pub entity: Entity,
     pub facing_right: bool,
+    pub etype: EnemyType,
 }
 
 pub struct Level {
     pub grid: [[TileType; COLS]; ROWS],
     pub phased_bricks: Vec<PhasedBrick>,
     pub collectibles: Vec<Collectible>,
-    pub portal: Portal,
+    pub exit_door: ExitDoor,
     pub emeralds_total: usize,
     pub emeralds_collected: usize,
 }
@@ -79,12 +92,40 @@ impl Level {
                         draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, DARKGRAY);
                         draw_rectangle(x + 2.0, y + 2.0, TILE_SIZE - 4.0, TILE_SIZE - 4.0, GRAY);
                     }
-                    TileType::Ladder => {
-                        draw_rectangle(x + 6.0, y, 4.0, TILE_SIZE, DARKBROWN);
-                        draw_rectangle(x + TILE_SIZE - 10.0, y, 4.0, TILE_SIZE, DARKBROWN);
+                    TileType::Ladder | TileType::UpLadder => {
+                        let color = if self.grid[r][c] == TileType::UpLadder { BLUE } else { DARKBROWN };
+                        draw_rectangle(x + 6.0, y, 4.0, TILE_SIZE, color);
+                        draw_rectangle(x + TILE_SIZE - 10.0, y, 4.0, TILE_SIZE, color);
                         for i in 0..4 {
                             let ly = y + 4.0 + i as f32 * 8.0;
-                            draw_rectangle(x + 6.0, ly, TILE_SIZE - 12.0, 4.0, DARKBROWN);
+                            draw_rectangle(x + 6.0, ly, TILE_SIZE - 12.0, 4.0, color);
+                        }
+                    }
+                    TileType::Spikes => {
+                        for i in 0..4 {
+                            let sx = x + i as f32 * 8.0;
+                            draw_triangle(
+                                vec2(sx, y + TILE_SIZE),
+                                vec2(sx + 8.0, y + TILE_SIZE),
+                                vec2(sx + 4.0, y + 12.0),
+                                LIGHTGRAY
+                            );
+                        }
+                    }
+                    TileType::EnergyCharger => {
+                        draw_rectangle(x, y + TILE_SIZE - 4.0, TILE_SIZE, 4.0, YELLOW);
+                        let t = get_time() * 20.0;
+                        for i in 0..3 {
+                            let offset = (t + i as f64 * 5.0).sin() as f32 * 4.0;
+                            draw_line(x + i as f32 * 10.0 + 5.0, y + TILE_SIZE - 4.0, x + i as f32 * 10.0 + 5.0, y + TILE_SIZE - 12.0 + offset, 2.0, GOLD);
+                        }
+                    }
+                    TileType::EnergyDrain => {
+                        draw_rectangle(x, y + TILE_SIZE - 4.0, TILE_SIZE, 4.0, DARKGRAY);
+                        let t = get_time() * 10.0;
+                        for i in 0..3 {
+                            let offset = (t + i as f64 * 5.0).cos() as f32 * 4.0;
+                            draw_line(x + i as f32 * 10.0 + 5.0, y + TILE_SIZE - 4.0, x + i as f32 * 10.0 + 5.0, y + TILE_SIZE - 8.0 + offset, 2.0, PURPLE);
                         }
                     }
                     TileType::Empty => {}
@@ -96,7 +137,7 @@ impl Level {
         for pb in &self.phased_bricks {
             let x = pb.col as f32 * TILE_SIZE;
             let y = pb.row as f32 * TILE_SIZE;
-            let alpha = if pb.timer < 1.0 { 1.0 - pb.timer } else { 0.2 };
+            let alpha = if pb.timer < 1.0 { pb.timer } else { 0.2 }; // Fades in back to solid
             draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, Color::new(1.0, 0.0, 0.0, alpha));
         }
 
@@ -121,23 +162,19 @@ impl Level {
             }
         }
 
-        // Draw Portal
-        let px = self.portal.col as f32 * TILE_SIZE;
-        let py = self.portal.row as f32 * TILE_SIZE;
-        draw_rectangle(px, py, TILE_SIZE * 2.0, TILE_SIZE * 2.0, DARKGRAY);
-        if self.portal.active {
-            draw_rectangle(px + 4.0, py + 4.0, TILE_SIZE * 2.0 - 8.0, TILE_SIZE * 2.0 - 8.0, BLACK);
-            let t = get_time() * 10.0;
-            for i in 0..5 {
-                let r = (t + i as f64).sin() as f32 * 10.0 + 15.0;
-                draw_circle(px + TILE_SIZE, py + TILE_SIZE, r, Color::new(0.5, 0.0, 1.0, 0.3));
-            }
-            draw_circle(px + TILE_SIZE, py + TILE_SIZE, 10.0, MAGENTA);
-        } else {
-            // Closed doors
-            draw_rectangle(px + 4.0, py + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
-            draw_rectangle(px + TILE_SIZE, py + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
-            draw_line(px + TILE_SIZE, py + 4.0, px + TILE_SIZE, py + TILE_SIZE * 2.0 - 4.0, 2.0, BLACK);
+        // Draw Exit Door
+        let dx = self.exit_door.col as f32 * TILE_SIZE;
+        let dy = self.exit_door.row as f32 * TILE_SIZE;
+        draw_rectangle(dx, dy, TILE_SIZE * 2.0, TILE_SIZE * 2.0, DARKGRAY);
+        
+        let door_offset = self.exit_door.opening_progress * (TILE_SIZE - 4.0);
+        // Left door
+        draw_rectangle(dx + 4.0 - door_offset, dy + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
+        // Right door
+        draw_rectangle(dx + TILE_SIZE + door_offset, dy + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
+        
+        if self.exit_door.opening_progress < 1.0 {
+            draw_line(dx + TILE_SIZE, dy + 4.0, dx + TILE_SIZE, dy + TILE_SIZE * 2.0 - 4.0, 2.0, BLACK);
         }
     }
 }
@@ -185,10 +222,11 @@ impl Player {
 }
 
 impl Enemy {
-    pub fn new(col: usize, row: usize) -> Self {
+    pub fn new(col: usize, row: usize, etype: EnemyType) -> Self {
         Self {
             entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE + 8.0, 24.0, 24.0),
             facing_right: true,
+            etype,
         }
     }
 
@@ -198,15 +236,28 @@ impl Enemy {
         let x = self.entity.collider.x;
         let y = self.entity.collider.y;
         
-        // Trackbot style
-        draw_rectangle(x, y - wobble, 24.0, 24.0, PURPLE);
-        draw_rectangle(x + 2.0, y + 2.0 - wobble, 20.0, 20.0, MAGENTA);
-        
-        // Treads
-        draw_rectangle(x - 2.0, y + 20.0, 28.0, 6.0, DARKGRAY);
-        
-        let eye_x = if self.facing_right { x + 14.0 } else { x + 4.0 };
-        draw_rectangle(eye_x, y + 6.0 - wobble, 6.0, 6.0, RED);
+        match self.etype {
+            EnemyType::Trackbot => {
+                draw_rectangle(x, y - wobble, 24.0, 24.0, PURPLE);
+                draw_rectangle(x + 2.0, y + 2.0 - wobble, 20.0, 20.0, MAGENTA);
+                draw_rectangle(x - 2.0, y + 20.0, 28.0, 6.0, DARKGRAY);
+                let eye_x = if self.facing_right { x + 14.0 } else { x + 4.0 };
+                draw_rectangle(eye_x, y + 6.0 - wobble, 6.0, 6.0, RED);
+            }
+            EnemyType::SteelBall => {
+                draw_circle(x + 12.0, y + 12.0, 12.0, GRAY);
+                draw_circle(x + 12.0, y + 12.0, 8.0, LIGHTGRAY);
+                draw_circle(x + 8.0, y + 8.0, 3.0, WHITE); // Reflection
+            }
+            EnemyType::Spring => {
+                draw_rectangle(x + 4.0, y + 18.0, 16.0, 6.0, ORANGE);
+                for i in 0..3 {
+                    let sy = y + 4.0 + i as f32 * 6.0;
+                    draw_line(x + 4.0, sy, x + 20.0, sy + 4.0, 2.0, DARKGRAY);
+                    draw_line(x + 20.0, sy + 4.0, x + 4.0, sy + 6.0, 2.0, DARKGRAY);
+                }
+            }
+        }
     }
 }
 
@@ -232,9 +283,12 @@ pub fn create_test_level() -> Level {
     grid[14][5] = TileType::SolidBrick;
     grid[10][15] = TileType::SolidBrick;
 
+    // Spikes
+    for c in 10..15 { grid[ROWS-2][c] = TileType::Spikes; }
+
     // Ladders
     for r in 11..18 { grid[r][10] = TileType::Ladder; }
-    for r in 7..11 { grid[r][18] = TileType::Ladder; }
+    for r in 7..11 { grid[r][18] = TileType::UpLadder; }
 
     let collectibles = vec![
         Collectible { col: 3, row: 13, ctype: CollectibleType::Emerald, active: true },
@@ -253,6 +307,6 @@ pub fn create_test_level() -> Level {
         emeralds_total: 6,
         emeralds_collected: 0,
         collectibles,
-        portal: Portal { col: 20, row: 16, active: false }, // 2x2 portal at bottom right
+        exit_door: ExitDoor { col: 20, row: 16, active: false, opening_progress: 0.0 }, 
     }
 }

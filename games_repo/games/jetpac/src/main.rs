@@ -3,7 +3,7 @@ mod game;
 mod audio;
 
 use macroquad::prelude::*;
-use game::{Player, Enemy, Level, TileType, CollectibleType, SCREEN_WIDTH, SCREEN_HEIGHT, TILE_SIZE, COLS, ROWS, create_test_level};
+use game::{Player, Enemy, EnemyType, Level, TileType, CollectibleType, SCREEN_WIDTH, SCREEN_HEIGHT, TILE_SIZE, COLS, ROWS, create_test_level};
 use physics::RectCollider;
 use audio::AudioManager;
 
@@ -44,6 +44,24 @@ fn check_collision(level: &Level, collider: &RectCollider) -> bool {
     false
 }
 
+fn check_spikes(level: &Level, collider: &RectCollider) -> bool {
+    let left_col = (collider.x / TILE_SIZE).floor() as i32;
+    let right_col = ((collider.x + collider.w - 0.1) / TILE_SIZE).floor() as i32;
+    let top_row = (collider.y / TILE_SIZE).floor() as i32;
+    let bottom_row = ((collider.y + collider.h - 0.1) / TILE_SIZE).floor() as i32;
+
+    for r in top_row..=bottom_row {
+        for c in left_col..=right_col {
+            if c >= 0 && c < COLS as i32 && r >= 0 && r < ROWS as i32 {
+                if level.grid[r as usize][c as usize] == TileType::Spikes {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn get_tile_at(level: &Level, x: f32, y: f32) -> TileType {
     let c = (x / TILE_SIZE).floor() as i32;
     let r = (y / TILE_SIZE).floor() as i32;
@@ -63,8 +81,10 @@ async fn main() {
     let mut level = create_test_level();
     let mut player = Player::new(2, 13);
     let mut enemies = vec![
-        Enemy::new(5, 5),
-        Enemy::new(12, 5),
+        Enemy::new(5, 5, EnemyType::Trackbot),
+        Enemy::new(12, 5, EnemyType::Trackbot),
+        Enemy::new(15, 17, EnemyType::SteelBall),
+        Enemy::new(5, 17, EnemyType::Spring),
     ];
 
     loop {
@@ -147,52 +167,67 @@ async fn main() {
                         }
                     }
 
+                    // Ground Check
+                    player.entity.collider.y += 1.0;
+                    let is_on_ground = check_collision(&level, &player.entity.collider);
+                    player.entity.collider.y -= 1.0;
+
                     // Jetpack logic
                     player.is_jetting = false;
                     if jet_btn && player.fuel > 0.0 {
                         player.is_jetting = true;
-                        player.fuel -= 20.0 * dt;
-                        dy -= 200.0 * dt;
-                        if player.entity.vy > -150.0 {
-                            player.entity.vy -= 800.0 * dt; // Jet thrust
+                        player.fuel -= 30.0 * dt;
+                        if player.entity.vy > -200.0 {
+                            player.entity.vy -= 1200.0 * dt; // Stronger thrust
                         }
                     } else {
                         // Gravity
-                        player.entity.vy += 600.0 * dt;
+                        player.entity.vy += 800.0 * dt;
+                    }
+
+                    // Jumping logic
+                    if move_up && is_on_ground && !player.is_jetting {
+                        player.entity.vy = -350.0;
+                        audio.play_jump();
                     }
 
                     // Ladder logic
                     let center_x = player.entity.collider.x + player.entity.collider.w / 2.0;
                     let center_y = player.entity.collider.y + player.entity.collider.h / 2.0;
-                    let on_ladder = get_tile_at(&level, center_x, center_y) == TileType::Ladder;
+                    let current_tile = get_tile_at(&level, center_x, center_y);
+                    let on_ladder = current_tile == TileType::Ladder || current_tile == TileType::UpLadder;
                     
                     if on_ladder && !player.is_jetting {
+                        let climb_speed = if current_tile == TileType::UpLadder { 250.0 } else { 150.0 };
                         player.entity.vy = 0.0;
-                        if move_up { dy -= 150.0 * dt; }
-                        if move_down { dy += 150.0 * dt; }
+                        if move_up { dy -= climb_speed * dt; }
+                        if move_down { dy += climb_speed * dt; }
                     }
 
                     // Horizontal movement
-                    if move_left {
-                        dx -= 150.0 * dt;
-                        player.facing_right = false;
-                    }
-                    if move_right {
-                        dx += 150.0 * dt;
-                        player.facing_right = true;
-                    }
+                    let speed = 180.0;
+                    if move_left { dx -= speed * dt; player.facing_right = false; }
+                    if move_right { dx += speed * dt; player.facing_right = true; }
 
                     // Apply horizontal physics
                     player.entity.collider.x += dx;
                     if check_collision(&level, &player.entity.collider) {
-                        player.entity.collider.x -= dx; // Revert
+                        player.entity.collider.x -= dx;
                     }
 
                     // Apply vertical physics
                     player.entity.collider.y += dy + player.entity.vy * dt;
                     if check_collision(&level, &player.entity.collider) {
-                        player.entity.collider.y -= dy + player.entity.vy * dt; // Revert
+                        player.entity.collider.y -= dy + player.entity.vy * dt;
                         player.entity.vy = 0.0;
+                    }
+
+                    // Spike Death
+                    if check_spikes(&level, &player.entity.collider) {
+                        player.dead = true;
+                        state = GameState::GameOver;
+                        audio.stop_jet();
+                        audio.play_game_over();
                     }
 
                     // Phase Shifter logic
@@ -200,26 +235,23 @@ async fn main() {
                         player.phase_cooldown -= dt;
                     }
                     if phase_btn && player.phase_cooldown <= 0.0 {
-                        // Find tile directly in front and below
+                        // Find tile directly in front
                         let pc_x = player.entity.collider.x + if player.facing_right { TILE_SIZE } else { -TILE_SIZE/2.0 };
-                        let pc_y = player.entity.collider.y + player.entity.collider.h + 2.0; // Phasing floor
+                        let pc_y = player.entity.collider.y + player.entity.collider.h / 2.0; 
                         let c = (pc_x / TILE_SIZE).floor() as usize;
                         let r = (pc_y / TILE_SIZE).floor() as usize;
                         
                         if c < COLS && r < ROWS && level.grid[r][c] == TileType::NormalBrick {
                             level.grid[r][c] = TileType::Empty;
-                            level.phased_bricks.push(game::PhasedBrick { col: c, row: r, timer: 5.0 });
-                            player.phase_cooldown = 0.5;
+                            level.phased_bricks.push(game::PhasedBrick { col: c, row: r, timer: 4.0 });
+                            player.phase_cooldown = 0.4;
                             audio.play_phase();
                         }
                     }
 
                     // Audio
-                    if player.is_jetting {
-                        audio.start_jet();
-                    } else {
-                        audio.stop_jet();
-                    }
+                    if player.is_jetting { audio.start_jet(); }
+                    else { audio.stop_jet(); }
 
                     // Collectibles
                     for col in &mut level.collectibles {
@@ -235,7 +267,7 @@ async fn main() {
                                         level.emeralds_collected += 1;
                                         audio.play_gem();
                                         if level.emeralds_collected >= level.emeralds_total {
-                                            level.portal.active = true;
+                                            level.exit_door.active = true;
                                             audio.play_portal();
                                         }
                                     }
@@ -248,12 +280,15 @@ async fn main() {
                         }
                     }
 
-                    // Portal completion
-                    if level.portal.active {
-                        let px = level.portal.col as f32 * TILE_SIZE;
-                        let py = level.portal.row as f32 * TILE_SIZE;
-                        let portal_rect = RectCollider::new(px, py, TILE_SIZE * 2.0, TILE_SIZE * 2.0);
-                        if player.entity.collider.overlaps(&portal_rect) {
+                    // Exit Door completion
+                    if level.exit_door.active {
+                        if level.exit_door.opening_progress < 1.0 {
+                            level.exit_door.opening_progress = (level.exit_door.opening_progress + dt).min(1.0);
+                        }
+                        let ex = level.exit_door.col as f32 * TILE_SIZE + TILE_SIZE / 2.0;
+                        let ey = level.exit_door.row as f32 * TILE_SIZE + TILE_SIZE / 2.0;
+                        let exit_rect = RectCollider::new(ex, ey, TILE_SIZE, TILE_SIZE * 2.0);
+                        if player.entity.collider.overlaps(&exit_rect) && level.exit_door.opening_progress >= 1.0 {
                             state = GameState::Victory;
                             audio.stop_jet();
                         }
@@ -285,19 +320,46 @@ async fn main() {
 
                 // --- Enemy Update ---
                 for enemy in &mut enemies {
-                    let dx = if enemy.facing_right { 100.0 * dt } else { -100.0 * dt };
-                    enemy.entity.vy += 600.0 * dt; // Gravity
-                    
-                    enemy.entity.collider.x += dx;
-                    if check_collision(&level, &enemy.entity.collider) {
-                        enemy.entity.collider.x -= dx;
-                        enemy.facing_right = !enemy.facing_right; // Turn around
-                    }
-                    
-                    enemy.entity.collider.y += enemy.entity.vy * dt;
-                    if check_collision(&level, &enemy.entity.collider) {
-                        enemy.entity.collider.y -= enemy.entity.vy * dt;
-                        enemy.entity.vy = 0.0;
+                    match enemy.etype {
+                        EnemyType::Trackbot => {
+                            let dx = if enemy.facing_right { 100.0 * dt } else { -100.0 * dt };
+                            enemy.entity.vy += 600.0 * dt; // Gravity
+                            
+                            enemy.entity.collider.x += dx;
+                            if check_collision(&level, &enemy.entity.collider) {
+                                enemy.entity.collider.x -= dx;
+                                enemy.facing_right = !enemy.facing_right;
+                            }
+                            
+                            enemy.entity.collider.y += enemy.entity.vy * dt;
+                            if check_collision(&level, &enemy.entity.collider) {
+                                enemy.entity.collider.y -= enemy.entity.vy * dt;
+                                enemy.entity.vy = 0.0;
+                            }
+                        }
+                        EnemyType::SteelBall => {
+                            if enemy.entity.vy == 0.0 { enemy.entity.vy = 150.0; } // Initial vertical speed
+                            let dx = if enemy.facing_right { 150.0 * dt } else { -150.0 * dt };
+                            enemy.entity.collider.x += dx;
+                            if check_collision(&level, &enemy.entity.collider) {
+                                enemy.entity.collider.x -= dx;
+                                enemy.facing_right = !enemy.facing_right;
+                            }
+                            let dy = enemy.entity.vy * dt;
+                            enemy.entity.collider.y += dy;
+                            if check_collision(&level, &enemy.entity.collider) {
+                                enemy.entity.collider.y -= dy;
+                                enemy.entity.vy = -enemy.entity.vy; // Bounce vertically
+                            }
+                        }
+                        EnemyType::Spring => {
+                            enemy.entity.vy += 800.0 * dt; // Gravity
+                            enemy.entity.collider.y += enemy.entity.vy * dt;
+                            if check_collision(&level, &enemy.entity.collider) {
+                                enemy.entity.collider.y -= enemy.entity.vy * dt;
+                                enemy.entity.vy = -450.0; // Bounce up
+                            }
+                        }
                     }
 
                     if player.entity.collider.overlaps(&enemy.entity.collider) && !player.dead {
@@ -328,7 +390,12 @@ async fn main() {
                 if restart {
                     level = create_test_level();
                     player = Player::new(2, 13);
-                    enemies = vec![Enemy::new(5, 5), Enemy::new(12, 5)];
+                    enemies = vec![
+                        Enemy::new(5, 5, EnemyType::Trackbot),
+                        Enemy::new(12, 5, EnemyType::Trackbot),
+                        Enemy::new(15, 17, EnemyType::SteelBall),
+                        Enemy::new(5, 17, EnemyType::Spring),
+                    ];
                     state = GameState::Playing;
                 }
 

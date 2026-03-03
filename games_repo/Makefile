@@ -1,4 +1,4 @@
-GAMES := jetpac zookeeper
+GAMES := jetpac zookeeper bubbles
 
 .PHONY: all setup build test lint clean rename $(GAMES)
 
