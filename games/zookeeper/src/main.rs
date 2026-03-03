@@ -264,7 +264,7 @@ async fn main() {
                 board.state = GameState::GameOver;
                 board.update_leaderboard();
                 if !settings.muted {
-                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0, pitch: 1.0 });
+                    play_sound(&snd_game_over, PlaySoundParams { looped: false, volume: 1.0 });
                 }
             }
         }
@@ -305,7 +305,7 @@ async fn main() {
             GameState::WaitingToStart => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
                     if !settings.muted {
-                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01, pitch: 1.0 });
+                        play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 0.01 });
                     }
                     board.state = GameState::Idle;
                 }
@@ -329,7 +329,7 @@ async fn main() {
                                     board.combo_count = 1;
                                 }
                                 if !settings.muted {
-                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0, pitch: 1.0 });
+                                    play_sound(&snd_swap, PlaySoundParams { looped: false, volume: 1.0 });
                                 }
                             }
                             board.selected = None;
@@ -354,8 +354,7 @@ async fn main() {
                         for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                         board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                         if !settings.muted {
-                            let pitch = 1.0 + (board.combo_count as f32 - 1.0) * 0.15;
-                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0, pitch: pitch.min(2.5) });
+                            play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
                         }
                     }
                 } else {
@@ -377,7 +376,7 @@ async fn main() {
                     if board.apply_gravity() {
                         board.state = GameState::Falling { timer: 0.0 };
                         if !settings.muted {
-                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3, pitch: 1.0 });
+                            play_sound(&snd_fall, PlaySoundParams { looped: false, volume: 0.3 });
                         }
                     } else {
                         let matches = board.find_matches();
@@ -387,8 +386,7 @@ async fn main() {
                             for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
                             board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
                             if !settings.muted {
-                                let pitch = 1.0 + (board.combo_count as f32 - 1.0) * 0.15;
-                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0, pitch: pitch.min(2.5) });
+                                play_sound(&snd_match, PlaySoundParams { looped: false, volume: 1.0 });
                             }
                         } else {
                             board.state = GameState::Idle;
