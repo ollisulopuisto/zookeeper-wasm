@@ -35,6 +35,7 @@ struct Leaderboard {
 extern "C" {
     fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
     fn js_save_leaderboard(ptr: *const u8, len: u32);
+    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
 }
 
 /// Persistent user settings.
@@ -72,6 +73,7 @@ enum GameState {
         score: u32,
         combo: u32,
         name: String,
+        notified: bool,
     },
     /// The board is being refilled after a shuffle or level up.
     Reshuffling {
@@ -414,7 +416,7 @@ async fn main() {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string() };
+                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string(), notified: false };
                 } else {
                     board.state = GameState::GameOver;
                 }
@@ -588,7 +590,18 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, mut name } => {
+            GameState::EnteringName { score, combo, mut name, mut notified } => {
+                if !notified {
+                    let mut buffer = [0u8; 16];
+                    let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
+                    if len > 0 {
+                        if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
+                            name = js_name.trim().to_string();
+                        }
+                    }
+                    notified = true;
+                }
+
                 let mut submitted = false;
                 while let Some(c) = get_char_pressed() {
                     if c.is_alphanumeric() || c == ' ' {
@@ -615,7 +628,7 @@ async fn main() {
                     }
                 }
                 if !submitted {
-                    board.state = GameState::EnteringName { score, combo, name };
+                    board.state = GameState::EnteringName { score, combo, name, notified };
                 }
             }
             GameState::GameOver => {
@@ -783,7 +796,7 @@ async fn main() {
             draw_text(lu_text, sw / 2.0 - tw / 2.0, sh / 2.0, font_size * 1.5, SKYBLUE);
         }
 
-        if let GameState::EnteringName { score, combo, ref name } = board.state {
+        if let GameState::EnteringName { score, combo, ref name, .. } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
             
