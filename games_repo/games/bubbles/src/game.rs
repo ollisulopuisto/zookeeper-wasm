@@ -76,7 +76,7 @@ impl Player {
             respawn_timer: 0.0,
             max_bubbles: 10,
             bubble_speed: 3.5,
-            bubble_range: 0.5,
+            bubble_range: 0.5, // 0.5 seconds of forward travel
             bubble_scale: 1.0,
             powerup_timer: 0.0,
         }
@@ -320,11 +320,11 @@ impl Game {
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = -15.0; }
-                else { p.pos.y = PLAY_HEIGHT; p.vel.y = 0.0; p.grounded = true; }
+                else { p.pos.y = PLAY_HEIGHT - 16.0; p.vel.y = 0.0; p.grounded = true; }
             }
             if p.pos.y < -16.0 {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = PLAY_HEIGHT - 1.0; }
-                else { p.pos.y = -16.0; p.vel.y = 0.0; }
+                else { p.pos.y = 0.0; p.vel.y = 0.0; }
             }
         }
 
@@ -338,7 +338,6 @@ impl Game {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
             
-            // SIDE BARRIER: Trapped bubbles stay inside
             if b.trapped_kind.is_some() {
                 b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
             }
@@ -375,8 +374,8 @@ impl Game {
                 }
                 EnemyType::Flyer => {
                     e.pos += e.vel;
-                    if e.pos.x < 0.0 || e.pos.x > VIRTUAL_WIDTH - 16.0 { e.vel.x = -e.vel.x; }
-                    if e.pos.y < 0.0 || e.pos.y > PLAY_HEIGHT - 16.0 { e.vel.y = -e.vel.y; }
+                    if e.pos.x < TILE_SIZE || e.pos.x > VIRTUAL_WIDTH - TILE_SIZE * 2.0 { e.vel.x = -e.vel.x; }
+                    if e.pos.y < TILE_SIZE || e.pos.y > PLAY_HEIGHT - TILE_SIZE * 2.0 { e.vel.y = -e.vel.y; }
                     let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
                     let ty = ((e.pos.y + 8.0) / TILE_SIZE) as i32;
                     if self.level.is_wall(tx, ty) { e.vel = -e.vel; }
@@ -402,11 +401,11 @@ impl Game {
             let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
             if e.pos.y > PLAY_HEIGHT {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = -15.0; }
-                else { e.pos.y = PLAY_HEIGHT; e.vel.y = 0.0; }
+                else { e.pos.y = PLAY_HEIGHT - 16.0; e.vel.y = 0.0; }
             }
             if e.pos.y < -16.0 {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = PLAY_HEIGHT - 1.0; }
-                else { e.pos.y = -16.0; e.vel.y = 0.0; }
+                else { e.pos.y = 0.0; e.vel.y = 0.0; }
             }
         }
 
@@ -584,9 +583,26 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
     let ty = (p.pos.y / TILE_SIZE) as i32;
     let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
+    
+    // CEILING COLLISION
+    if p.vel.y < 0.0 {
+        let head_tile_y = (p.pos.y + 2.0) / TILE_SIZE;
+        if level.is_wall(ground_tile_x as i32, head_tile_y as i32) {
+            p.pos.y = (head_tile_y as i32 * 16 + 16) as f32;
+            p.vel.y = 0.0;
+        }
+    }
+
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
-        if p.vel.y > 0.0 { p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; p.vel.y = 0.0; p.grounded = true; }
-    } else { p.grounded = false; }
+        if p.vel.y > 0.0 {
+            p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
+            p.vel.y = 0.0;
+            p.grounded = true;
+        }
+    } else {
+        p.grounded = false;
+    }
+    
     if level.is_wall((p.pos.x + 4.0) as i32 / 16, ty) || level.is_wall((p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
         if p.vel.x < 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16 + 16) as f32; p.vel.x = 0.0; }
     }
@@ -599,6 +615,16 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     let mut grounded = false;
     let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
+    
+    // CEILING COLLISION
+    if e.vel.y < 0.0 {
+        let head_tile_y = (e.pos.y + 2.0) / TILE_SIZE;
+        if level.is_wall(ground_tile_x as i32, head_tile_y as i32) {
+            e.pos.y = (head_tile_y as i32 * 16 + 16) as f32;
+            e.vel.y = 0.0;
+        }
+    }
+
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
         if e.vel.y > 0.0 { 
             e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; 
