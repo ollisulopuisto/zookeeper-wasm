@@ -113,10 +113,24 @@
 
         let started = false;
         function resumeAudio() {
-            if (captured_ctx && captured_ctx.state === 'suspended') {
-                captured_ctx.resume().then(() => {
-                    console.log("AudioContext resumed successfully");
-                });
+            if (captured_ctx) {
+                if (captured_ctx.state === 'suspended') {
+                    captured_ctx.resume().then(() => {
+                        console.log("AudioContext resumed successfully");
+                    });
+                }
+                // Force unlock with a silent oscillator
+                try {
+                    const osc = captured_ctx.createOscillator();
+                    const silent = captured_ctx.createGain();
+                    silent.gain.value = 0;
+                    osc.connect(silent);
+                    silent.connect(captured_ctx.destination);
+                    osc.start(0);
+                    osc.stop(0.1);
+                } catch (e) {
+                    console.error("Error playing silent sound:", e);
+                }
             }
         }
 

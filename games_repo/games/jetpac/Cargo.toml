@@ -1,6 +1,6 @@
 [package]
 name = "jetpac"
-version = "26.3.41450"
+version = "26.3.41548"
 edition = "2021"
 
 [dependencies]
