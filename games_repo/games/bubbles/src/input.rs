@@ -26,9 +26,10 @@ impl InputManager {
     }
 
     pub fn update(&mut self, virtual_width: f32, virtual_height: f32) {
-        // Reset state but keep "pressed" for current frame
-        let prev_p1_jump = self.p1.jump;
-        let prev_p1_bubble = self.p1.bubble;
+        // Reset state for new frame
+        self.p1 = PlayerInput::default();
+        self.p2 = PlayerInput::default();
+        self.any_key = false;
 
         // Keyboard P1
         self.p1.left = is_key_down(KeyCode::Left);
@@ -42,7 +43,9 @@ impl InputManager {
         self.p2.jump = is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Q);
         self.p2.bubble = is_key_pressed(KeyCode::E) || is_key_pressed(KeyCode::S);
 
-        self.any_key = get_last_key_pressed().is_some();
+        if get_last_key_pressed().is_some() {
+            self.any_key = true;
+        }
 
         // Touch handling
         let sw = screen_width();
@@ -64,19 +67,13 @@ impl InputManager {
             let ty = (touch.position.y - vy) / scale;
 
             // Define control regions in virtual coordinates
-            // D-Pad Area: Bottom Left
             let dpad_y = virtual_height - 100.0;
             if ty > dpad_y {
                 if tx < 60.0 {
                     self.p1.left = true;
                 } else if tx < 120.0 {
                     self.p1.right = true;
-                }
-            }
-
-            // Buttons Area: Bottom Right
-            if ty > dpad_y {
-                if tx > virtual_width - 60.0 {
+                } else if tx > virtual_width - 60.0 {
                     if touch.phase == TouchPhase::Started { self.p1.bubble = true; }
                 } else if tx > virtual_width - 120.0 {
                     if touch.phase == TouchPhase::Started { self.p1.jump = true; }
@@ -87,10 +84,6 @@ impl InputManager {
                 self.any_key = true;
             }
         }
-
-        // Ensure we don't lose keyboard presses if touch is active
-        if prev_p1_jump { self.p1.jump = true; }
-        if prev_p1_bubble { self.p1.bubble = true; }
     }
 
     pub fn draw_controls(&self, vx: f32, vy: f32, scale: f32, virtual_width: f32, virtual_height: f32) {

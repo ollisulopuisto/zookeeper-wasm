@@ -297,10 +297,10 @@ impl Game {
                 }
             }
 
-            if input.bubble {
+            if input.bubble && p.blow_timer <= 0.0 {
                 let current_bubbles = self.bubbles.iter().filter(|b| b.owner_id == p.id).count();
                 if current_bubbles < p.max_bubbles {
-                    p.blow_timer = 0.2;
+                    p.blow_timer = 0.25;
                     let bx = if p.dir == Direction::Right { p.pos.x + 16.0 } else { p.pos.x - 16.0 };
                     self.bubbles.push(Bubble {
                         pos: vec2(bx, p.pos.y),
