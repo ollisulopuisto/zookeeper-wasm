@@ -2,6 +2,24 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.4.1] - 2026-03-03
+### Added
+- **Bubbles Game:** A new 16-bit "Bubble Bobble" clone with 2-player support and Amiga/NEO GEO aesthetics.
+- **Audiovisual Overhaul (Bubbles):**
+  - High-fidelity NEO GEO-style expressive character animations.
+  - Multi-channel procedural chiptune system featuring Rush-inspired melodic structures.
+  - Smooth 60 FPS rendering with manual viewport scaling for maximum browser compatibility.
+- **Enhanced Physics (Bubbles):**
+  - "Hefty" movement with horizontal inertia, coyote time, and jump buffering.
+  - Conditional vertical screen wrapping through level-specific gaps.
+- **Power-up System (Bubbles):** Upgradeable bubble capacity, speed, range, and size.
+- **Testing Infrastructure:** Mandated CI success through unit tests for physics, logic, and sprite data integrity.
+### Changed
+- **Unified High Score Entry:** Bubbles now uses the robust text-based name entry system from Zookeeper, optimized for both desktop and mobile.
+### Fixed
+- **HUD Readability (Zookeeper):** Readjusted score and time bar positions to prevent layout overlap on mobile.
+- **WASM Stability:** Resolved `TypeError` in JS-WASM memory bridge for more reliable leaderboard persistence.
+
 ## [26.3.3.42] - 2026-03-03
 ### Added
 - **Explicit Start Button:** Added a "START GAME" HTML button to index.html to ensure 100% reliable audio initialization on all browsers (especially iOS Safari).
