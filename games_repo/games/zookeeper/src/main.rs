@@ -591,7 +591,7 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, name } => {
+            GameState::EnteringName { score, combo, ref name } => {
                 let mut submitted = false;
                 let mut current_name = name.clone();
                 while let Some(c) = get_char_pressed() {
@@ -608,15 +608,15 @@ async fn main() {
                 let _font_size = sh * 0.05;
 
                 let prompt_w = sw * 0.4;
-                let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                let _prompt_x = sw / 2.0 - prompt_w / 2.0;
                 let _prompt_y = sh * 0.6;
                 let _prompt_h = sh * 0.06;
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    draw_rectangle(prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                    draw_rectangle(_prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
                     draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
-                    if is_mouse_button_pressed(MouseButton::Left) && mx >= prompt_x && mx <= prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
+                    if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
                         let mut buffer = [0u8; 16];
                         let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
                         if len > 0 {
