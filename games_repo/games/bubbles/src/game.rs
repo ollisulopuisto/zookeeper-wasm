@@ -584,17 +584,18 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
     let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
     
-    // CEILING COLLISION
+    // CEILING COLLISION - Only for the TOP BORDER (row 0)
     if p.vel.y < 0.0 {
         let head_tile_y = (p.pos.y + 2.0) / TILE_SIZE;
-        if level.is_wall(ground_tile_x as i32, head_tile_y as i32) {
-            p.pos.y = (head_tile_y as i32 * 16 + 16) as f32;
+        if head_tile_y as i32 == 0 && level.is_wall(ground_tile_x as i32, 0) {
+            p.pos.y = 16.0;
             p.vel.y = 0.0;
         }
     }
 
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
-        if p.vel.y > 0.0 {
+        // Only land if falling and strictly above the tile
+        if p.vel.y >= 0.0 && p.pos.y + 12.0 < (ground_tile_y as i32 * 16) as f32 {
             p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
             p.vel.y = 0.0;
             p.grounded = true;
@@ -603,11 +604,19 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
         p.grounded = false;
     }
     
-    if level.is_wall((p.pos.x + 4.0) as i32 / 16, ty) || level.is_wall((p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
-        if p.vel.x < 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16 + 16) as f32; p.vel.x = 0.0; }
+    // Side walls are only solid if they are NOT in wrap zones
+    let left_tile_x = ((p.pos.x + 4.0) / 16.0) as i32;
+    let right_tile_x = ((p.pos.x + 12.0) / 16.0) as i32;
+    
+    if level.is_wall(left_tile_x, ty) {
+        if left_tile_x > 0 && left_tile_x < 15 { // Internal walls
+             if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 16) as f32; p.vel.x = 0.0; }
+        }
     }
-    if level.is_wall((p.pos.x + 12.0) as i32 / 16, ty) || level.is_wall((p.pos.x + 12.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
-        if p.vel.x > 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16) as f32; p.vel.x = 0.0; }
+    if level.is_wall(right_tile_x, ty) {
+        if right_tile_x > 0 && right_tile_x < 15 { // Internal walls
+            if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
+        }
     }
 }
 
@@ -616,23 +625,28 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
     
-    // CEILING COLLISION
+    // CEILING COLLISION - Only for row 0
     if e.vel.y < 0.0 {
         let head_tile_y = (e.pos.y + 2.0) / TILE_SIZE;
-        if level.is_wall(ground_tile_x as i32, head_tile_y as i32) {
-            e.pos.y = (head_tile_y as i32 * 16 + 16) as f32;
+        if head_tile_y as i32 == 0 && level.is_wall(ground_tile_x as i32, 0) {
+            e.pos.y = 16.0;
             e.vel.y = 0.0;
         }
     }
 
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
-        if e.vel.y > 0.0 { 
+        if e.vel.y >= 0.0 && e.pos.y + 12.0 < (ground_tile_y as i32 * 16) as f32 {
             e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; 
             e.vel.y = 0.0; 
             grounded = true;
         }
     }
-    if level.is_wall((e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 }) as i32 / 16, (e.pos.y + 8.0) as i32 / 16) { e.vel.x = -e.vel.x; }
+    // Bounce off internal walls
+    let next_x = e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 };
+    let tx = (next_x / 16.0) as i32;
+    if tx > 0 && tx < 15 && level.is_wall(tx, (e.pos.y + 8.0) as i32 / 16) {
+        e.vel.x = -e.vel.x;
+    }
     grounded
 }
 
