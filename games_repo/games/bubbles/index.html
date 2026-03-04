@@ -100,12 +100,16 @@
                     const data = new TextDecoder().decode(heap.subarray(ptr, ptr + len));
                     localStorage.setItem("WASM_GAMES_BUBBLES_HISCORES", data);
                 };
+                importObject.env.js_ask_name = function (ptr, max_len) {
+                    const name = prompt("ENTER YOUR INITIALS (MAX 10):", "BUB") || "BUB";
+                    const bytes = new TextEncoder().encode(name.substring(0, 10));
+                    const len = Math.min(bytes.length, max_len);
+                    const heap = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
+                    heap.set(bytes.subarray(0, len), ptr);
+                    return len;
+                };
             }
         });
-
-        window.ask_name = function() {
-            return prompt("ENTER INITIALS:", "BUB") || "BUB";
-        };
 
         let started = false;
         function resumeAudio() {

@@ -741,7 +741,7 @@ async fn main() {
         // Vertical positioning offsets relative to board (offset_y)
         let line1_y = offset_y - 10.0;
         let line2_y = line1_y - font_size * 0.8;
-        let time_bar_y = line2_y - 25.0;
+        let time_bar_y = line2_y - font_size * 0.8 - 15.0;
 
         // 1. Time Bar (Top)
         let time_progress = (board.time_left / 60.0).clamp(0.0, 1.0);
