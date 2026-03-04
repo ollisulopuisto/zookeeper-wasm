@@ -27,14 +27,10 @@ async fn main() {
     let mut game = Game::new(false);
     let mut state = AppState::Menu;
     let mut two_player = false;
-    let mut touch_detected = false;
 
     loop {
         // Handle input using virtual resolution
         input.update(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-        if !touches().is_empty() {
-            touch_detected = true;
-        }
 
         match state {
             AppState::Menu => {

@@ -76,7 +76,6 @@ enum GameState {
         score: u32,
         combo: u32,
         name: String,
-        notified: bool,
     },
     /// The board is being refilled after a shuffle or level up.
     Reshuffling {
@@ -367,7 +366,7 @@ async fn main() {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string(), notified: false };
+                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string() };
                 } else {
                     board.state = GameState::GameOver;
                 }
@@ -592,7 +591,7 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, name, notified } => {
+            GameState::EnteringName { score, combo, name } => {
                 let mut submitted = false;
                 let mut current_name = name.clone();
                 while let Some(c) = get_char_pressed() {
@@ -641,7 +640,7 @@ async fn main() {
                     }
                 }
                 if !submitted {
-                    board.state = GameState::EnteringName { score, combo, name: current_name, notified };
+                    board.state = GameState::EnteringName { score, combo, name: current_name };
                 }
             }
             GameState::GameOver => {
@@ -650,6 +649,7 @@ async fn main() {
                     board.state = GameState::Idle;
                 }
             }
+            GameState::Paused { .. } => {}
         }
 
         // Draw

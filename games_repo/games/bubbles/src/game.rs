@@ -90,7 +90,7 @@ impl Player {
 pub struct Enemy {
     pub pos: Vec2,
     pub vel: Vec2,
-    pub dir: Direction,
+    pub _dir: Direction,
     pub kind: EnemyType,
     pub trapped: bool,
     pub trap_timer: f32,
@@ -109,7 +109,7 @@ impl Enemy {
         Self {
             pos,
             vel,
-            dir: Direction::Right,
+            _dir: Direction::Right,
             kind,
             trapped: false,
             trap_timer: 0.0,
@@ -137,7 +137,7 @@ pub struct Bubble {
 
 pub struct Item {
     pub pos: Vec2,
-    pub vel: Vec2,
+    pub _vel: Vec2,
     pub upgrade: Option<UpgradeType>,
     pub score_val: u32,
     pub timer: f32,
