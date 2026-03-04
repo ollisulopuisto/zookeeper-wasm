@@ -2,10 +2,11 @@ use macroquad::prelude::*;
 use crate::physics::Entity;
 
 pub const SCREEN_WIDTH: f32 = 800.0;
-pub const SCREEN_HEIGHT: f32 = 600.0;
+pub const SCREEN_HEIGHT: f32 = 640.0; // Play area (576) + HUD (64)
+pub const HUD_HEIGHT: f32 = 64.0;
 pub const TILE_SIZE: f32 = 32.0;
 pub const COLS: usize = 25;
-pub const ROWS: usize = 18; // 18 * 32 = 576, leaves 24 for HUD
+pub const ROWS: usize = 18; 
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq)]
@@ -82,7 +83,7 @@ impl Level {
         for r in 0..ROWS {
             for c in 0..COLS {
                 let x = c as f32 * TILE_SIZE;
-                let y = r as f32 * TILE_SIZE;
+                let y = r as f32 * TILE_SIZE + HUD_HEIGHT;
                 match self.grid[r][c] {
                     TileType::NormalBrick => {
                         draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, MAROON);
@@ -134,11 +135,11 @@ impl Level {
             }
         }
 
-        // Draw phased bricks (fading effect)
+        // Draw phased bricks
         for pb in &self.phased_bricks {
             let x = pb.col as f32 * TILE_SIZE;
-            let y = pb.row as f32 * TILE_SIZE;
-            let alpha = if pb.timer < 1.0 { pb.timer } else { 0.2 }; // Fades in back to solid
+            let y = pb.row as f32 * TILE_SIZE + HUD_HEIGHT;
+            let alpha = if pb.timer < 1.0 { pb.timer } else { 0.2 };
             draw_rectangle(x, y, TILE_SIZE, TILE_SIZE, Color::new(1.0, 0.0, 0.0, alpha));
         }
 
@@ -146,7 +147,7 @@ impl Level {
         for col in &self.collectibles {
             if col.active {
                 let x = col.col as f32 * TILE_SIZE + TILE_SIZE / 2.0;
-                let y = col.row as f32 * TILE_SIZE + TILE_SIZE / 2.0;
+                let y = col.row as f32 * TILE_SIZE + TILE_SIZE / 2.0 + HUD_HEIGHT;
                 let t = get_time() * 5.0;
                 let bounce = (t.sin() * 4.0) as f32;
                 match col.ctype {
@@ -165,15 +166,11 @@ impl Level {
 
         // Draw Exit Door
         let dx = self.exit_door.col as f32 * TILE_SIZE;
-        let dy = self.exit_door.row as f32 * TILE_SIZE;
+        let dy = self.exit_door.row as f32 * TILE_SIZE + HUD_HEIGHT;
         draw_rectangle(dx, dy, TILE_SIZE * 2.0, TILE_SIZE * 2.0, DARKGRAY);
-        
         let door_offset = self.exit_door.opening_progress * (TILE_SIZE - 4.0);
-        // Left door
         draw_rectangle(dx + 4.0 - door_offset, dy + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
-        // Right door
         draw_rectangle(dx + TILE_SIZE + door_offset, dy + 4.0, TILE_SIZE - 4.0, TILE_SIZE * 2.0 - 8.0, RED);
-        
         if self.exit_door.opening_progress < 1.0 {
             draw_line(dx + TILE_SIZE, dy + 4.0, dx + TILE_SIZE, dy + TILE_SIZE * 2.0 - 4.0, 2.0, BLACK);
         }
@@ -183,7 +180,7 @@ impl Level {
 impl Player {
     pub fn new(col: usize, row: usize) -> Self {
         Self {
-            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE, 24.0, 30.0),
+            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE + HUD_HEIGHT, 24.0, 30.0),
             fuel: 100.0,
             is_jetting: false,
             facing_right: true,
@@ -193,31 +190,18 @@ impl Player {
     }
 
     pub fn draw(&self) {
-        if self.dead {
-            return;
-        }
+        if self.dead { return; }
         let color_main = if self.is_jetting { YELLOW } else { GREEN };
         let color_shadow = DARKGREEN;
-        
         draw_rectangle(self.entity.collider.x, self.entity.collider.y, self.entity.collider.w, self.entity.collider.h, color_shadow);
         draw_rectangle(self.entity.collider.x + 2.0, self.entity.collider.y + 2.0, self.entity.collider.w - 4.0, self.entity.collider.h - 4.0, color_main);
-        
-        // Visor
         let visor_x = if self.facing_right { self.entity.collider.x + 12.0 } else { self.entity.collider.x + 2.0 };
         draw_rectangle(visor_x, self.entity.collider.y + 6.0, 10.0, 8.0, SKYBLUE);
-
-        // Jetpack
         let pack_x = if self.facing_right { self.entity.collider.x - 6.0 } else { self.entity.collider.x + self.entity.collider.w - 2.0 };
         draw_rectangle(pack_x, self.entity.collider.y + 6.0, 8.0, 16.0, GRAY);
-
         if self.is_jetting {
             let flame_y = self.entity.collider.y + 22.0;
-            draw_triangle(
-                vec2(pack_x, flame_y),
-                vec2(pack_x + 8.0, flame_y),
-                vec2(pack_x + 4.0, flame_y + 10.0 + rand::gen_range(0.0, 8.0)),
-                ORANGE
-            );
+            draw_triangle(vec2(pack_x, flame_y), vec2(pack_x + 8.0, flame_y), vec2(pack_x + 4.0, flame_y + 10.0 + rand::gen_range(0.0, 8.0)), ORANGE);
         }
     }
 }
@@ -225,7 +209,7 @@ impl Player {
 impl Enemy {
     pub fn new(col: usize, row: usize, etype: EnemyType) -> Self {
         Self {
-            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE + 8.0, 24.0, 24.0),
+            entity: Entity::new(col as f32 * TILE_SIZE + 4.0, row as f32 * TILE_SIZE + 8.0 + HUD_HEIGHT, 24.0, 24.0),
             facing_right: true,
             etype,
         }
@@ -236,7 +220,6 @@ impl Enemy {
         let wobble = (t.sin() * 2.0) as f32;
         let x = self.entity.collider.x;
         let y = self.entity.collider.y;
-        
         match self.etype {
             EnemyType::Trackbot => {
                 draw_rectangle(x, y - wobble, 24.0, 24.0, PURPLE);
@@ -248,7 +231,7 @@ impl Enemy {
             EnemyType::SteelBall => {
                 draw_circle(x + 12.0, y + 12.0, 12.0, GRAY);
                 draw_circle(x + 12.0, y + 12.0, 8.0, LIGHTGRAY);
-                draw_circle(x + 8.0, y + 8.0, 3.0, WHITE); // Reflection
+                draw_circle(x + 8.0, y + 8.0, 3.0, WHITE);
             }
             EnemyType::Spring => {
                 draw_rectangle(x + 4.0, y + 18.0, 16.0, 6.0, ORANGE);
@@ -264,37 +247,16 @@ impl Enemy {
 
 pub fn create_test_level() -> Level {
     let mut grid = [[TileType::Empty; COLS]; ROWS];
-    
-    // Border
-    for c in 0..COLS {
-        grid[0][c] = TileType::SolidBrick;
-        grid[ROWS-1][c] = TileType::SolidBrick;
-    }
-    for r in 0..ROWS {
-        grid[r][0] = TileType::SolidBrick;
-        grid[r][COLS-1] = TileType::SolidBrick;
-    }
-
-    // Platforms
+    for c in 0..COLS { grid[0][c] = TileType::SolidBrick; grid[ROWS-1][c] = TileType::SolidBrick; }
+    for r in 0..ROWS { grid[r][0] = TileType::SolidBrick; grid[r][COLS-1] = TileType::SolidBrick; }
     for c in 2..10 { grid[14][c] = TileType::NormalBrick; }
     for c in 12..20 { grid[10][c] = TileType::NormalBrick; }
     for c in 4..15 { grid[6][c] = TileType::NormalBrick; }
-
-    // Indestructible blocks
-    grid[14][5] = TileType::SolidBrick;
-    grid[10][15] = TileType::SolidBrick;
-
-    // Spikes
+    grid[14][5] = TileType::SolidBrick; grid[10][15] = TileType::SolidBrick;
     for c in 10..15 { grid[ROWS-2][c] = TileType::Spikes; }
-
-    // Energy
-    grid[13][3] = TileType::EnergyCharger;
-    grid[13][9] = TileType::EnergyDrain;
-
-    // Ladders
+    grid[13][3] = TileType::EnergyCharger; grid[13][9] = TileType::EnergyDrain;
     for r in 11..18 { grid[r][10] = TileType::Ladder; }
     for r in 7..11 { grid[r][18] = TileType::UpLadder; }
-
     let collectibles = vec![
         Collectible { col: 3, row: 13, ctype: CollectibleType::Emerald, active: true },
         Collectible { col: 9, row: 13, ctype: CollectibleType::Emerald, active: true },
@@ -305,13 +267,5 @@ pub fn create_test_level() -> Level {
         Collectible { col: 7, row: 17, ctype: CollectibleType::Fuel, active: true },
         Collectible { col: 15, row: 17, ctype: CollectibleType::Fuel, active: true },
     ];
-
-    Level {
-        grid,
-        phased_bricks: Vec::new(),
-        emeralds_total: 6,
-        emeralds_collected: 0,
-        collectibles,
-        exit_door: ExitDoor { col: 20, row: 16, active: false, opening_progress: 0.0 }, 
-    }
+    Level { grid, phased_bricks: Vec::new(), emeralds_total: 6, emeralds_collected: 0, collectibles, exit_door: ExitDoor { col: 20, row: 16, active: false, opening_progress: 0.0 } }
 }
