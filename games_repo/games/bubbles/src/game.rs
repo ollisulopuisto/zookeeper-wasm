@@ -252,11 +252,11 @@ impl Game {
                 // Vertical wrap only if there's a hole
                 let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
                 if p.pos.y > PLAY_HEIGHT {
-                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = -16.0; }
+                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = -15.0; }
                     else { p.pos.y = PLAY_HEIGHT; p.vel.y = 0.0; }
                 }
                 if p.pos.y < -16.0 {
-                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = PLAY_HEIGHT; }
+                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = PLAY_HEIGHT - 1.0; }
                     else { p.pos.y = -16.0; p.vel.y = 0.0; }
                 }
             }
@@ -304,11 +304,11 @@ impl Game {
                 
                 let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
                 if e.pos.y > PLAY_HEIGHT {
-                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = -16.0; }
+                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = -15.0; }
                     else { e.pos.y = PLAY_HEIGHT; e.vel.y = 0.0; }
                 }
                 if e.pos.y < -16.0 {
-                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = PLAY_HEIGHT; }
+                    if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = PLAY_HEIGHT - 1.0; }
                     else { e.pos.y = -16.0; e.vel.y = 0.0; }
                 }
             }
