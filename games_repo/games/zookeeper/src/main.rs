@@ -762,7 +762,7 @@ async fn main() {
             draw_text_centered("GET READY...", sh / 2.0 + font_size, font_size * 0.6, WHITE);
         }
 
-        if let GameState::EnteringName { score, combo, name, notified } = &board.state {
+        if let GameState::EnteringName { score, combo, name } = &board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
             let stats = format!("SCORE: {}  COMBO: X{}", score, combo);

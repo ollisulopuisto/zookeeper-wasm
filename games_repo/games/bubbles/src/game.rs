@@ -453,7 +453,7 @@ impl Game {
                             3 => Some(UpgradeType::DoubleSize),
                             _ => None,
                         };
-                        self.items.push(Item { pos: b.pos, vel: vec2(0.0, 0.0), upgrade: ut, score_val: 500, timer: 10.0 });
+                        self.items.push(Item { pos: b.pos, _vel: vec2(0.0, 0.0), upgrade: ut, score_val: 500, timer: 10.0 });
                         // Find the enemy that matches this bubble's trapped state (simplified)
                         if let Some(e) = self.enemies.iter_mut().find(|e| e.trapped) { e.dead = true; }
                     }
