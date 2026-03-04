@@ -12,6 +12,7 @@ pub struct InputManager {
     pub p1: PlayerInput,
     pub p2: PlayerInput,
     pub any_key: bool,
+    pub touch_active: bool,
 }
 
 impl InputManager {
@@ -20,10 +21,15 @@ impl InputManager {
             p1: PlayerInput::default(),
             p2: PlayerInput::default(),
             any_key: false,
+            touch_active: false,
         }
     }
 
     pub fn update(&mut self, virtual_width: f32, virtual_height: f32) {
+        // Reset state but keep "pressed" for current frame
+        let prev_p1_jump = self.p1.jump;
+        let prev_p1_bubble = self.p1.bubble;
+
         // Keyboard P1
         self.p1.left = is_key_down(KeyCode::Left);
         self.p1.right = is_key_down(KeyCode::Right);
@@ -39,29 +45,40 @@ impl InputManager {
         self.any_key = get_last_key_pressed().is_some();
 
         // Touch handling
-        let screen_width = screen_width();
-        let screen_height = screen_height();
-        let scale_x = screen_width / virtual_width;
-        let scale_y = screen_height / virtual_height;
+        let sw = screen_width();
+        let sh = screen_height();
+        let scale_x = sw / virtual_width;
+        let scale_y = sh / virtual_height;
+        let scale = scale_x.min(scale_y);
+        
+        let vx = (sw - virtual_width * scale) / 2.0;
+        let vy = (sh - virtual_height * scale) / 2.0;
 
-        for touch in touches() {
-            let tx = touch.position.x / scale_x;
-            let ty = touch.position.y / scale_y;
+        let touches = touches();
+        if !touches.is_empty() {
+            self.touch_active = true;
+        }
 
-            // Simple region-based touch controls
-            // Bottom left: Left/Right
-            if ty > virtual_height * 0.7 {
-                if tx < virtual_width * 0.2 {
+        for touch in touches {
+            let tx = (touch.position.x - vx) / scale;
+            let ty = (touch.position.y - vy) / scale;
+
+            // Define control regions in virtual coordinates
+            // D-Pad Area: Bottom Left
+            let dpad_y = virtual_height - 100.0;
+            if ty > dpad_y {
+                if tx < 60.0 {
                     self.p1.left = true;
-                } else if tx < virtual_width * 0.4 {
+                } else if tx < 120.0 {
                     self.p1.right = true;
                 }
             }
-            // Bottom right: Jump/Bubble
-            if ty > virtual_height * 0.7 {
-                if tx > virtual_width * 0.8 {
+
+            // Buttons Area: Bottom Right
+            if ty > dpad_y {
+                if tx > virtual_width - 60.0 {
                     if touch.phase == TouchPhase::Started { self.p1.bubble = true; }
-                } else if tx > virtual_width * 0.6 {
+                } else if tx > virtual_width - 120.0 {
                     if touch.phase == TouchPhase::Started { self.p1.jump = true; }
                 }
             }
@@ -70,24 +87,34 @@ impl InputManager {
                 self.any_key = true;
             }
         }
+
+        // Ensure we don't lose keyboard presses if touch is active
+        if prev_p1_jump { self.p1.jump = true; }
+        if prev_p1_bubble { self.p1.bubble = true; }
     }
 
-    pub fn draw_debug_touch_regions(&self, vx: f32, vy: f32, scale: f32, virtual_width: f32, virtual_height: f32) {
-        // Only draw if there are touches or for debugging
-        let alpha = 0.3;
-        let font_size = 30.0 * scale;
-        // Left
-        draw_rectangle(vx, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(1.0, 1.0, 1.0, alpha));
-        // Right
-        draw_rectangle(vx + virtual_width * 0.2 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(0.8, 0.8, 0.8, alpha));
-        // Jump
-        draw_rectangle(vx + virtual_width * 0.6 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(0.0, 1.0, 0.0, alpha));
-        // Bubble
-        draw_rectangle(vx + virtual_width * 0.8 * scale, vy + virtual_height * 0.8 * scale, virtual_width * 0.2 * scale, virtual_height * 0.2 * scale, Color::new(1.0, 0.0, 0.0, alpha));
-        
-        draw_text("L", vx + 10.0 * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
-        draw_text("R", vx + (virtual_width * 0.2 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
-        draw_text("J", vx + (virtual_width * 0.6 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
-        draw_text("B", vx + (virtual_width * 0.8 + 10.0) * scale, vy + (virtual_height - 5.0) * scale, font_size, WHITE);
+    pub fn draw_controls(&self, vx: f32, vy: f32, scale: f32, virtual_width: f32, virtual_height: f32) {
+        if !self.touch_active { return; }
+
+        let alpha = 0.4;
+        let dpad_y = vy + (virtual_height - 100.0) * scale;
+        let btn_size = 50.0 * scale;
+        let font_size = 20.0 * scale;
+
+        // Draw D-Pad (L/R)
+        draw_rectangle(vx + 10.0 * scale, dpad_y + 20.0 * scale, btn_size, btn_size, Color::new(0.5, 0.5, 0.5, alpha));
+        draw_text("L", vx + 25.0 * scale, dpad_y + 55.0 * scale, font_size, WHITE);
+
+        draw_rectangle(vx + 70.0 * scale, dpad_y + 20.0 * scale, btn_size, btn_size, Color::new(0.5, 0.5, 0.5, alpha));
+        draw_text("R", vx + 85.0 * scale, dpad_y + 55.0 * scale, font_size, WHITE);
+
+        // Draw Action Buttons (J/B)
+        let jump_x = vx + (virtual_width - 110.0) * scale;
+        draw_circle(jump_x + btn_size/2.0, dpad_y + 20.0 * scale + btn_size/2.0, btn_size/2.0, Color::new(0.0, 0.8, 0.0, alpha));
+        draw_text("JUMP", jump_x + 5.0 * scale, dpad_y + 55.0 * scale, font_size * 0.8, WHITE);
+
+        let bubble_x = vx + (virtual_width - 55.0) * scale;
+        draw_circle(bubble_x + btn_size/2.0, dpad_y + 20.0 * scale + btn_size/2.0, btn_size/2.0, Color::new(0.8, 0.0, 0.0, alpha));
+        draw_text("BUB", bubble_x + 10.0 * scale, dpad_y + 55.0 * scale, font_size * 0.8, WHITE);
     }
 }

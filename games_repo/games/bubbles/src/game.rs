@@ -1,10 +1,10 @@
 use macroquad::prelude::*;
-use crate::input::PlayerInput;
+use crate::input::{PlayerInput, InputManager};
 use crate::audio::AudioManager;
 use crate::gfx::SpriteManager;
 
 pub const VIRTUAL_WIDTH: f32 = 256.0;
-pub const VIRTUAL_HEIGHT: f32 = 240.0; // Play area (224) + HUD (16)
+pub const VIRTUAL_HEIGHT: f32 = 400.0; // Play area (224) + HUD (16) + Controls (160)
 pub const PLAY_HEIGHT: f32 = 224.0;
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
@@ -69,7 +69,7 @@ impl Player {
             respawn_timer: 0.0,
             max_bubbles: 10,
             bubble_speed: 3.5,
-            bubble_range: 0.5, // 0.5 seconds of forward travel
+            bubble_range: 0.5,
             bubble_scale: 1.0,
             powerup_timer: 0.0,
         }
@@ -236,7 +236,6 @@ impl Game {
             let input = &inputs[i];
             let p = &mut self.players[i];
             
-            // Movement
             if input.left { p.vel.x -= ACCEL; p.dir = Direction::Left; }
             else if input.right { p.vel.x += ACCEL; p.dir = Direction::Right; }
             else { p.vel.x *= FRICTION; }
@@ -260,18 +259,13 @@ impl Game {
             if p.vel.x.abs() > 0.1 && p.grounded { p.anim_timer += 0.15; }
             else { p.anim_timer = 0.0; }
 
-            // Upgrade Timer
             if p.powerup_timer > 0.0 {
                 p.powerup_timer -= 0.016;
                 if p.powerup_timer <= 0.0 {
-                    p.max_bubbles = 10;
-                    p.bubble_speed = 3.5;
-                    p.bubble_range = 0.5;
-                    p.bubble_scale = 1.0;
+                    p.max_bubbles = 10; p.bubble_speed = 3.5; p.bubble_range = 0.5; p.bubble_scale = 1.0;
                 }
             }
 
-            // Blowing bubbles
             if input.bubble {
                 let current_bubbles = self.bubbles.iter().filter(|b| b.owner_id == p.id).count();
                 if current_bubbles < p.max_bubbles {
@@ -296,7 +290,6 @@ impl Game {
             
             handle_player_collision(p, &self.level);
             
-            // Wrap logic
             if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
             if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
@@ -310,7 +303,6 @@ impl Game {
             }
         }
 
-        // Update Bubbles
         for b in self.bubbles.iter_mut() {
             b.pos += b.vel;
             if b.range_timer > 0.0 {
@@ -325,7 +317,6 @@ impl Game {
         }
         self.bubbles.retain(|b| b.timer > 0.0);
 
-        // Update Enemies
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
             e.anim_timer += 0.1;
@@ -356,7 +347,6 @@ impl Game {
             }
         }
 
-        // Bubbles vs Enemies
         for b in self.bubbles.iter_mut().filter(|b| !b.trapped_enemy) {
             let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
             for e in self.enemies.iter_mut().filter(|e| !e.trapped) {
@@ -369,11 +359,10 @@ impl Game {
             }
         }
 
-        // Players vs Everything
         let mut game_over_now = false;
         for i in 0..self.players.len() {
-            if self.players[i].dead { continue; }
             let p_rect = self.players[i].rect();
+            if self.players[i].dead { continue; }
             
             for b in self.bubbles.iter_mut() {
                 if b.trapped_enemy {
@@ -397,17 +386,14 @@ impl Game {
             for e in self.enemies.iter().filter(|e| !e.trapped && !e.dead) {
                 if p_rect.overlaps(&e.rect()) {
                     let p = &mut self.players[i];
-                    p.dead = true;
-                    p.lives = p.lives.saturating_sub(1);
-                    p.respawn_timer = 2.0;
+                    p.dead = true; p.lives = p.lives.saturating_sub(1); p.respawn_timer = 2.0;
                     audio.play_death();
                     if self.players.iter().all(|p| p.dead && p.lives == 0) { game_over_now = true; }
                 }
             }
             
             for it in self.items.iter_mut() {
-                let it_rect = Rect::new(it.pos.x, it.pos.y, 16.0, 16.0);
-                if p_rect.overlaps(&it_rect) {
+                if p_rect.overlaps(&Rect::new(it.pos.x, it.pos.y, 16.0, 16.0)) {
                     let p = &mut self.players[i];
                     p.score += it.score_val;
                     if let Some(u) = it.upgrade {
@@ -419,8 +405,7 @@ impl Game {
                             UpgradeType::DoubleSize => p.bubble_scale = 2.0,
                         }
                     }
-                    it.timer = 0.0;
-                    audio.play_fruit_collect();
+                    it.timer = 0.0; audio.play_fruit_collect();
                 }
             }
         }
@@ -435,7 +420,7 @@ impl Game {
         }
     }
 
-    pub fn draw(&self, gfx: &SpriteManager, vx: f32, vy: f32, scale: f32) {
+    pub fn draw(&self, gfx: &SpriteManager, input: &InputManager, vx: f32, vy: f32, scale: f32) {
         let game_vy = vy + HUD_HEIGHT * scale;
         let (warp_scale, warp_rot) = if self.transition_timer > 0.0 {
             if self.transition_timer < 1.0 { (1.0 - self.transition_timer, self.transition_timer * 5.0) }
@@ -511,6 +496,9 @@ impl Game {
             draw_text(&format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives), vx + 170.0 * scale, vy + 12.0 * scale, font_size as f32, BLUE);
         }
         draw_text(&format!("LEVEL {:02}", self.current_level_idx + 1), vx + 105.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
+
+        // Draw Touch Controls
+        input.draw_controls(vx, vy, scale, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     }
 }
 
