@@ -4,7 +4,9 @@ use crate::audio::AudioManager;
 use crate::gfx::SpriteManager;
 
 pub const VIRTUAL_WIDTH: f32 = 256.0;
-pub const VIRTUAL_HEIGHT: f32 = 224.0;
+pub const VIRTUAL_HEIGHT: f32 = 240.0; // Play area (224) + HUD (16)
+pub const PLAY_HEIGHT: f32 = 224.0;
+pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
 
 // Physics Constants
@@ -260,9 +262,9 @@ impl Game {
                 if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
                 if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
                 
-                // Screen wrap top/bottom
-                if p.pos.y > VIRTUAL_HEIGHT { p.pos.y = -16.0; }
-                if p.pos.y < -16.0 { p.pos.y = VIRTUAL_HEIGHT; }
+                // Screen wrap top/bottom relative to PLAY_HEIGHT
+                if p.pos.y > PLAY_HEIGHT { p.pos.y = -16.0; }
+                if p.pos.y < -16.0 { p.pos.y = PLAY_HEIGHT; }
             }
         }
 
@@ -307,8 +309,8 @@ impl Game {
                 let e = &mut self.enemies[i];
                 if e.pos.x < -16.0 { e.pos.x = VIRTUAL_WIDTH; }
                 if e.pos.x > VIRTUAL_WIDTH { e.pos.x = -16.0; }
-                if e.pos.y > VIRTUAL_HEIGHT { e.pos.y = -16.0; }
-                if e.pos.y < -16.0 { e.pos.y = VIRTUAL_HEIGHT; }
+                if e.pos.y > PLAY_HEIGHT { e.pos.y = -16.0; }
+                if e.pos.y < -16.0 { e.pos.y = PLAY_HEIGHT; }
             }
         }
 
@@ -432,11 +434,14 @@ impl Game {
     }
 
     pub fn draw(&self, gfx: &SpriteManager, vx: f32, vy: f32, scale: f32) {
+        // Offset for the HUD at the top
+        let game_vy = vy + HUD_HEIGHT * scale;
+
         // Draw Level
         for y in 0..14 {
             for x in 0..16 {
                 if self.level[y * 16 + x] == 1 {
-                    draw_texture_ex(&gfx.tile, vx + x as f32 * 16.0 * scale, vy + y as f32 * 16.0 * scale, WHITE, DrawTextureParams {
+                    draw_texture_ex(&gfx.tile, vx + x as f32 * 16.0 * scale, game_vy + y as f32 * 16.0 * scale, WHITE, DrawTextureParams {
                         dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                         ..Default::default()
                     });
@@ -458,13 +463,13 @@ impl Game {
             let draw_scale = if b.trapped_enemy { 0.7 } else { 1.0 };
             let offset = (16.0 * (1.0 - draw_scale)) / 2.0;
 
-            draw_texture_ex(tex, vx + (b.pos.x + offset) * scale, vy + (b.pos.y + offset) * scale, WHITE, DrawTextureParams {
+            draw_texture_ex(tex, vx + (b.pos.x + offset) * scale, game_vy + (b.pos.y + offset) * scale, WHITE, DrawTextureParams {
                 dest_size: Some(vec2(16.0 * draw_scale * scale, 16.0 * draw_scale * scale)),
                 ..Default::default()
             });
             
             if b.trapped_enemy {
-                draw_texture_ex(&gfx.bubble, vx + b.pos.x * scale, vy + b.pos.y * scale, Color::new(1.0, 1.0, 1.0, 0.5), DrawTextureParams {
+                draw_texture_ex(&gfx.bubble, vx + b.pos.x * scale, game_vy + b.pos.y * scale, Color::new(1.0, 1.0, 1.0, 0.5), DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                     ..Default::default()
                 });
@@ -475,7 +480,7 @@ impl Game {
         for e in &self.enemies {
             if !e.trapped {
                 let frame_idx = (e.anim_timer as usize) % 2;
-                draw_texture_ex(&gfx.zen_chan[frame_idx], vx + e.pos.x * scale, vy + e.pos.y * scale, WHITE, DrawTextureParams {
+                draw_texture_ex(&gfx.zen_chan[frame_idx], vx + e.pos.x * scale, game_vy + e.pos.y * scale, WHITE, DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                     flip_x: e.vel.x < 0.0,
                     ..Default::default()
@@ -485,7 +490,7 @@ impl Game {
 
         // Draw Fruits
         for f in &self.fruits {
-            draw_texture_ex(&gfx.apple, vx + f.pos.x * scale, vy + f.pos.y * scale, WHITE, DrawTextureParams {
+            draw_texture_ex(&gfx.apple, vx + f.pos.x * scale, game_vy + f.pos.y * scale, WHITE, DrawTextureParams {
                 dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                 ..Default::default()
             });
@@ -504,7 +509,7 @@ impl Game {
                     else { &gfx.bob_idle }
                 };
                 
-                draw_texture_ex(tex, vx + p.pos.x * scale, vy + p.pos.y * scale, WHITE, DrawTextureParams {
+                draw_texture_ex(tex, vx + p.pos.x * scale, game_vy + p.pos.y * scale, WHITE, DrawTextureParams {
                     dest_size: Some(vec2(16.0 * scale, 16.0 * scale)),
                     flip_x: p.dir == Direction::Left,
                     ..Default::default()
@@ -512,13 +517,13 @@ impl Game {
             }
         }
 
-        // UI
-        let font_size = (20.0 * scale) as u16;
-        draw_text(&format!("P1: {:06}", self.players[0].score), vx + 10.0 * scale, vy + 15.0 * scale, font_size as f32, GREEN);
+        // UI - Now drawn at the top HUD area
+        let font_size = (12.0 * scale) as u16;
+        draw_text(&format!("P1: {:06}", self.players[0].score), vx + 5.0 * scale, vy + 12.0 * scale, font_size as f32, GREEN);
         if self.players.len() > 1 {
-            draw_text(&format!("P2: {:06}", self.players[1].score), vx + 160.0 * scale, vy + 15.0 * scale, font_size as f32, BLUE);
+            draw_text(&format!("P2: {:06}", self.players[1].score), vx + 180.0 * scale, vy + 12.0 * scale, font_size as f32, BLUE);
         }
-        draw_text(&format!("LEVEL {:02}", self.current_level + 1), vx + 100.0 * scale, vy + 15.0 * scale, font_size as f32, YELLOW);
+        draw_text(&format!("LEVEL {:02}", self.current_level + 1), vx + 100.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
     }
 }
 
