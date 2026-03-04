@@ -4,7 +4,7 @@ use crate::audio::AudioManager;
 use crate::gfx::SpriteManager;
 
 pub const VIRTUAL_WIDTH: f32 = 256.0;
-pub const VIRTUAL_HEIGHT: f32 = 400.0; // Play area (224) + HUD (16) + Controls (160)
+pub const VIRTUAL_HEIGHT: f32 = 400.0; // Max possible height (Play + HUD + Controls)
 pub const PLAY_HEIGHT: f32 = 224.0;
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
@@ -442,7 +442,7 @@ impl Game {
                             _ => None,
                         };
                         self.items.push(Item { pos: b.pos, _vel: vec2(0.0, 0.0), upgrade: ut, score_val: 500, timer: 10.0 });
-                        b.trapped_kind = None; // Already dead/transformed
+                        b.trapped_kind = None; 
                     }
                 }
             }
@@ -484,7 +484,7 @@ impl Game {
         }
     }
 
-    pub fn draw(&self, gfx: &SpriteManager, input: &InputManager, vx: f32, vy: f32, scale: f32) {
+    pub fn draw(&self, gfx: &SpriteManager, input: &InputManager, vx: f32, vy: f32, scale: f32, virtual_height: f32) {
         let game_vy = vy + HUD_HEIGHT * scale;
         let (warp_scale, warp_rot) = if self.transition_timer > 0.0 {
             if self.transition_timer < 1.0 { (1.0 - self.transition_timer, self.transition_timer * 5.0) }
@@ -575,7 +575,7 @@ impl Game {
         draw_text(&format!("LEVEL {:02}", self.current_level_idx + 1), vx + 105.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
 
         // Draw Touch Controls
-        input.draw_controls(vx, vy, scale, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        input.draw_controls(vx, vy, scale, VIRTUAL_WIDTH, virtual_height);
     }
 }
 
@@ -604,17 +604,16 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
         p.grounded = false;
     }
     
-    // Side walls are only solid if they are NOT in wrap zones
     let left_tile_x = ((p.pos.x + 4.0) / 16.0) as i32;
     let right_tile_x = ((p.pos.x + 12.0) / 16.0) as i32;
     
     if level.is_wall(left_tile_x, ty) {
-        if left_tile_x > 0 && left_tile_x < 15 { // Internal walls
+        if left_tile_x > 0 && left_tile_x < 15 { 
              if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 16) as f32; p.vel.x = 0.0; }
         }
     }
     if level.is_wall(right_tile_x, ty) {
-        if right_tile_x > 0 && right_tile_x < 15 { // Internal walls
+        if right_tile_x > 0 && right_tile_x < 15 { 
             if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
         }
     }
@@ -625,7 +624,6 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
     
-    // CEILING COLLISION - Only for row 0
     if e.vel.y < 0.0 {
         let head_tile_y = (e.pos.y + 2.0) / TILE_SIZE;
         if head_tile_y as i32 == 0 && level.is_wall(ground_tile_x as i32, 0) {
@@ -641,7 +639,6 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
             grounded = true;
         }
     }
-    // Bounce off internal walls
     let next_x = e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 };
     let tx = (next_x / 16.0) as i32;
     if tx > 0 && tx < 15 && level.is_wall(tx, (e.pos.y + 8.0) as i32 / 16) {

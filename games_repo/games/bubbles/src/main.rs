@@ -8,7 +8,7 @@ use macroquad::prelude::*;
 use crate::audio::AudioManager;
 use crate::gfx::SpriteManager;
 use crate::input::InputManager;
-use crate::game::{Game, VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
+use crate::game::{Game, VIRTUAL_WIDTH, HUD_HEIGHT, PLAY_HEIGHT};
 
 #[derive(PartialEq)]
 enum AppState {
@@ -29,8 +29,11 @@ async fn main() {
     let mut two_player = false;
 
     loop {
-        // Handle input using virtual resolution
-        input.update(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+        // Dynamic virtual height: only reserve space for controls if touch is active
+        let target_vheight = if input.touch_active { 400.0 } else { HUD_HEIGHT + PLAY_HEIGHT };
+        
+        // Handle input using current virtual resolution
+        input.update(VIRTUAL_WIDTH, target_vheight);
 
         match state {
             AppState::Menu => {
@@ -45,7 +48,6 @@ async fn main() {
                     state = AppState::Playing;
                     audio.play_music();
                 } else if input.any_key {
-                    // Default to 1P on touch
                     two_player = false;
                     game = Game::new(false);
                     state = AppState::Playing;
@@ -82,12 +84,12 @@ async fn main() {
                     submitted = true;
                 }
 
-                // UI calculations for button
+                // UI calculations
                 let sw = screen_width();
                 let sh = screen_height();
-                let scale = (sw / VIRTUAL_WIDTH).min(sh / VIRTUAL_HEIGHT);
+                let scale = (sw / VIRTUAL_WIDTH).min(sh / target_vheight);
                 let vx = (sw - VIRTUAL_WIDTH * scale) / 2.0;
-                let vy = (sh - VIRTUAL_HEIGHT * scale) / 2.0;
+                let vy = (sh - target_vheight * scale) / 2.0;
                 let btn_w = 100.0 * scale;
                 let btn_h = 30.0 * scale;
                 let btn_x = vx + (VIRTUAL_WIDTH / 2.0) * scale - btn_w / 2.0;
@@ -121,12 +123,12 @@ async fn main() {
             }
         }
 
-        // Scaling calculations
+        // Final rendering scale based on current target height
         let sw = screen_width();
         let sh = screen_height();
-        let scale = (sw / VIRTUAL_WIDTH).min(sh / VIRTUAL_HEIGHT);
+        let scale = (sw / VIRTUAL_WIDTH).min(sh / target_vheight);
         let vx = (sw - VIRTUAL_WIDTH * scale) / 2.0;
-        let vy = (sh - VIRTUAL_HEIGHT * scale) / 2.0;
+        let vy = (sh - target_vheight * scale) / 2.0;
 
         clear_background(BLACK);
 
@@ -140,7 +142,7 @@ async fn main() {
                 draw_text("TOUCH TO START", vx + 75.0 * scale, vy + 160.0 * scale, text_size, YELLOW);
             }
             AppState::Playing => {
-                game.draw(&gfx, &input, vx, vy, scale);
+                game.draw(&gfx, &input, vx, vy, scale, target_vheight);
             }
             AppState::GameOver => {
                 let title_size = 40.0 * scale;
@@ -166,11 +168,9 @@ async fn main() {
                 let btn_h = 30.0 * scale;
                 let btn_x = vx + (VIRTUAL_WIDTH / 2.0) * scale - btn_w / 2.0;
                 
-                // JS Popup button for mobile
                 draw_rectangle(btn_x, vy + 140.0 * scale, btn_w, btn_h, Color::new(0.2, 0.2, 0.2, 1.0));
                 draw_text("TAP FOR POPUP", btn_x + 5.0 * scale, vy + 160.0 * scale, 12.0 * scale, WHITE);
 
-                // OK button
                 draw_rectangle(btn_x, vy + 180.0 * scale, btn_w, btn_h, Color::new(0.3, 0.8, 0.3, 1.0));
                 draw_text("OK", btn_x + 40.0 * scale, vy + 200.0 * scale, 20.0 * scale, WHITE);
             }
