@@ -12,8 +12,8 @@ pub const TILE_SIZE: f32 = 16.0;
 // Physics Constants
 const GRAVITY: f32 = 0.25;
 const JUMP_FORCE: f32 = -5.5;
-const ACCEL: f32 = 0.2;
-const FRICTION: f32 = 0.85;
+const ACCEL: f32 = 0.35;
+const FRICTION: f32 = 0.75;
 const MAX_SPEED: f32 = 2.0;
 const TERMINAL_VELOCITY: f32 = 6.0;
 
