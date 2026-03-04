@@ -312,8 +312,15 @@ impl Game {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
             b.timer -= 0.016;
+            
             let tx = ((b.pos.x + 8.0) / TILE_SIZE) as i32;
-            if b.pos.y < -16.0 && !self.level.is_wall(tx, 13) { b.pos.y = PLAY_HEIGHT; }
+            if b.pos.y < -8.0 {
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) {
+                    b.pos.y = PLAY_HEIGHT; 
+                } else {
+                    b.pos.y = 0.0; // Clamp to top visible row if no hole
+                }
+            }
         }
         self.bubbles.retain(|b| b.timer > 0.0);
 
@@ -324,8 +331,15 @@ impl Game {
                 e.pos.y -= 0.5;
                 e.trap_timer -= 0.016;
                 if e.trap_timer <= 0.0 { e.trapped = false; e.vel.x = 1.2; }
+                
                 let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
-                if e.pos.y < -16.0 && !self.level.is_wall(tx, 13) { e.pos.y = PLAY_HEIGHT; }
+                if e.pos.y < -8.0 {
+                    if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) {
+                        e.pos.y = PLAY_HEIGHT;
+                    } else {
+                        e.pos.y = 0.0; // Keep monster reachable at the top
+                    }
+                }
             } else {
                 e.pos.x += e.vel.x;
                 e.vel.y += GRAVITY;

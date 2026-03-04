@@ -597,7 +597,7 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, mut name, mut notified } => {
+            GameState::EnteringName { score, combo, name, notified } => {
                 // On WASM, we can optionally trigger a JS prompt once, 
                 // but we also allow direct keyboard entry in the loop below.
                 #[cfg(target_arch = "wasm32")]
@@ -606,58 +606,59 @@ async fn main() {
                     // For now, let's just make it a manual trigger or only if name is still empty after some time.
                     // Actually, let's just allow direct typing and only use prompt as a "fallback" button if needed.
                     // For simplicity, let's REMOVE the auto-popup and let users type.
-                    notified = true;
+                    // notified = true; // No longer needed as mut
                 }
 
                 let mut submitted = false;
+                let mut current_name = name.clone();
                 while let Some(c) = get_char_pressed() {
-                    if (c.is_alphanumeric() || c == ' ') && name.len() < 10 {
-                        name.push(c);
+                    if (c.is_alphanumeric() || c == ' ') && current_name.len() < 10 {
+                        current_name.push(c);
                     }
                 }
-                if is_key_pressed(KeyCode::Backspace) { name.pop(); }
+                if is_key_pressed(KeyCode::Backspace) { current_name.pop(); }
 
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
-                let font_size = sh * 0.05;
+                let _font_size = sh * 0.05;
 
                 // Also allow triggering JS prompt via a button for mobile users who can't trigger the virtual keyboard
                 let prompt_w = sw * 0.4;
-                let prompt_x = sw / 2.0 - prompt_w / 2.0;
-                let prompt_y = sh * 0.6;
-                let prompt_h = sh * 0.06;
+                let _prompt_x = sw / 2.0 - prompt_w / 2.0;
+                let _prompt_y = sh * 0.6;
+                let _prompt_h = sh * 0.06;
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
-                    draw_text_centered("TAP FOR POPUP", prompt_y + prompt_h * 0.7, font_size * 0.4, WHITE);
-                    if is_mouse_button_pressed(MouseButton::Left) && mx >= prompt_x && mx <= prompt_x + prompt_w && my >= prompt_y && my <= prompt_y + prompt_h {
+                    draw_rectangle(prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                    draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
+                    if is_mouse_button_pressed(MouseButton::Left) && mx >= prompt_x && mx <= prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
                         let mut buffer = [0u8; 16];
                         let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
                         if len > 0 {
                             if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
-                                name = js_name.trim().to_string();
+                                current_name = js_name.trim().to_string();
                             }
                         }
                     }
                 }
 
                 if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-                    board.add_to_leaderboard(name.clone(), score, combo);
+                    board.add_to_leaderboard(current_name.clone(), score, combo);
                     board.state = GameState::GameOver;
                     submitted = true;
                 }
                 if !submitted && is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
-                        board.add_to_leaderboard(name.clone(), score, combo);
+                        board.add_to_leaderboard(current_name.clone(), score, combo);
                         board.state = GameState::GameOver;
                         submitted = true;
                     }
                 }
                 if !submitted {
-                    board.state = GameState::EnteringName { score, combo, name, notified };
+                    board.state = GameState::EnteringName { score, combo, name: current_name, notified };
                 }
             }            GameState::GameOver => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
