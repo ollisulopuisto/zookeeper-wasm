@@ -15,6 +15,7 @@ build:
 	cp index.html docs/
 	cp assets/icon.png docs/assets/icon.png
 	cp assets/1f680.png docs/assets/1f680.png
+	cp assets/bubbles_icon.png docs/assets/bubbles_icon.png
 	@for game in $(GAMES); do \
 		echo "Building $$game..."; \
 		$(MAKE) -C games/$$game build || exit 1; \
