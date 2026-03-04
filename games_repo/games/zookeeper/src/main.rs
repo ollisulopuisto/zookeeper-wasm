@@ -39,7 +39,7 @@ unsafe fn js_load_leaderboard(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
 #[cfg(not(target_arch = "wasm32"))]
 unsafe fn js_save_leaderboard(_ptr: *const u8, _len: u32) { }
 #[cfg(not(target_arch = "wasm32"))]
-unsafe fn js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
+unsafe fn _js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
 
 /// Persistent user settings.
 struct Settings {

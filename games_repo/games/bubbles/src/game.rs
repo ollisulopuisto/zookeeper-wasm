@@ -429,7 +429,7 @@ impl Game {
             if self.players[i].dead { continue; }
             
             for b in self.bubbles.iter_mut() {
-                if let Some(kind) = b.trapped_kind {
+                if let Some(_kind) = b.trapped_kind {
                     let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
                     if p_rect.overlaps(&b_rect) {
                         b.timer = 0.0; audio.play_bubble_pop();
