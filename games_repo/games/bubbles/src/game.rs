@@ -92,8 +92,6 @@ pub struct Enemy {
     pub vel: Vec2,
     pub _dir: Direction,
     pub kind: EnemyType,
-    pub trapped: bool,
-    pub trap_timer: f32,
     pub dead: bool,
     pub anim_timer: f32,
     pub jump_cooldown: f32,
@@ -111,8 +109,6 @@ impl Enemy {
             vel,
             _dir: Direction::Right,
             kind,
-            trapped: false,
-            trap_timer: 0.0,
             dead: false,
             anim_timer: 0.0,
             jump_cooldown: 0.0,
@@ -129,7 +125,6 @@ pub struct Bubble {
     pub vel: Vec2,
     pub timer: f32,
     pub range_timer: f32,
-    pub trapped_enemy: bool,
     pub trapped_kind: Option<EnemyType>,
     pub owner_id: usize,
     pub scale: f32,
@@ -210,7 +205,6 @@ impl Game {
                 Enemy::new(vec2(120.0, 120.0), EnemyType::Bouncer),
             ],
             _ => {
-                // Procedural mix for higher levels
                 let mut e = Vec::new();
                 for i in 0..5 {
                     let pos = vec2(50.0 + i as f32 * 30.0, 50.0 + (i % 3) as f32 * 40.0);
@@ -307,7 +301,6 @@ impl Game {
                         vel: vec2(if p.dir == Direction::Right { p.bubble_speed } else { -p.bubble_speed }, 0.0),
                         timer: 5.0,
                         range_timer: p.bubble_range,
-                        trapped_enemy: false,
                         trapped_kind: None,
                         owner_id: p.id,
                         scale: p.bubble_scale,
@@ -335,6 +328,7 @@ impl Game {
             }
         }
 
+        let mut escaped_enemies = Vec::new();
         for b in self.bubbles.iter_mut() {
             b.pos += b.vel;
             if b.range_timer > 0.0 {
@@ -343,67 +337,61 @@ impl Game {
             } else {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
+            
+            // SIDE BARRIER: Trapped bubbles stay inside
+            if b.trapped_kind.is_some() {
+                b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+            }
+
             b.timer -= 0.016;
+            if b.timer <= 0.0 {
+                if let Some(kind) = b.trapped_kind {
+                    escaped_enemies.push(Enemy::new(b.pos, kind));
+                }
+            }
             
             let tx = ((b.pos.x + 8.0) / TILE_SIZE) as i32;
             if b.pos.y < -8.0 {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) {
                     b.pos.y = PLAY_HEIGHT; 
                 } else {
-                    b.pos.y = 0.0; // Clamp to top visible row if no hole
+                    b.pos.y = 0.0; 
                 }
             }
         }
         self.bubbles.retain(|b| b.timer > 0.0);
+        self.enemies.extend(escaped_enemies);
 
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
             e.anim_timer += 0.1;
-            if e.trapped {
-                e.pos.y -= 0.5;
-                e.trap_timer -= 0.016;
-                if e.trap_timer <= 0.0 { e.trapped = false; e.vel.x = 1.2; }
-                
-                let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
-                if e.pos.y < -8.0 {
-                    if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) {
-                        e.pos.y = PLAY_HEIGHT;
-                    } else {
-                        e.pos.y = 0.0; 
-                    }
+            match e.kind {
+                EnemyType::Walker => {
+                    e.pos.x += e.vel.x;
+                    e.vel.y += GRAVITY;
+                    if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
+                    e.pos.y += e.vel.y;
+                    handle_enemy_collision(e, &self.level);
                 }
-            } else {
-                match e.kind {
-                    EnemyType::Walker => {
-                        e.pos.x += e.vel.x;
-                        e.vel.y += GRAVITY;
-                        if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
-                        e.pos.y += e.vel.y;
-                        handle_enemy_collision(e, &self.level);
-                    }
-                    EnemyType::Flyer => {
-                        e.pos += e.vel;
-                        // Bounce off walls and ceilings
-                        if e.pos.x < 0.0 || e.pos.x > VIRTUAL_WIDTH - 16.0 { e.vel.x = -e.vel.x; }
-                        if e.pos.y < 0.0 || e.pos.y > PLAY_HEIGHT - 16.0 { e.vel.y = -e.vel.y; }
-                        // Minimal tile collision for flyers: just bounce
-                        let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
-                        let ty = ((e.pos.y + 8.0) / TILE_SIZE) as i32;
-                        if self.level.is_wall(tx, ty) { e.vel = -e.vel; }
-                    }
-                    EnemyType::Bouncer => {
-                        e.pos.x += e.vel.x;
-                        e.vel.y += GRAVITY;
-                        if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
-                        e.pos.y += e.vel.y;
-                        
-                        let grounded = handle_enemy_collision(e, &self.level);
-                        if grounded {
-                            e.jump_cooldown -= 0.016;
-                            if e.jump_cooldown <= 0.0 {
-                                e.vel.y = -4.0;
-                                e.jump_cooldown = 1.0 + (next_rand(100) as f32 / 50.0);
-                            }
+                EnemyType::Flyer => {
+                    e.pos += e.vel;
+                    if e.pos.x < 0.0 || e.pos.x > VIRTUAL_WIDTH - 16.0 { e.vel.x = -e.vel.x; }
+                    if e.pos.y < 0.0 || e.pos.y > PLAY_HEIGHT - 16.0 { e.vel.y = -e.vel.y; }
+                    let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
+                    let ty = ((e.pos.y + 8.0) / TILE_SIZE) as i32;
+                    if self.level.is_wall(tx, ty) { e.vel = -e.vel; }
+                }
+                EnemyType::Bouncer => {
+                    e.pos.x += e.vel.x;
+                    e.vel.y += GRAVITY;
+                    if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
+                    e.pos.y += e.vel.y;
+                    let grounded = handle_enemy_collision(e, &self.level);
+                    if grounded {
+                        e.jump_cooldown -= 0.016;
+                        if e.jump_cooldown <= 0.0 {
+                            e.vel.y = -4.0;
+                            e.jump_cooldown = 1.0 + (next_rand(100) as f32 / 50.0);
                         }
                     }
                 }
@@ -422,13 +410,14 @@ impl Game {
             }
         }
 
-        for b in self.bubbles.iter_mut().filter(|b| !b.trapped_enemy) {
+        // Bubbles vs Enemies
+        for b in self.bubbles.iter_mut().filter(|b| b.trapped_kind.is_none()) {
             let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
-            for e in self.enemies.iter_mut().filter(|e| !e.trapped) {
-                if b_rect.overlaps(&e.rect()) {
-                    e.trapped = true; e.trap_timer = 4.0;
-                    b.trapped_enemy = true; b.timer = 4.0;
+            for e in self.enemies.iter_mut() {
+                if !e.dead && b_rect.overlaps(&e.rect()) {
                     b.trapped_kind = Some(e.kind);
+                    b.timer = 4.0;
+                    e.dead = true;
                     audio.play_enemy_trapped();
                     break;
                 }
@@ -441,7 +430,7 @@ impl Game {
             if self.players[i].dead { continue; }
             
             for b in self.bubbles.iter_mut() {
-                if b.trapped_enemy {
+                if let Some(kind) = b.trapped_kind {
                     let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
                     if p_rect.overlaps(&b_rect) {
                         b.timer = 0.0; audio.play_bubble_pop();
@@ -454,13 +443,12 @@ impl Game {
                             _ => None,
                         };
                         self.items.push(Item { pos: b.pos, _vel: vec2(0.0, 0.0), upgrade: ut, score_val: 500, timer: 10.0 });
-                        // Find the enemy that matches this bubble's trapped state (simplified)
-                        if let Some(e) = self.enemies.iter_mut().find(|e| e.trapped) { e.dead = true; }
+                        b.trapped_kind = None; // Already dead/transformed
                     }
                 }
             }
 
-            for e in self.enemies.iter().filter(|e| !e.trapped && !e.dead) {
+            for e in self.enemies.iter().filter(|e| !e.dead) {
                 if p_rect.overlaps(&e.rect()) {
                     let p = &mut self.players[i];
                     p.dead = true; p.lives = p.lives.saturating_sub(1); p.respawn_timer = 2.0;
@@ -492,7 +480,7 @@ impl Game {
         self.items.retain(|it| it.timer > 0.0);
         for it in self.items.iter_mut() { it.timer -= 0.016; }
 
-        if self.enemies.is_empty() && !self.game_over && self.transition_timer == 0.0 {
+        if self.enemies.is_empty() && !self.game_over && self.transition_timer == 0.0 && self.bubbles.iter().all(|b| b.trapped_kind.is_none()) {
             self.start_transition(self.current_level_idx + 1);
         }
     }
@@ -522,8 +510,8 @@ impl Game {
         for b in &self.bubbles {
             if b.timer < 1.5 && (get_time() * 10.0) as i32 % 2 == 0 { continue; }
             let frame_idx = (get_time() * 4.0) as usize % 2;
-            let tex = if b.trapped_enemy { &gfx.zen_chan[frame_idx] } else { &gfx.bubble };
-            let s = if b.trapped_enemy { 0.7 } else { 1.0 } * b.scale;
+            let tex = if b.trapped_kind.is_some() { &gfx.zen_chan[frame_idx] } else { &gfx.bubble };
+            let s = if b.trapped_kind.is_some() { 0.7 } else { 1.0 } * b.scale;
             let offset = (16.0 * (1.0 - s)) / 2.0;
             let tint = if let Some(kind) = b.trapped_kind {
                 match kind {
@@ -536,7 +524,7 @@ impl Game {
             draw_texture_ex(tex, vx + (b.pos.x + offset) * scale, game_vy + (b.pos.y + offset) * scale, tint, DrawTextureParams {
                 dest_size: Some(vec2(16.0 * s * scale, 16.0 * s * scale)), ..Default::default()
             });
-            if b.trapped_enemy {
+            if b.trapped_kind.is_some() {
                 draw_texture_ex(&gfx.bubble, vx + b.pos.x * scale, game_vy + b.pos.y * scale, Color::new(1.0, 1.0, 1.0, 0.5), DrawTextureParams {
                     dest_size: Some(vec2(16.0 * b.scale * scale, 16.0 * b.scale * scale)), ..Default::default()
                 });
@@ -544,7 +532,7 @@ impl Game {
         }
 
         for e in &self.enemies {
-            if !e.trapped {
+            if !e.dead {
                 let frame_idx = (e.anim_timer as usize) % 2;
                 let tint = match e.kind {
                     EnemyType::Walker => WHITE,
