@@ -126,21 +126,27 @@ pub struct Item {
     pub timer: f32,
 }
 
+pub struct Level {
+    pub tiles: Vec<u8>,
+}
+
+impl Level {
+    pub fn is_wall(&self, x: i32, y: i32) -> bool {
+        if x < 0 || x >= 16 || y < 0 || y >= 14 { return false; }
+        self.tiles[(y * 16 + x) as usize] == 1
+    }
+}
+
 pub struct Game {
     pub players: Vec<Player>,
     pub enemies: Vec<Enemy>,
     pub bubbles: Vec<Bubble>,
     pub items: Vec<Item>,
-    pub level: Vec<u8>,
-    pub next_level: Option<Vec<u8>>,
+    pub level: Level,
+    pub next_level: Option<Level>,
     pub current_level_idx: usize,
     pub transition_timer: f32,
     pub game_over: bool,
-}
-
-fn is_wall(level: &[u8], x: i32, y: i32) -> bool {
-    if x < 0 || x >= 16 || y < 0 || y >= 14 { return false; }
-    level[(y * 16 + x) as usize] == 1
 }
 
 impl Game {
@@ -155,7 +161,7 @@ impl Game {
             enemies: Vec::new(),
             bubbles: Vec::new(),
             items: Vec::new(),
-            level: get_level_layout(0),
+            level: Level { tiles: get_level_layout(0) },
             next_level: None,
             current_level_idx: 0,
             transition_timer: 0.0,
@@ -191,7 +197,7 @@ impl Game {
 
     fn start_transition(&mut self, next_idx: usize) {
         self.current_level_idx = next_idx;
-        self.next_level = Some(get_level_layout(next_idx));
+        self.next_level = Some(Level { tiles: get_level_layout(next_idx) });
         self.transition_timer = 0.001; 
         self.bubbles.clear();
         self.items.clear();
@@ -216,8 +222,8 @@ impl Game {
         }
 
         for i in 0..self.players.len() {
-            let p = &mut self.players[i];
-            if p.dead {
+            if self.players[i].dead {
+                let p = &mut self.players[i];
                 p.respawn_timer -= 0.016;
                 if p.respawn_timer <= 0.0 && p.lives > 0 {
                     p.dead = false;
@@ -228,6 +234,7 @@ impl Game {
             }
             
             let input = &inputs[i];
+            let p = &mut self.players[i];
             
             // Movement
             if input.left { p.vel.x -= ACCEL; p.dir = Direction::Left; }
@@ -257,7 +264,6 @@ impl Game {
             if p.powerup_timer > 0.0 {
                 p.powerup_timer -= 0.016;
                 if p.powerup_timer <= 0.0 {
-                    // Reset temporary stats
                     p.max_bubbles = 10;
                     p.bubble_speed = 3.5;
                     p.bubble_range = 0.5;
@@ -265,7 +271,7 @@ impl Game {
                 }
             }
 
-            // Blowing bubbles with limit
+            // Blowing bubbles
             if input.bubble {
                 let current_bubbles = self.bubbles.iter().filter(|b| b.owner_id == p.id).count();
                 if current_bubbles < p.max_bubbles {
@@ -288,18 +294,18 @@ impl Game {
             if p.vel.y > TERMINAL_VELOCITY { p.vel.y = TERMINAL_VELOCITY; }
             p.pos += p.vel;
             
-            self.handle_player_collision(i);
+            handle_player_collision(p, &self.level);
             
             // Wrap logic
             if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
             if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
-                if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = -15.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = -15.0; }
                 else { p.pos.y = PLAY_HEIGHT; p.vel.y = 0.0; p.grounded = true; }
             }
             if p.pos.y < -16.0 {
-                if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { p.pos.y = PLAY_HEIGHT - 1.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = PLAY_HEIGHT - 1.0; }
                 else { p.pos.y = -16.0; p.vel.y = 0.0; }
             }
         }
@@ -309,16 +315,13 @@ impl Game {
             b.pos += b.vel;
             if b.range_timer > 0.0 {
                 b.range_timer -= 0.016;
-                if b.range_timer <= 0.0 {
-                    b.vel.x = 0.0;
-                    b.vel.y = -0.6;
-                }
+                if b.range_timer <= 0.0 { b.vel.x = 0.0; b.vel.y = -0.6; }
             } else {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
             b.timer -= 0.016;
             let tx = ((b.pos.x + 8.0) / TILE_SIZE) as i32;
-            if b.pos.y < -16.0 && !is_wall(&self.level, tx, 13) { b.pos.y = PLAY_HEIGHT; }
+            if b.pos.y < -16.0 && !self.level.is_wall(tx, 13) { b.pos.y = PLAY_HEIGHT; }
         }
         self.bubbles.retain(|b| b.timer > 0.0);
 
@@ -330,27 +333,25 @@ impl Game {
                 e.pos.y -= 0.5;
                 e.trap_timer -= 0.016;
                 if e.trap_timer <= 0.0 { e.trapped = false; e.vel.x = 1.2; }
-                
-                // Trapped enemies wrap too
                 let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
-                if e.pos.y < -16.0 && !is_wall(&self.level, tx, 13) { e.pos.y = PLAY_HEIGHT; }
+                if e.pos.y < -16.0 && !self.level.is_wall(tx, 13) { e.pos.y = PLAY_HEIGHT; }
             } else {
                 e.pos.x += e.vel.x;
                 e.vel.y += GRAVITY;
                 if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                 e.pos.y += e.vel.y;
-                self.handle_enemy_collision(i);
+                handle_enemy_collision(e, &self.level);
             }
             
             if e.pos.x < -16.0 { e.pos.x = VIRTUAL_WIDTH; }
             if e.pos.x > VIRTUAL_WIDTH { e.pos.x = -16.0; }
             let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
             if e.pos.y > PLAY_HEIGHT {
-                if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = -15.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = -15.0; }
                 else { e.pos.y = PLAY_HEIGHT; e.vel.y = 0.0; }
             }
             if e.pos.y < -16.0 {
-                if !is_wall(&self.level, tx, 0) && !is_wall(&self.level, tx, 13) { e.pos.y = PLAY_HEIGHT - 1.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = PLAY_HEIGHT - 1.0; }
                 else { e.pos.y = -16.0; e.vel.y = 0.0; }
             }
         }
@@ -369,18 +370,17 @@ impl Game {
         }
 
         // Players vs Everything
+        let mut game_over_now = false;
         for i in 0..self.players.len() {
-            let p_rect = self.players[i].rect();
             if self.players[i].dead { continue; }
+            let p_rect = self.players[i].rect();
             
-            // Pop trapped bubbles
             for b in self.bubbles.iter_mut() {
                 if b.trapped_enemy {
                     let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
                     if p_rect.overlaps(&b_rect) {
                         b.timer = 0.0; audio.play_bubble_pop();
                         self.players[i].score += 500;
-                        // Spawn random upgrade or fruit
                         let ut = match next_rand(10) {
                             0 => Some(UpgradeType::MoreBubbles),
                             1 => Some(UpgradeType::FasterBubbles),
@@ -394,7 +394,6 @@ impl Game {
                 }
             }
 
-            // Hit by untrapped enemy
             for e in self.enemies.iter().filter(|e| !e.trapped && !e.dead) {
                 if p_rect.overlaps(&e.rect()) {
                     let p = &mut self.players[i];
@@ -402,18 +401,17 @@ impl Game {
                     p.lives = p.lives.saturating_sub(1);
                     p.respawn_timer = 2.0;
                     audio.play_death();
-                    if self.players.iter().all(|p| p.dead && p.lives == 0) { self.game_over = true; }
+                    if self.players.iter().all(|p| p.dead && p.lives == 0) { game_over_now = true; }
                 }
             }
             
-            // Collect Items
             for it in self.items.iter_mut() {
                 let it_rect = Rect::new(it.pos.x, it.pos.y, 16.0, 16.0);
                 if p_rect.overlaps(&it_rect) {
                     let p = &mut self.players[i];
                     p.score += it.score_val;
                     if let Some(u) = it.upgrade {
-                        p.powerup_timer = 10.0; // 10 seconds of power
+                        p.powerup_timer = 10.0;
                         match u {
                             UpgradeType::MoreBubbles => p.max_bubbles = 20,
                             UpgradeType::FasterBubbles => p.bubble_speed = 6.0,
@@ -426,6 +424,7 @@ impl Game {
                 }
             }
         }
+        if game_over_now { self.game_over = true; }
 
         self.enemies.retain(|e| !e.dead);
         self.items.retain(|it| it.timer > 0.0);
@@ -433,44 +432,6 @@ impl Game {
 
         if self.enemies.is_empty() && !self.game_over && self.transition_timer == 0.0 {
             self.start_transition(self.current_level_idx + 1);
-        }
-    }
-
-    fn handle_player_collision(&mut self, player_idx: usize) {
-        let p = &mut self.players[player_idx];
-        let ty = (p.pos.y / TILE_SIZE) as i32;
-        let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
-        let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
-        
-        if is_wall(&self.level, ground_tile_x as i32, ground_tile_y as i32) {
-            if p.vel.y > 0.0 {
-                // Smooth floor landing
-                p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
-                p.vel.y = 0.0;
-                p.grounded = true;
-            }
-        } else {
-            p.grounded = false;
-        }
-        
-        // Wall collisions
-        if is_wall(&self.level, (p.pos.x + 4.0) as i32 / 16, ty) || is_wall(&self.level, (p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
-            if p.vel.x < 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16 + 16) as f32; p.vel.x = 0.0; }
-        }
-        if is_wall(&self.level, (p.pos.x + 12.0) as i32 / 16, ty) || is_wall(&self.level, (p.pos.x + 12.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
-            if p.vel.x > 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16) as f32; p.vel.x = 0.0; }
-        }
-    }
-
-    fn handle_enemy_collision(&mut self, enemy_idx: usize) {
-        let e = &mut self.enemies[enemy_idx];
-        let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
-        let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
-        if is_wall(&self.level, ground_tile_x as i32, ground_tile_y as i32) {
-            if e.vel.y > 0.0 { e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; e.vel.y = 0.0; }
-        }
-        if is_wall(&self.level, (e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 }) as i32 / 16, (e.pos.y + 8.0) as i32 / 16) {
-            e.vel.x = -e.vel.x;
         }
     }
 
@@ -483,7 +444,7 @@ impl Game {
 
         for y in 0..14 {
             for x in 0..16 {
-                if self.level[y * 16 + x] == 1 {
+                if self.level.tiles[y * 16 + x] == 1 {
                     let tx = vx + (x as f32 * 16.0 + 8.0) * scale;
                     let ty = game_vy + (y as f32 * 16.0 + 8.0) * scale;
                     draw_texture_ex(&gfx.tile, tx - 8.0 * scale * warp_scale, ty - 8.0 * scale * warp_scale, WHITE, DrawTextureParams {
@@ -553,12 +514,33 @@ impl Game {
     }
 }
 
+fn handle_player_collision(p: &mut Player, level: &Level) {
+    let ty = (p.pos.y / TILE_SIZE) as i32;
+    let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
+    let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
+    if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
+        if p.vel.y > 0.0 { p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; p.vel.y = 0.0; p.grounded = true; }
+    } else { p.grounded = false; }
+    if level.is_wall((p.pos.x + 4.0) as i32 / 16, ty) || level.is_wall((p.pos.x + 4.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
+        if p.vel.x < 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16 + 16) as f32; p.vel.x = 0.0; }
+    }
+    if level.is_wall((p.pos.x + 12.0) as i32 / 16, ty) || level.is_wall((p.pos.x + 12.0) as i32 / 16, (p.pos.y + 14.0) as i32 / 16) {
+        if p.vel.x > 0.0 { p.pos.x = (p.pos.x as i32 / 16 * 16) as f32; p.vel.x = 0.0; }
+    }
+}
+
+fn handle_enemy_collision(e: &mut Enemy, level: &Level) {
+    let ground_tile_x = (e.pos.x + 8.0) / TILE_SIZE;
+    let ground_tile_y = (e.pos.y + 16.0) / TILE_SIZE;
+    if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
+        if e.vel.y > 0.0 { e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; e.vel.y = 0.0; }
+    }
+    if level.is_wall((e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 }) as i32 / 16, (e.pos.y + 8.0) as i32 / 16) { e.vel.x = -e.vel.x; }
+}
+
 fn next_rand(max: usize) -> usize {
     static mut SEED: u32 = 42;
-    unsafe {
-        SEED = SEED.wrapping_mul(1103515245).wrapping_add(12345);
-        ((SEED >> 16) as usize) % max
-    }
+    unsafe { SEED = SEED.wrapping_mul(1103515245).wrapping_add(12345); ((SEED >> 16) as usize) % max }
 }
 
 fn get_level_layout(idx: usize) -> Vec<u8> {

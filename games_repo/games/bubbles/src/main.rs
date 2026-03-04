@@ -167,7 +167,7 @@ async fn main() {
                 draw_text("NEW HIGH SCORE!", vx + 40.0 * scale, vy + 60.0 * scale, title_size, YELLOW);
                 draw_text("TYPE YOUR NAME:", vx + 50.0 * scale, vy + 100.0 * scale, 20.0 * scale, WHITE);
                 let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
-                draw_text(&display_name, vx + 80.0 * scale, vy + 130.0 * scale, 30.0 * scale, CYAN);
+                draw_text(&display_name, vx + 80.0 * scale, vy + 130.0 * scale, 30.0 * scale, SKYBLUE);
                 
                 let btn_w = 100.0 * scale;
                 let btn_h = 30.0 * scale;
