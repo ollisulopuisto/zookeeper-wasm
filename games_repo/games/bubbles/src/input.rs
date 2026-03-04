@@ -31,13 +31,13 @@ impl InputManager {
         self.p2 = PlayerInput::default();
         self.any_key = false;
 
-        // Keyboard P1
-        self.p1.left = is_key_down(KeyCode::Left);
-        self.p1.right = is_key_down(KeyCode::Right);
-        self.p1.jump = is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Up);
-        self.p1.bubble = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space);
+        // Keyboard P1 (Arrows or WASD)
+        self.p1.left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
+        self.p1.right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
+        self.p1.jump = is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::LeftShift);
+        self.p1.bubble = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) || is_key_pressed(KeyCode::LeftControl) || is_key_pressed(KeyCode::S);
 
-        // Keyboard P2
+        // Keyboard P2 (remains WASD for now, but P1 has priority if shared)
         self.p2.left = is_key_down(KeyCode::A);
         self.p2.right = is_key_down(KeyCode::D);
         self.p2.jump = is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Q);
