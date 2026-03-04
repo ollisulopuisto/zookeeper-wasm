@@ -144,10 +144,7 @@ async fn main() {
                 draw_text("TOUCH TO START", vx + 75.0 * scale, vy + 160.0 * scale, text_size, YELLOW);
             }
             AppState::Playing => {
-                game.draw(&gfx, vx, vy, scale);
-                if !two_player && touch_detected {
-                    input.draw_debug_touch_regions(vx, vy, scale, VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
-                }
+                game.draw(&gfx, &input, vx, vy, scale);
             }
             AppState::GameOver => {
                 let title_size = 40.0 * scale;
