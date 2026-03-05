@@ -314,8 +314,6 @@ impl Game {
             
             handle_player_collision(p, &self.level);
             
-            if p.pos.x < -16.0 { p.pos.x = VIRTUAL_WIDTH; }
-            if p.pos.x > VIRTUAL_WIDTH { p.pos.x = -16.0; }
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = -15.0; }
@@ -337,6 +335,13 @@ impl Game {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
             
+            // Bubble side wall collision
+            let tx_left = (b.pos.x / 16.0) as i32;
+            let tx_right = ((b.pos.x + 15.0) / 16.0) as i32;
+            let ty = ((b.pos.y + 8.0) / 16.0) as i32;
+            if self.level.is_wall(tx_left, ty) { b.pos.x = (tx_left * 16 + 16) as f32; b.vel.x = -b.vel.x; }
+            if self.level.is_wall(tx_right, ty) { b.pos.x = (tx_right * 16 - 16) as f32; b.vel.x = -b.vel.x; }
+
             if b.trapped_kind.is_some() {
                 b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
             }
@@ -395,8 +400,6 @@ impl Game {
                 }
             }
             
-            if e.pos.x < -16.0 { e.pos.x = VIRTUAL_WIDTH; }
-            if e.pos.x > VIRTUAL_WIDTH { e.pos.x = -16.0; }
             let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
             if e.pos.y > PLAY_HEIGHT {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = -15.0; }
@@ -607,14 +610,10 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
     let right_tile_x = ((p.pos.x + 12.0) / 16.0) as i32;
     
     if level.is_wall(left_tile_x, ty) {
-        if left_tile_x > 0 && left_tile_x < 15 { 
-             if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 16) as f32; p.vel.x = 0.0; }
-        }
+        if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 16) as f32; p.vel.x = 0.0; }
     }
     if level.is_wall(right_tile_x, ty) {
-        if right_tile_x > 0 && right_tile_x < 15 { 
-            if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
-        }
+        if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
     }
 }
 
@@ -640,7 +639,7 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     }
     let next_x = e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 };
     let tx = (next_x / 16.0) as i32;
-    if tx > 0 && tx < 15 && level.is_wall(tx, (e.pos.y + 8.0) as i32 / 16) {
+    if level.is_wall(tx, (e.pos.y + 8.0) as i32 / 16) {
         e.vel.x = -e.vel.x;
     }
     grounded
