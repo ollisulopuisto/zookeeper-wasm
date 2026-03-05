@@ -28,7 +28,7 @@ fn window_conf() -> Conf {
 async fn main() {
     let mut state = AppState::Menu;
     let mut level = create_test_level();
-    let mut player = Player::new(2, 16);
+    let mut player = Player::new(2, 15); // Start slightly higher
     let mut enemies = vec![
         Enemy::new(5, 5, EnemyType::Trackbot),
         Enemy::new(15, 10, EnemyType::SteelBall),
@@ -71,7 +71,7 @@ async fn main() {
                 if is_key_pressed(KeyCode::Space) {
                     state = AppState::Playing;
                     level = create_test_level();
-                    player = Player::new(2, 16);
+                    player = Player::new(2, 15);
                     enemies = vec![
                         Enemy::new(5, 5, EnemyType::Trackbot),
                         Enemy::new(15, 10, EnemyType::SteelBall),
@@ -83,14 +83,20 @@ async fn main() {
             AppState::Playing => {
                 let dt = get_frame_time();
 
-                // Input
+                // Horizontal movement
                 let mut dx = 0.0;
                 if is_key_down(KeyCode::Left) { dx -= 1.0; player.facing_right = false; }
                 if is_key_down(KeyCode::Right) { dx += 1.0; player.facing_right = true; }
                 player.entity.collider.x += dx * 4.0;
 
+                // Screen Wrap (Horizontal)
+                if player.entity.collider.x < -player.entity.collider.w { player.entity.collider.x = SCREEN_WIDTH; }
+                if player.entity.collider.x > SCREEN_WIDTH { player.entity.collider.x = -player.entity.collider.w; }
+
+                // Thrust logic
                 if is_key_down(KeyCode::Up) && player.fuel > 0.0 {
-                    player.entity.vy -= 0.5;
+                    player.entity.vy -= 0.5; // Upward force
+                    if player.entity.vy < -4.0 { player.entity.vy = -4.0; } // Cap upward speed
                     player.is_jetting = true;
                     player.fuel -= 0.1;
                     if !was_jetting {
@@ -128,11 +134,14 @@ async fn main() {
                 player.phase_cooldown = (player.phase_cooldown - dt).max(0.0);
 
                 // Gravity & Movement
-                player.entity.vy += 0.2;
+                player.entity.vy += 0.2; // Gravity
+                if player.entity.vy > 6.0 { player.entity.vy = 6.0; } // Terminal velocity
                 player.entity.collider.y += player.entity.vy;
 
-                handle_collisions(&mut player.entity.collider, &level);
+                // Collisions (Player)
+                handle_collisions(&mut player.entity, &level);
 
+                // Emeralds & Fuel
                 for col in &mut level.collectibles {
                     if col.active && player.entity.collider.overlaps(&RectCollider::new(col.col as f32 * TILE_SIZE, col.row as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE)) {
                         col.active = false;
@@ -191,11 +200,19 @@ async fn main() {
 
                 for enemy in &mut enemies {
                     enemy.entity.collider.x += if enemy.facing_right { 2.0 } else { -2.0 };
+                    
+                    // Enemy screen wrap
+                    if enemy.entity.collider.x < -24.0 { enemy.entity.collider.x = SCREEN_WIDTH; }
+                    if enemy.entity.collider.x > SCREEN_WIDTH { enemy.entity.collider.x = -24.0; }
+
                     let ec = (enemy.entity.collider.x + if enemy.facing_right { 24.0 } else { 0.0 }) / TILE_SIZE;
                     let er = (enemy.entity.collider.y + 12.0 - HUD_HEIGHT) / TILE_SIZE;
-                    if ec < 0.0 || ec >= COLS as f32 || (er as usize) >= ROWS || level.grid[er as usize][ec as usize] != TileType::Empty {
-                        enemy.facing_right = !enemy.facing_right;
+                    if ec >= 0.0 && ec < COLS as f32 && er >= 0.0 && (er as usize) < ROWS {
+                        if level.grid[er as usize][ec as usize] != TileType::Empty {
+                            enemy.facing_right = !enemy.facing_right;
+                        }
                     }
+
                     if enemy.entity.collider.overlaps(&player.entity.collider) {
                         player.dead = true;
                     }
@@ -233,36 +250,54 @@ async fn main() {
     }
 }
 
-fn handle_collisions(entity: &mut physics::RectCollider, level: &Level) {
-    let left_col = (entity.x / TILE_SIZE) as usize;
-    let right_col = ((entity.x + entity.w) / TILE_SIZE) as usize;
-    let top_row = ((entity.y - HUD_HEIGHT) / TILE_SIZE) as usize;
-    let bottom_row = ((entity.y + entity.h - HUD_HEIGHT) / TILE_SIZE) as usize;
+fn handle_collisions(entity: &mut physics::Entity, level: &Level) {
+    let col = &mut entity.collider;
+    
+    // Y-axis boundary clamping
+    if col.y < HUD_HEIGHT { col.y = HUD_HEIGHT; entity.vy = 0.0; }
+    if col.y + col.h > SCREEN_HEIGHT { col.y = SCREEN_HEIGHT - col.h; entity.vy = 0.0; }
+
+    let left_col = (col.x / TILE_SIZE) as usize;
+    let right_col = ((col.x + col.w) / TILE_SIZE) as usize;
+    let top_row = ((col.y - HUD_HEIGHT) / TILE_SIZE) as usize;
+    let bottom_row = ((col.y + col.h - HUD_HEIGHT) / TILE_SIZE) as usize;
+
+    // Floor
     if bottom_row < ROWS {
         for c in left_col..=right_col {
             if c < COLS && (level.grid[bottom_row][c] == TileType::NormalBrick || level.grid[bottom_row][c] == TileType::SolidBrick) {
                 let tile_y = bottom_row as f32 * TILE_SIZE + HUD_HEIGHT;
-                if entity.y + entity.h > tile_y { entity.y = tile_y - entity.h; }
+                if col.y + col.h > tile_y {
+                    col.y = tile_y - col.h;
+                    entity.vy = 0.0;
+                }
             }
         }
     }
+    
+    // Ceiling
     if top_row < ROWS {
         for c in left_col..=right_col {
             if c < COLS && (level.grid[top_row][c] == TileType::NormalBrick || level.grid[top_row][c] == TileType::SolidBrick) {
                 let tile_bottom = (top_row + 1) as f32 * TILE_SIZE + HUD_HEIGHT;
-                if entity.y < tile_bottom { entity.y = tile_bottom; }
+                if col.y < tile_bottom {
+                    col.y = tile_bottom;
+                    entity.vy = 0.0;
+                }
             }
         }
     }
-    let row_mid = ((entity.y + entity.h / 2.0 - HUD_HEIGHT) / TILE_SIZE) as usize;
+
+    // Walls
+    let row_mid = ((col.y + col.h / 2.0 - HUD_HEIGHT) / TILE_SIZE) as usize;
     if row_mid < ROWS {
         if left_col < COLS && (level.grid[row_mid][left_col] == TileType::NormalBrick || level.grid[row_mid][left_col] == TileType::SolidBrick) {
             let tile_right = (left_col + 1) as f32 * TILE_SIZE;
-            if entity.x < tile_right { entity.x = tile_right; }
+            if col.x < tile_right { col.x = tile_right; }
         }
         if right_col < COLS && (level.grid[row_mid][right_col] == TileType::NormalBrick || level.grid[row_mid][right_col] == TileType::SolidBrick) {
             let tile_left = right_col as f32 * TILE_SIZE;
-            if entity.x + entity.w > tile_left { entity.x = tile_left - entity.w; }
+            if col.x + col.w > tile_left { col.x = tile_left - col.w; }
         }
     }
 }
