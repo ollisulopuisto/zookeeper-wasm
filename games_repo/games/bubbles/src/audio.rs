@@ -194,14 +194,6 @@ fn generate_music_wav() -> Vec<u8> {
     let scale = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84];
     let progression = [48, 53, 55, 45];
     
-    let mut seed = 0xACE1u32;
-    let mut next_rand = || {
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        seed
-    };
-
     let mut noise_seed = 0x12345678u32;
 
     for i in 0..num_samples {
