@@ -55,6 +55,7 @@ pub struct Player {
     pub bubble_range: f32, // in seconds
     pub bubble_scale: f32,
     pub powerup_timer: f32,
+    pub active_powerup: Option<UpgradeType>,
 }
 
 impl Player {
@@ -78,6 +79,7 @@ impl Player {
             bubble_range: 0.5, // 0.5 seconds of forward travel
             bubble_scale: 1.0,
             powerup_timer: 0.0,
+            active_powerup: None,
         }
     }
 
@@ -311,6 +313,7 @@ impl Game {
                 p.powerup_timer -= 0.016;
                 if p.powerup_timer <= 0.0 {
                     p.max_bubbles = 10; p.bubble_speed = 3.5; p.bubble_range = 0.5; p.bubble_scale = 1.0;
+                    p.active_powerup = None;
                 }
             }
 
@@ -349,10 +352,7 @@ impl Game {
                 else { p.pos.y = PLAY_HEIGHT - 32.0; p.vel.y = 0.0; p.grounded = true; }
             }
             if p.pos.y < -16.0 {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
-                    p.pos.y = PLAY_HEIGHT; 
-                }
-                else { p.pos.y = 0.0; p.vel.y = 0.0; }
+                p.pos.y = 0.0; p.vel.y = 0.0;
             }
         }
 
@@ -447,10 +447,7 @@ impl Game {
                 else { e.pos.y = PLAY_HEIGHT - 32.0; e.vel.y = 0.0; }
             }
             if e.pos.y < -16.0 {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
-                    e.pos.y = PLAY_HEIGHT; 
-                }
-                else { e.pos.y = 0.0; e.vel.y = 0.0; }
+                e.pos.y = 0.0; e.vel.y = 0.0;
             }
         }
 
@@ -507,6 +504,7 @@ impl Game {
                     p.score += it.score_val;
                     if let Some(u) = it.upgrade {
                         p.powerup_timer = 10.0;
+                        p.active_powerup = Some(u);
                         match u {
                             UpgradeType::MoreBubbles => p.max_bubbles = 20,
                             UpgradeType::FasterBubbles => p.bubble_speed = 6.0,
@@ -628,9 +626,35 @@ impl Game {
         }
 
         let font_size = (12.0 * scale) as u16;
-        draw_text(&format!("P1: {:06} L:{}", self.players[0].score, self.players[0].lives), vx + 5.0 * scale, vy + 12.0 * scale, font_size as f32, GREEN);
+        let hud_y = vy + 12.0 * scale;
+        
+        // P1 HUD
+        draw_text(&format!("P1: {:06} L:{}", self.players[0].score, self.players[0].lives), vx + 5.0 * scale, hud_y, font_size as f32, GREEN);
+        if let Some(upg) = self.players[0].active_powerup {
+            let label = match upg {
+                UpgradeType::MoreBubbles => "B-MAX",
+                UpgradeType::FasterBubbles => "SPEED",
+                UpgradeType::LongerDistance => "RANGE",
+                UpgradeType::DoubleSize => "BIG",
+            };
+            draw_text(label, vx + 5.0 * scale, hud_y + 10.0 * scale, font_size as f32 * 0.6, SKYBLUE);
+            draw_rectangle(vx + 5.0 * scale, hud_y + 12.0 * scale, (self.players[0].powerup_timer / 10.0) * 40.0 * scale, 2.0 * scale, SKYBLUE);
+        }
+
+        // P2 HUD
         if self.players.len() > 1 {
-            draw_text(&format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives), vx + 170.0 * scale, vy + 12.0 * scale, font_size as f32, BLUE);
+            let p2_x = vx + 170.0 * scale;
+            draw_text(&format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives), p2_x, hud_y, font_size as f32, BLUE);
+            if let Some(upg) = self.players[1].active_powerup {
+                let label = match upg {
+                    UpgradeType::MoreBubbles => "B-MAX",
+                    UpgradeType::FasterBubbles => "SPEED",
+                    UpgradeType::LongerDistance => "RANGE",
+                    UpgradeType::DoubleSize => "BIG",
+                };
+                draw_text(label, p2_x, hud_y + 10.0 * scale, font_size as f32 * 0.6, SKYBLUE);
+                draw_rectangle(p2_x, hud_y + 12.0 * scale, (self.players[1].powerup_timer / 10.0) * 40.0 * scale, 2.0 * scale, SKYBLUE);
+            }
         }
         draw_text(&format!("LEVEL {:02}", self.current_level_idx + 1), vx + 105.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
 
