@@ -179,91 +179,84 @@ fn generate_death_wav() -> Vec<u8> {
 
 fn generate_music_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let bpm = 120.0;
+    let bpm = 125.0;
     let beat_duration = 60.0 / bpm;
     let sixteen_duration = beat_duration / 4.0;
     
-    // C Major Scale: 3 Octaves (C3 to C6)
-    let scale = [
-        130.81, 146.83, 164.81, 174.61, 196.00, 220.00, 246.94, // C3-B3
-        261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, // C4-B4
-        523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, // C5-B5
-        1046.50 // C6
+    // Melody MIDI notes (0 for rest)
+    let melody_notes = [
+        72, 76, 79, 72, 77, 81, 84, 77, 79, 83, 86, 79, 72, 67, 64, 60,
+        69, 72, 76, 69, 65, 69, 72, 65, 67, 71, 74, 67, 60, 0, 0, 0,
+        72, 79, 76, 79, 77, 84, 81, 84, 79, 86, 83, 86, 84, 0, 0, 0,
+        72, 71, 69, 67, 65, 64, 62, 60, 67, 71, 74, 79, 72, 0, 0, 0
     ];
-    
-    let mut seed = 42u32;
-    let mut next_rand = |max: usize| -> usize {
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        ((seed >> 16) as usize) % max
-    };
 
-    let mut song_melody = Vec::new();
-    let mut song_bass = Vec::new();
-    
-    // Generate 10 distinct sections
-    for _ in 0..10 {
-        let root_idx = next_rand(7); // Random starting note in C3-B3
-        let mut current_idx = root_idx + 7; // Start melody in middle octave (C4-B4)
-        
-        for i in 0..16 {
-            // Random walk: Move current index by -2, -1, 0, 1, or 2
-            let step = (next_rand(5) as i32) - 2;
-            current_idx = (current_idx as i32 + step).clamp(0, (scale.len() - 1) as i32) as usize;
-            
-            let note = if i % 4 == 0 { scale[root_idx + 7] } // Strong root on downbeat
-                      else if i % 2 == 0 { scale[current_idx] }
-                      else if next_rand(4) == 0 { 0.0 } // Rests
-                      else { scale[current_idx] };
-            
-            song_melody.push(note);
-            
-            // Bass: Simple root note matching the melody section's key (C3-B3 range)
-            let bass_note = scale[root_idx];
-            song_bass.push(if i % 8 < 4 { bass_note } else { bass_note * 0.75 }); // Simple I-V or I-VII
-        }
-    }
-    
-    let num_sixteens = song_melody.len();
+    let bass_notes = [
+        48, 48, 48, 48, 53, 53, 53, 53, 55, 55, 55, 55, 48, 48, 48, 48,
+        45, 45, 45, 45, 41, 41, 41, 41, 43, 43, 43, 43, 48, 48, 48, 48,
+        48, 48, 48, 48, 53, 53, 53, 53, 55, 55, 55, 55, 48, 48, 48, 48,
+        45, 45, 45, 45, 38, 38, 38, 38, 43, 43, 43, 43, 48, 48, 48, 48
+    ];
+
+    let num_sixteens = melody_notes.len();
     let total_duration = sixteen_duration * num_sixteens as f32;
     let num_samples = (sample_rate as f32 * total_duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
+
+    let midi_to_freq = |m: i32| -> f32 {
+        if m == 0 { 0.0 } else { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) }
+    };
 
     let mut noise_seed = 0x12345678u32;
 
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
-        let idx = (t / sixteen_duration) as usize % song_melody.len();
+        let idx = (t / sixteen_duration) as usize % num_sixteens;
+        let t_sixteen = t % sixteen_duration;
         let t_beat = t % beat_duration;
         let beat_idx = (t / beat_duration) as usize;
         
-        // --- Lead Channel (Triangle-like pulse) ---
+        // --- Lead (Triangle Wave) ---
         let mut lead = 0.0;
-        if song_melody[idx] > 0.0 {
-            let freq = song_melody[idx];
-            lead = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.12 } else { -0.12 };
-            lead *= 1.0 - (t % sixteen_duration) / sixteen_duration; // Decay
+        let freq = midi_to_freq(melody_notes[idx] as i32);
+        if freq > 0.0 {
+            let phase = t * freq * 2.0 * std::f32::consts::PI;
+            let tri = (2.0 / std::f32::consts::PI) * (phase.sin().asin());
+            lead = tri * 0.12;
+            lead *= 1.0 - (t_sixteen / sixteen_duration).powi(2);
         }
         
-        // --- Bass Channel (Soft square) ---
-        let bass_freq = song_bass[idx];
-        let bass = if (t * bass_freq * 2.0 * std::f32::consts::PI).sin() > 0.5 { 0.18 } else { -0.18 };
+        // --- Bass (Soft Square) ---
+        let b_freq = midi_to_freq(bass_notes[idx] as i32);
+        let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.15 } else { -0.15 };
+        let bass_decay = 1.0 - (t_sixteen / sixteen_duration) * 0.5;
+        let bass = bass * bass_decay;
 
-        // --- Drum Channel ---
+        // --- Drums ---
         let mut drums = 0.0;
-        // Kick
-        if t_beat < 0.08 {
-            let k_freq = 55.0 * (1.0 - t_beat / 0.08) + 30.0;
-            drums += (t * k_freq * 2.0 * std::f32::consts::PI).sin() * 0.3;
+        // Kick on 1 and 3
+        if beat_idx % 2 == 0 && t_beat < 0.1 {
+            let k_f_start = 80.0;
+            let k_f_end = 30.0;
+            let k_d = 0.1;
+            let k_phase = 2.0 * std::f32::consts::PI * (k_f_start * t_beat + (k_f_end - k_f_start) * t_beat * t_beat / (2.0 * k_d));
+            drums += k_phase.sin() * 0.4 * (1.0 - t_beat / k_d);
         }
-        // Snare
-        if beat_idx % 2 == 1 && t_beat < 0.08 {
+        // Snare on 2 and 4
+        if beat_idx % 2 == 1 && t_beat < 0.1 {
             noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
             let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            drums += n * (1.0 - t_beat / 0.08) * 0.2;
+            drums += n * (1.0 - t_beat / 0.1) * 0.25;
+        }
+        // Hi-hat on eighths
+        if (t % (beat_duration / 2.0)) < 0.03 {
+            noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+            drums += n * (1.0 - (t % (beat_duration / 2.0)) / 0.03) * 0.1;
         }
 
-        let mixed = (lead + bass + drums) * 0.65;
-        samples.push((mixed * 16383.0) as i16);
+        let mixed = (lead + bass + drums) * 0.7;
+        samples.push((mixed.clamp(-1.0, 1.0) * 16383.0) as i16);
     }
 
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
