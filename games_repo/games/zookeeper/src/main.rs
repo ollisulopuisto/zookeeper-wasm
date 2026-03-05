@@ -553,7 +553,7 @@ async fn main() {
                         attempts += 1; if attempts > 100 { break; }
                     }
                     board.grid = [[None; COLS]; ROWS];
-                    board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
+                    board.state = GameState::Reshuffling { target_grid: target, next_row: 0, timer: 0.0 };
                     if !settings.muted {
                         if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
                     }
@@ -562,10 +562,10 @@ async fn main() {
             GameState::Reshuffling { target_grid, next_row, mut timer } => {
                 timer += dt;
                 if timer >= 0.05 {
-                    if next_row > 0 {
-                        let r = next_row - 1;
+                    if next_row < ROWS {
+                        let r = next_row;
                         for x in 0..COLS { board.grid[r][x] = Some(target_grid[r][x]); }
-                        board.state = GameState::Reshuffling { target_grid, next_row: r, timer: 0.0 };
+                        board.state = GameState::Reshuffling { target_grid, next_row: r + 1, timer: 0.0 };
                     } else { board.state = GameState::Idle; }
                 } else { board.state = GameState::Reshuffling { target_grid, next_row, timer }; }
             }
@@ -588,7 +588,7 @@ async fn main() {
                         if count_available_moves_static(&target) >= 3 { break; }
                     }
                     board.grid = [[None; COLS]; ROWS];
-                    board.state = GameState::Reshuffling { target_grid: target, next_row: ROWS, timer: 0.0 };
+                    board.state = GameState::Reshuffling { target_grid: target, next_row: 0, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, combo, ref name } => {
@@ -685,6 +685,12 @@ async fn main() {
                             }
                         }
                     }
+                    GameState::Reshuffling { next_row, timer, .. } => {
+                        if y == next_row.saturating_sub(1) {
+                            let t = (timer / 0.05).min(1.0);
+                            draw_y -= (1.0 - t) * cell_size;
+                        }
+                    }
                     _ => {}
                 }
                 if let Some(t_idx) = board.grid[y][x] {
@@ -732,7 +738,7 @@ async fn main() {
         draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
         if let GameState::Paused { .. } = board.state {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.5));
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("PAUSED", sh / 2.0, font_size * 2.0, WHITE);
         }
 
