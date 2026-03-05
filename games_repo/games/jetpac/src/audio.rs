@@ -7,7 +7,6 @@ pub struct AudioManager {
     pub fuel: Sound,
     pub portal: Sound,
     pub game_over: Sound,
-    pub jump: Sound,
 }
 
 impl AudioManager {
@@ -19,7 +18,6 @@ impl AudioManager {
             fuel: load_sound_from_bytes(&generate_fuel_wav()).await.unwrap(),
             portal: load_sound_from_bytes(&generate_portal_wav()).await.unwrap(),
             game_over: load_sound_from_bytes(&generate_game_over_wav()).await.unwrap(),
-            jump: load_sound_from_bytes(&generate_jump_wav()).await.unwrap(),
         }
     }
 
@@ -35,7 +33,7 @@ impl AudioManager {
         play_sound(&self.phase, PlaySoundParams { looped: false, volume: 0.4 });
     }
 
-    pub fn play_gem(&self) {
+    pub fn play_collect(&self) {
         play_sound(&self.gem, PlaySoundParams { looped: false, volume: 0.4 });
     }
 
@@ -51,28 +49,13 @@ impl AudioManager {
         play_sound(&self.game_over, PlaySoundParams { looped: false, volume: 0.5 });
     }
 
-    pub fn play_jump(&self) {
-        play_sound(&self.jump, PlaySoundParams { looped: false, volume: 0.3 });
+    pub fn play_death(&self) {
+        play_sound(&self.game_over, PlaySoundParams { looped: false, volume: 0.5 });
     }
-}
 
-// ... (existing generate functions)
-
-fn generate_jump_wav() -> Vec<u8> {
-    let sample_rate = 44100;
-    let duration = 0.1;
-    let num_samples = (sample_rate as f32 * duration) as usize;
-    let mut samples = Vec::with_capacity(num_samples);
-    for i in 0..num_samples {
-        let t = i as f32 / sample_rate as f32;
-        let freq = 400.0 + (t * 800.0);
-        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.3 } else { -0.3 };
-        let amplitude = 1.0 - t / duration;
-        samples.push((sample * amplitude * 16383.0) as i16);
+    pub fn play_music(&self) {
+        // Placeholder
     }
-    let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
-    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
-    wav
 }
 
 fn create_wav_header(data_size: u32, sample_rate: u32) -> Vec<u8> {

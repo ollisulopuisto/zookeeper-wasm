@@ -5,6 +5,7 @@ mod audio;
 use macroquad::prelude::*;
 use crate::game::*;
 use crate::audio::AudioManager;
+use crate::physics::RectCollider;
 
 #[derive(PartialEq, Clone)]
 enum AppState {
@@ -36,6 +37,8 @@ async fn main() {
     
     let audio = AudioManager::new().await;
     audio.play_music();
+
+    let mut was_jetting = false;
 
     loop {
         let sw = screen_width();
@@ -74,6 +77,7 @@ async fn main() {
                         Enemy::new(15, 10, EnemyType::SteelBall),
                         Enemy::new(10, 13, EnemyType::Spring),
                     ];
+                    was_jetting = false;
                 }
             }
             AppState::Playing => {
@@ -89,18 +93,25 @@ async fn main() {
                     player.entity.vy -= 0.5;
                     player.is_jetting = true;
                     player.fuel -= 0.1;
+                    if !was_jetting {
+                        audio.start_jet();
+                        was_jetting = true;
+                    }
                 } else {
                     player.is_jetting = false;
+                    if was_jetting {
+                        audio.stop_jet();
+                        was_jetting = false;
+                    }
                 }
 
                 if is_key_pressed(KeyCode::Z) && player.phase_cooldown <= 0.0 {
-                    // Try to phase bricks player is touching
                     let p_rect = player.entity.collider;
                     let mut phased_any = false;
                     for r in 0..ROWS {
                         for c in 0..COLS {
                             if level.grid[r][c] == TileType::NormalBrick {
-                                let b_rect = Rect::new(c as f32 * TILE_SIZE, r as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE);
+                                let b_rect = RectCollider::new(c as f32 * TILE_SIZE, r as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE);
                                 if p_rect.overlaps(&b_rect) {
                                     level.phased_bricks.push(PhasedBrick { col: c, row: r, timer: 0.0 });
                                     level.grid[r][c] = TileType::Empty;
@@ -120,12 +131,10 @@ async fn main() {
                 player.entity.vy += 0.2;
                 player.entity.collider.y += player.entity.vy;
 
-                // Collisions (Player)
-                handle_collisions(&mut player.entity, &level);
+                handle_collisions(&mut player.entity.collider, &level);
 
-                // Emeralds & Fuel
                 for col in &mut level.collectibles {
-                    if col.active && player.entity.collider.overlaps(&Rect::new(col.col as f32 * TILE_SIZE, col.row as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE)) {
+                    if col.active && player.entity.collider.overlaps(&RectCollider::new(col.col as f32 * TILE_SIZE, col.row as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE, TILE_SIZE)) {
                         col.active = false;
                         match col.ctype {
                             CollectibleType::Emerald => {
@@ -133,6 +142,7 @@ async fn main() {
                                 audio.play_collect();
                                 if level.emeralds_collected >= level.emeralds_total {
                                     level.exit_door.active = true;
+                                    audio.play_portal();
                                 }
                             }
                             CollectibleType::Fuel => {
@@ -143,7 +153,6 @@ async fn main() {
                     }
                 }
 
-                // Special tiles
                 let px = (player.entity.collider.x + player.entity.collider.w / 2.0) / TILE_SIZE;
                 let py = (player.entity.collider.y + player.entity.collider.h - 4.0 - HUD_HEIGHT) / TILE_SIZE;
                 let pr = py as usize;
@@ -157,20 +166,19 @@ async fn main() {
                     }
                 }
 
-                // Exit Door
                 if level.exit_door.active {
                     if level.exit_door.opening_progress < 1.0 {
                         level.exit_door.opening_progress += 0.01;
                     }
                     if level.exit_door.opening_progress >= 1.0 {
-                        let door_rect = Rect::new(level.exit_door.col as f32 * TILE_SIZE, level.exit_door.row as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE * 2.0, TILE_SIZE * 2.0);
+                        let door_rect = RectCollider::new(level.exit_door.col as f32 * TILE_SIZE, level.exit_door.row as f32 * TILE_SIZE + HUD_HEIGHT, TILE_SIZE * 2.0, TILE_SIZE * 2.0);
                         if player.entity.collider.overlaps(&door_rect) {
                             state = AppState::GameOver { win: true };
+                            audio.play_game_over();
                         }
                     }
                 }
 
-                // Phased bricks timer
                 level.phased_bricks.retain_mut(|pb| {
                     pb.timer += dt;
                     if pb.timer >= 3.0 {
@@ -181,17 +189,13 @@ async fn main() {
                     }
                 });
 
-                // Enemies
                 for enemy in &mut enemies {
                     enemy.entity.collider.x += if enemy.facing_right { 2.0 } else { -2.0 };
-                    
-                    // Bounce off walls
                     let ec = (enemy.entity.collider.x + if enemy.facing_right { 24.0 } else { 0.0 }) / TILE_SIZE;
                     let er = (enemy.entity.collider.y + 12.0 - HUD_HEIGHT) / TILE_SIZE;
-                    if ec < 0.0 || ec >= COLS as f32 || level.grid[er as usize][ec as usize] != TileType::Empty {
+                    if ec < 0.0 || ec >= COLS as f32 || (er as usize) >= ROWS || level.grid[er as usize][ec as usize] != TileType::Empty {
                         enemy.facing_right = !enemy.facing_right;
                     }
-
                     if enemy.entity.collider.overlaps(&player.entity.collider) {
                         player.dead = true;
                     }
@@ -200,20 +204,16 @@ async fn main() {
                 if player.dead {
                     state = AppState::GameOver { win: false };
                     audio.play_death();
+                    audio.stop_jet();
                 }
 
-                // Drawing
                 clear_background(BLACK);
                 level.draw();
                 player.draw();
-                for enemy in &enemies {
-                    enemy.draw();
-                }
+                for enemy in &enemies { enemy.draw(); }
 
-                // HUD - Now at the Top
                 draw_rectangle(0.0, 0.0, SCREEN_WIDTH, HUD_HEIGHT, Color::new(0.1, 0.1, 0.1, 1.0));
                 draw_line(0.0, HUD_HEIGHT, SCREEN_WIDTH, HUD_HEIGHT, 2.0, DARKGRAY);
-                
                 draw_text(&format!("FUEL: {}%", player.fuel.round()), 20.0, 40.0, 25.0, YELLOW);
                 draw_text(&format!("EMERALDS: {}/{}", level.emeralds_collected, level.emeralds_total), 250.0, 40.0, 25.0, GREEN);
                 draw_text(&format!("FPS: {}", get_fps()), SCREEN_WIDTH - 120.0, 40.0, 20.0, WHITE);
@@ -223,54 +223,37 @@ async fn main() {
                 let (msg, color) = if win { ("MISSION SUCCESS!", GREEN) } else { ("MISSION FAILED!", RED) };
                 let m_dims = measure_text(msg, None, 60, 1.0);
                 draw_text(msg, sw / 2.0 - m_dims.width / 2.0, sh / 2.0, 60.0, color);
-
                 let sub = "PRESS SPACE TO RETURN TO MENU";
                 let s_dims = measure_text(sub, None, 30, 1.0);
                 draw_text(sub, sw / 2.0 - s_dims.width / 2.0, sh / 2.0 + 50.0, 30.0, WHITE);
-
-                if is_key_pressed(KeyCode::Space) {
-                    state = AppState::Menu;
-                }
+                if is_key_pressed(KeyCode::Space) { state = AppState::Menu; }
             }
         }
-
         next_frame().await
     }
 }
 
 fn handle_collisions(entity: &mut physics::RectCollider, level: &Level) {
-    // Basic tile collision
     let left_col = (entity.x / TILE_SIZE) as usize;
     let right_col = ((entity.x + entity.w) / TILE_SIZE) as usize;
     let top_row = ((entity.y - HUD_HEIGHT) / TILE_SIZE) as usize;
     let bottom_row = ((entity.y + entity.h - HUD_HEIGHT) / TILE_SIZE) as usize;
-
-    // Floor
     if bottom_row < ROWS {
         for c in left_col..=right_col {
             if c < COLS && (level.grid[bottom_row][c] == TileType::NormalBrick || level.grid[bottom_row][c] == TileType::SolidBrick) {
                 let tile_y = bottom_row as f32 * TILE_SIZE + HUD_HEIGHT;
-                if entity.y + entity.h > tile_y {
-                    entity.y = tile_y - entity.h;
-                    // Reset vy is handled in physics but we don't have direct access to Entity here
-                }
+                if entity.y + entity.h > tile_y { entity.y = tile_y - entity.h; }
             }
         }
     }
-    
-    // Ceiling
     if top_row < ROWS {
         for c in left_col..=right_col {
             if c < COLS && (level.grid[top_row][c] == TileType::NormalBrick || level.grid[top_row][c] == TileType::SolidBrick) {
                 let tile_bottom = (top_row + 1) as f32 * TILE_SIZE + HUD_HEIGHT;
-                if entity.y < tile_bottom {
-                    entity.y = tile_bottom;
-                }
+                if entity.y < tile_bottom { entity.y = tile_bottom; }
             }
         }
     }
-
-    // Walls
     let row_mid = ((entity.y + entity.h / 2.0 - HUD_HEIGHT) / TILE_SIZE) as usize;
     if row_mid < ROWS {
         if left_col < COLS && (level.grid[row_mid][left_col] == TileType::NormalBrick || level.grid[row_mid][left_col] == TileType::SolidBrick) {

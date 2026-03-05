@@ -1,3 +1,5 @@
 .local_target/
 target/
 .cargo_home/
+.cargo_local/
+.rustup_local/

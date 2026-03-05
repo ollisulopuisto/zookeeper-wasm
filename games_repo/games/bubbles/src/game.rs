@@ -4,7 +4,6 @@ use crate::audio::AudioManager;
 use crate::gfx::SpriteManager;
 
 pub const VIRTUAL_WIDTH: f32 = 256.0;
-pub const VIRTUAL_HEIGHT: f32 = 400.0; // Max possible height (Play + HUD + Controls)
 pub const PLAY_HEIGHT: f32 = 224.0;
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
