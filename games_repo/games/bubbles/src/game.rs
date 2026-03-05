@@ -269,9 +269,6 @@ impl Game {
         let clamp_max = VIRTUAL_WIDTH - TILE_SIZE * 2.0 - field_offset;
 
         for i in 0..self.players.len() {
-            // ...
-
-        for i in 0..self.players.len() {
             if self.players[i].dead {
                 let p = &mut self.players[i];
                 p.respawn_timer -= 0.016;
