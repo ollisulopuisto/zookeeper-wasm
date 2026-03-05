@@ -179,11 +179,11 @@ fn generate_death_wav() -> Vec<u8> {
 
 fn generate_music_wav() -> Vec<u8> {
     let sample_rate = 44100;
-    let bpm = 128.0;
+    let bpm = 112.0; // Slightly slower, more "chill" arcade tempo
     let beat_duration = 60.0 / bpm;
     let sixteen_duration = beat_duration / 4.0;
     
-    let total_duration = 120.0; // 2 minutes of music
+    let total_duration = 120.0;
     let num_samples = (sample_rate as f32 * total_duration) as usize;
     let mut samples = Vec::with_capacity(num_samples);
 
@@ -191,10 +191,7 @@ fn generate_music_wav() -> Vec<u8> {
         if m == 0 { 0.0 } else { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) }
     };
 
-    // C Major scale notes (MIDI)
     let scale = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84];
-    
-    // Chord progression (Roots): C, F, G, Am
     let progression = [48, 53, 55, 45];
     
     let mut seed = 0xACE1u32;
@@ -215,62 +212,60 @@ fn generate_music_wav() -> Vec<u8> {
         let beat_idx = (t / beat_duration) as usize;
         let bar_idx = beat_idx / 4;
         
-        // Progression changes every 2 bars
         let chord_idx = (bar_idx / 2) % progression.composite_len(4);
         let root = progression[chord_idx];
 
-        // --- Polyrhythmic Lead (3/4 time = 12 steps) ---
-        // Seed based on current "phrase" to keep it consistent but changing
+        // --- Polyrhythmic Lead ---
         let melody_phrase = sixteen_idx / 12;
         let melody_step = sixteen_idx % 12;
         let mut m_rng = melody_phrase as u32;
         let mut m_rand = || { m_rng = m_rng.wrapping_mul(1103515245).wrapping_add(12345); m_rng };
         
-        // Generate a note for this step of the phrase
-        let mut note_idx = (m_rand() % 7) as usize + 7; // Middle of scale
+        let mut note_idx = (m_rand() % 7) as usize + 7;
         for _ in 0..melody_step { note_idx = (note_idx as i32 + (m_rand() % 3) as i32 - 1).clamp(0, 14) as usize; }
         
         let mut lead = 0.0;
-        if melody_step % 3 != 2 || (m_rand() % 4 > 0) { // Some rests/syncopation
+        // Lengthen notes: Only change note on eighths (every 2 sixteen steps) for a calmer feel
+        let is_note_start = melody_step % 2 == 0;
+        if is_note_start || (m_rand() % 8 == 0) {
             let freq = midi_to_freq(scale[note_idx] as i32);
             let phase = t * freq * 2.0 * std::f32::consts::PI;
             let tri = (2.0 / std::f32::consts::PI) * (phase.sin().asin());
-            lead = tri * 0.1;
-            lead *= 1.0 - (t_sixteen / sixteen_duration).powf(1.5);
+            lead = tri * 0.15;
+            // Gentler decay for longer sounding notes
+            let t_note = t % (sixteen_duration * 2.0);
+            lead *= 1.0 - (t_note / (sixteen_duration * 2.0)).powf(0.8);
         }
         
-        // --- Bass (4/4 time = 16 steps) ---
+        // --- Bass ---
         let bass_step = sixteen_idx % 16;
         let b_note = if bass_step % 4 == 0 { root } 
-                    else if bass_step % 4 == 2 && (next_rand() % 2 == 0) { root + 7 }
+                    else if bass_step % 8 == 6 { root + 7 }
                     else { root };
         let b_freq = midi_to_freq(b_note as i32);
-        let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.14 } else { -0.14 };
-        let bass_decay = 1.0 - (t_sixteen / sixteen_duration) * 0.8;
+        let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.12 } else { -0.12 };
+        let bass_decay = 1.0 - (t_sixteen / sixteen_duration) * 0.6; // Longer bass sustain
         let bass = bass * bass_decay;
 
         // --- Drums ---
         let mut drums = 0.0;
-        // Kick on 1 and 3
-        if beat_idx % 2 == 0 && t_beat < 0.12 {
-            let k_f_start = 90.0;
+        if beat_idx % 2 == 0 && t_beat < 0.15 {
+            let k_f_start = 80.0;
             let k_f_end = 30.0;
-            let k_d = 0.12;
+            let k_d = 0.15;
             let k_phase = 2.0 * std::f32::consts::PI * (k_f_start * t_beat + (k_f_end - k_f_start) * t_beat * t_beat / (2.0 * k_d));
-            drums += k_phase.sin() * 0.45 * (1.0 - t_beat / k_d);
+            drums += k_phase.sin() * 0.4 * (1.0 - t_beat / k_d);
         }
-        // Snare on 2 and 4
         if beat_idx % 2 == 1 && t_beat < 0.1 {
             noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
             let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            drums += n * (1.0 - t_beat / 0.1) * 0.22;
+            drums += n * (1.0 - t_beat / 0.1) * 0.18;
         }
-        // Hi-hat
-        let hh_speed = if bar_idx % 4 == 3 { sixteen_duration } else { sixteen_duration * 2.0 };
+        let hh_speed = sixteen_duration * 2.0; // Consistent eighth-note hi-hats
         if (t % hh_speed) < 0.02 {
             noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
             let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            drums += n * (1.0 - (t % hh_speed) / 0.02) * 0.08;
+            drums += n * (1.0 - (t % hh_speed) / 0.02) * 0.06;
         }
 
         let mixed = (lead + bass + drums) * 0.6;
