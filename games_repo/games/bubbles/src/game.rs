@@ -160,6 +160,9 @@ pub struct Game {
     pub current_level_idx: usize,
     pub transition_timer: f32,
     pub game_over: bool,
+    pub level_timer: f32,
+    pub furious: bool,
+    pub level_width: f32,
 }
 
 impl Game {
@@ -179,6 +182,9 @@ impl Game {
             current_level_idx: 0,
             transition_timer: 0.0,
             game_over: false,
+            level_timer: 60.0,
+            furious: false,
+            level_width: VIRTUAL_WIDTH,
         };
         game.spawn_enemies(0);
         game
@@ -224,11 +230,13 @@ impl Game {
     fn start_transition(&mut self, next_idx: usize) {
         self.current_level_idx = next_idx;
         self.next_level = Some(Level { tiles: get_level_layout(next_idx) });
-        self.transition_timer = 0.001; 
+        self.transition_timer = 0.001;
         self.bubbles.clear();
         self.items.clear();
+        self.level_timer = 60.0;
+        self.furious = false;
+        self.level_width = VIRTUAL_WIDTH;
     }
-
     pub fn update(&mut self, inputs: &[PlayerInput], audio: &AudioManager) {
         if self.game_over { return; }
 
@@ -246,6 +254,20 @@ impl Game {
             if self.transition_timer >= 2.0 { self.transition_timer = 0.0; }
             return;
         }
+
+        self.level_timer -= 0.016;
+        let mut field_offset = 0.0;
+        if self.level_timer <= 0.0 {
+            self.furious = true;
+            self.level_width -= 0.15; // Shrink field
+            if self.level_width < TILE_SIZE * 2.0 { self.level_width = TILE_SIZE * 2.0; }
+            field_offset = (VIRTUAL_WIDTH - self.level_width) / 2.0;
+        }
+        let clamp_min = TILE_SIZE + field_offset;
+        let clamp_max = VIRTUAL_WIDTH - TILE_SIZE * 2.0 - field_offset;
+
+        for i in 0..self.players.len() {
+            // ...
 
         for i in 0..self.players.len() {
             if self.players[i].dead {
@@ -313,10 +335,10 @@ impl Game {
             p.vel.y += GRAVITY;
             if p.vel.y > TERMINAL_VELOCITY { p.vel.y = TERMINAL_VELOCITY; }
             p.pos += p.vel;
-            p.pos.x = p.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+            p.pos.x = p.pos.x.clamp(clamp_min, clamp_max);
             
             handle_player_collision(p, &self.level);
-            p.pos.x = p.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+            p.pos.x = p.pos.x.clamp(clamp_min, clamp_max);
             
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
@@ -337,7 +359,7 @@ impl Game {
         let mut escaped_enemies = Vec::new();
         for b in self.bubbles.iter_mut() {
             b.pos += b.vel;
-            b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+            b.pos.x = b.pos.x.clamp(clamp_min, clamp_max);
             if b.range_timer > 0.0 {
                 b.range_timer -= 0.016;
                 if b.range_timer <= 0.0 { b.vel.x = 0.0; b.vel.y = -0.6; }
@@ -353,7 +375,7 @@ impl Game {
             if self.level.is_wall(tx_right, ty) { b.pos.x = (tx_right * 16 - 16) as f32; b.vel.x = -b.vel.x; }
 
             if b.trapped_kind.is_some() {
-                b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                b.pos.x = b.pos.x.clamp(clamp_min, clamp_max);
             }
 
             b.timer -= 0.016;
@@ -378,28 +400,29 @@ impl Game {
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
             e.anim_timer += 0.1;
+            let speed_mult = if self.furious { 2.0 } else { 1.0 };
             match e.kind {
                 EnemyType::Walker => {
-                    e.pos.x += e.vel.x;
-                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                    e.pos.x += e.vel.x * speed_mult;
+                    e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
                     e.vel.y += GRAVITY;
                     if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                     e.pos.y += e.vel.y;
                     handle_enemy_collision(e, &self.level);
-                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                    e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
                 }
                 EnemyType::Flyer => {
-                    e.pos += e.vel;
-                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
-                    if e.pos.x <= TILE_SIZE || e.pos.x >= VIRTUAL_WIDTH - TILE_SIZE * 2.0 { e.vel.x = -e.vel.x; }
+                    e.pos += e.vel * speed_mult;
+                    e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
+                    if e.pos.x <= clamp_min || e.pos.x >= clamp_max { e.vel.x = -e.vel.x; }
                     if e.pos.y < TILE_SIZE || e.pos.y > PLAY_HEIGHT - TILE_SIZE * 2.0 { e.vel.y = -e.vel.y; }
                     let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
                     let ty = ((e.pos.y + 8.0) / TILE_SIZE) as i32;
                     if self.level.is_wall(tx, ty) { e.vel = -e.vel; }
                 }
                 EnemyType::Bouncer => {
-                    e.pos.x += e.vel.x;
-                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                    e.pos.x += e.vel.x * speed_mult;
+                    e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
                     e.vel.y += GRAVITY;
                     if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                     e.pos.y += e.vel.y;
@@ -411,7 +434,7 @@ impl Game {
                             e.jump_cooldown = 1.0 + (next_rand(100) as f32 / 50.0);
                         }
                     }
-                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                    e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
                 }
             }
             
@@ -610,6 +633,19 @@ impl Game {
             draw_text(&format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives), vx + 170.0 * scale, vy + 12.0 * scale, font_size as f32, BLUE);
         }
         draw_text(&format!("LEVEL {:02}", self.current_level_idx + 1), vx + 105.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
+
+        // Draw Timer
+        let timer_color = if self.level_timer < 10.0 { RED } else { WHITE };
+        let timer_text = if self.level_timer > 0.0 { format!("TIME: {:.0}", self.level_timer) } else { "FURIOUS!".to_string() };
+        draw_text(&timer_text, vx + 80.0 * scale, vy + 24.0 * scale, font_size as f32, timer_color);
+
+        // Draw shrinking borders
+        if self.furious {
+            let field_offset = (VIRTUAL_WIDTH - self.level_width) / 2.0;
+            let danger_color = Color::new(1.0, 0.0, 0.0, 0.3 + (get_time() * 5.0).sin() as f32 * 0.1);
+            draw_rectangle(vx, game_vy, field_offset * scale, PLAY_HEIGHT * scale, danger_color);
+            draw_rectangle(vx + (VIRTUAL_WIDTH - field_offset) * scale, game_vy, field_offset * scale, PLAY_HEIGHT * scale, danger_color);
+        }
 
         // Draw Touch Controls
         input.draw_controls(vx, vy, scale, VIRTUAL_WIDTH, virtual_height);
