@@ -24,21 +24,18 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxi-dev libgl1-mesa-dev libxcursor-dev libxinerama-dev libxrandr-dev
+          sudo apt-get install -y libasound2-dev libx11-dev libxi-dev libgl1-mesa-dev libxcursor-dev libxinerama-dev libxrandr-dev lld
 
       - name: Run Tests
-        run: cargo test
+        run: cargo test --workspace --all-targets --all-features
 
-      - name: Build WASM
+      - name: Build WASM Games
         run: |
           cd games_repo && make build
           
