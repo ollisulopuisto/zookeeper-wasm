@@ -131,10 +131,11 @@ pub struct Bubble {
 
 pub struct Item {
     pub pos: Vec2,
-    pub _vel: Vec2,
+    pub vel: Vec2,
     pub upgrade: Option<UpgradeType>,
     pub score_val: u32,
     pub timer: f32,
+    pub grounded: bool,
 }
 
 pub struct Level {
@@ -462,7 +463,7 @@ impl Game {
                             3 => Some(UpgradeType::DoubleSize),
                             _ => None,
                         };
-                        self.items.push(Item { pos: b.pos, _vel: vec2(0.0, 0.0), upgrade: ut, score_val: 500, timer: 10.0 });
+                        self.items.push(Item { pos: b.pos, vel: vec2(0.0, 1.0), upgrade: ut, score_val: 500, timer: 10.0, grounded: false });
                         b.trapped_kind = None; 
                     }
                 }
@@ -498,7 +499,22 @@ impl Game {
 
         self.enemies.retain(|e| !e.dead);
         self.items.retain(|it| it.timer > 0.0);
-        for it in self.items.iter_mut() { it.timer -= 0.016; }
+        for it in self.items.iter_mut() { 
+            it.timer -= 0.016; 
+            if !it.grounded {
+                it.vel.y += GRAVITY;
+                if it.vel.y > TERMINAL_VELOCITY { it.vel.y = TERMINAL_VELOCITY; }
+            }
+            it.pos += it.vel;
+            handle_item_collision(it, &self.level);
+            
+            // Item wrapping
+            let tx = ((it.pos.x + 8.0) / TILE_SIZE) as i32;
+            if it.pos.y > PLAY_HEIGHT {
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { it.pos.y = -16.0; }
+                else { it.pos.y = PLAY_HEIGHT - 32.0; it.vel.y = 0.0; it.grounded = true; }
+            }
+        }
 
         if self.enemies.is_empty() && !self.game_over && self.transition_timer == 0.0 && self.bubbles.iter().all(|b| b.trapped_kind.is_none()) {
             self.start_transition(self.current_level_idx + 1);
@@ -633,6 +649,21 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
     }
     if level.is_wall(right_tile_x, ty) {
         if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
+    }
+}
+
+fn handle_item_collision(it: &mut Item, level: &Level) {
+    let ground_tile_x = (it.pos.x + 8.0) / TILE_SIZE;
+    let ground_tile_y = (it.pos.y + 16.0) / TILE_SIZE;
+    
+    if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
+        if it.vel.y >= 0.0 && it.pos.y + 16.0 - it.vel.y <= (ground_tile_y as i32 * 16) as f32 {
+            it.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
+            it.vel.y = 0.0;
+            it.grounded = true;
+        }
+    } else {
+        it.grounded = false;
     }
 }
 
