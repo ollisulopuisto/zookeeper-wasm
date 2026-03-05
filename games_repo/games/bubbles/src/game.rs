@@ -319,11 +319,16 @@ impl Game {
             
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = -15.0; }
-                else { p.pos.y = PLAY_HEIGHT - 16.0; p.vel.y = 0.0; p.grounded = true; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
+                    p.pos.y = -16.0; 
+                    p.vel.y *= 0.5; // Damp fall after wrap
+                }
+                else { p.pos.y = PLAY_HEIGHT - 32.0; p.vel.y = 0.0; p.grounded = true; }
             }
             if p.pos.y < -16.0 {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { p.pos.y = PLAY_HEIGHT - 1.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
+                    p.pos.y = PLAY_HEIGHT; 
+                }
                 else { p.pos.y = 0.0; p.vel.y = 0.0; }
             }
         }
@@ -411,11 +416,16 @@ impl Game {
             
             let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
             if e.pos.y > PLAY_HEIGHT {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = -15.0; }
-                else { e.pos.y = PLAY_HEIGHT - 16.0; e.vel.y = 0.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
+                    e.pos.y = -16.0; 
+                    e.vel.y *= 0.5;
+                }
+                else { e.pos.y = PLAY_HEIGHT - 32.0; e.vel.y = 0.0; }
             }
             if e.pos.y < -16.0 {
-                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { e.pos.y = PLAY_HEIGHT - 1.0; }
+                if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) { 
+                    e.pos.y = PLAY_HEIGHT; 
+                }
                 else { e.pos.y = 0.0; e.vel.y = 0.0; }
             }
         }
@@ -605,8 +615,8 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
     }
 
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
-        // Only land if falling and strictly above the tile
-        if p.vel.y >= 0.0 && p.pos.y + 12.0 < (ground_tile_y as i32 * 16) as f32 {
+        // Only land if falling and bottom of sprite was above the tile in the previous frame
+        if p.vel.y >= 0.0 && p.pos.y + 16.0 - p.vel.y <= (ground_tile_y as i32 * 16) as f32 {
             p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
             p.vel.y = 0.0;
             p.grounded = true;
@@ -640,7 +650,7 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     }
 
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
-        if e.vel.y >= 0.0 && e.pos.y + 12.0 < (ground_tile_y as i32 * 16) as f32 {
+        if e.vel.y >= 0.0 && e.pos.y + 16.0 - e.vel.y <= (ground_tile_y as i32 * 16) as f32 {
             e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; 
             e.vel.y = 0.0; 
             grounded = true;
