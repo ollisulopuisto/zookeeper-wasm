@@ -747,8 +747,8 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
             grounded = true;
         }
     }
-    let next_x = e.pos.x + if e.vel.x > 0.0 { 16.0 } else { 0.0 };
-    let tx = (next_x / 16.0) as i32;
+    // Wall bounce: check leading edge
+    let tx = if e.vel.x > 0.0 { ((e.pos.x + 15.0) / 16.0) as i32 } else { (e.pos.x / 16.0) as i32 - 1 };
     if level.is_wall(tx, (e.pos.y + 8.0) as i32 / 16) {
         e.vel.x = -e.vel.x;
     }
