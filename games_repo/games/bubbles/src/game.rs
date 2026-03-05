@@ -143,7 +143,8 @@ pub struct Level {
 
 impl Level {
     pub fn is_wall(&self, x: i32, y: i32) -> bool {
-        if x < 0 || x >= 16 || y < 0 || y >= 14 { return false; }
+        if x < 0 || x >= 16 { return true; }
+        if y < 0 || y >= 14 { return false; }
         self.tiles[(y * 16 + x) as usize] == 1
     }
 }
@@ -311,8 +312,10 @@ impl Game {
             p.vel.y += GRAVITY;
             if p.vel.y > TERMINAL_VELOCITY { p.vel.y = TERMINAL_VELOCITY; }
             p.pos += p.vel;
+            p.pos.x = p.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
             
             handle_player_collision(p, &self.level);
+            p.pos.x = p.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
             
             let tx = ((p.pos.x + 8.0) / TILE_SIZE) as i32;
             if p.pos.y > PLAY_HEIGHT {
@@ -328,6 +331,7 @@ impl Game {
         let mut escaped_enemies = Vec::new();
         for b in self.bubbles.iter_mut() {
             b.pos += b.vel;
+            b.pos.x = b.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
             if b.range_timer > 0.0 {
                 b.range_timer -= 0.016;
                 if b.range_timer <= 0.0 { b.vel.x = 0.0; b.vel.y = -0.6; }
@@ -371,14 +375,17 @@ impl Game {
             match e.kind {
                 EnemyType::Walker => {
                     e.pos.x += e.vel.x;
+                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
                     e.vel.y += GRAVITY;
                     if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                     e.pos.y += e.vel.y;
                     handle_enemy_collision(e, &self.level);
+                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
                 }
                 EnemyType::Flyer => {
                     e.pos += e.vel;
-                    if e.pos.x < TILE_SIZE || e.pos.x > VIRTUAL_WIDTH - TILE_SIZE * 2.0 { e.vel.x = -e.vel.x; }
+                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
+                    if e.pos.x <= TILE_SIZE || e.pos.x >= VIRTUAL_WIDTH - TILE_SIZE * 2.0 { e.vel.x = -e.vel.x; }
                     if e.pos.y < TILE_SIZE || e.pos.y > PLAY_HEIGHT - TILE_SIZE * 2.0 { e.vel.y = -e.vel.y; }
                     let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
                     let ty = ((e.pos.y + 8.0) / TILE_SIZE) as i32;
@@ -386,6 +393,7 @@ impl Game {
                 }
                 EnemyType::Bouncer => {
                     e.pos.x += e.vel.x;
+                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
                     e.vel.y += GRAVITY;
                     if e.vel.y > TERMINAL_VELOCITY { e.vel.y = TERMINAL_VELOCITY; }
                     e.pos.y += e.vel.y;
@@ -397,6 +405,7 @@ impl Game {
                             e.jump_cooldown = 1.0 + (next_rand(100) as f32 / 50.0);
                         }
                     }
+                    e.pos.x = e.pos.x.clamp(TILE_SIZE, VIRTUAL_WIDTH - TILE_SIZE * 2.0);
                 }
             }
             
