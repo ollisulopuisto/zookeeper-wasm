@@ -24,6 +24,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
