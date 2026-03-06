@@ -68,6 +68,7 @@ async fn main() {
             }
             AppState::GameOver => {
                 if input.any_key {
+                    while let Some(_) = get_char_pressed() {} // Clear garbage
                     state = AppState::EnteringName { name: String::new() };
                 }
             }

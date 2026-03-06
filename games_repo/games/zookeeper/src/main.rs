@@ -25,6 +25,8 @@ struct LeaderboardEntry {
     name: String,
     score: u32,
     combo: u32,
+    #[serde(default)]
+    snail: bool,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -76,6 +78,7 @@ enum GameState {
         score: u32,
         combo: u32,
         name: String,
+        snail: bool,
     },
     /// The board is being shuffled because no moves are left.
     Shuffling {
@@ -112,6 +115,7 @@ struct Board {
     level: u32,
     level_tiles_cleared: u32,
     level_goal: u32,
+    snail_used: bool,
 }
 
 /// Rules for board generation to allow future tweaks.
@@ -144,6 +148,7 @@ impl Board {
             level: 1,
             level_tiles_cleared: 0,
             level_goal: 50,
+            snail_used: false,
         };
         board.fill_initial(GenerationRules::default());
         board
@@ -153,12 +158,12 @@ impl Board {
         let mut buffer = [0u8; 4096];
         let len = unsafe { js_load_leaderboard(buffer.as_mut_ptr(), buffer.len() as u32) };
         if len == 0 {
-            return vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES];
+            return vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES];
         }
         
         let json_str = String::from_utf8_lossy(&buffer[..len as usize]);
         serde_json::from_str(&json_str).unwrap_or_else(|_| {
-            vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0 }; MAX_HIGH_SCORES]
+            vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES]
         })
     }
 
@@ -166,12 +171,12 @@ impl Board {
         self.high_scores.iter().any(|e| self.score > e.score) || self.high_scores.len() < MAX_HIGH_SCORES
     }
 
-    fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32) {
+    fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32, snail: bool) {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
         self.new_record = self.high_scores.first().map_or(true, |best| score > best.score);
         
         // Add locally first
-        self.high_scores.push(LeaderboardEntry { name, score, combo });
+        self.high_scores.push(LeaderboardEntry { name, score, combo, snail });
         self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
         self.high_scores.truncate(MAX_HIGH_SCORES);
 
@@ -373,7 +378,7 @@ async fn main() {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string() };
+                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string(), snail: board.snail_used };
                 } else {
                     board.state = GameState::GameOver;
                 }
@@ -416,7 +421,10 @@ async fn main() {
 
         if is_mouse_button_pressed(MouseButton::Left) {
             if over_mute { settings.muted = !settings.muted; }
-            if over_snail { settings.slow_mode = !settings.slow_mode; }
+            if over_snail { 
+                settings.slow_mode = !settings.slow_mode;
+                if settings.slow_mode { board.snail_used = true; }
+            }
         }
 
         // Logic
@@ -478,7 +486,8 @@ async fn main() {
                         let (mx, my) = matches[i];
                         board.grid[my][mx] = None;
                     }
-                    let points = (match_count as u32 * 10) * board.combo_count;
+                    let mut points = (match_count as u32 * 10) * board.combo_count;
+                    if settings.slow_mode { points /= 2; }
                     board.score += points;
                     board.level_tiles_cleared += match_count as u32;
                     board.time_left = (board.time_left + (match_count as f32 * 0.5)).min(60.0);
@@ -669,7 +678,7 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: 0, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, ref name } => {
+            GameState::EnteringName { score, combo, ref name, snail } => {
                 let mut submitted = false;
                 let mut current_name = name.clone();
                 while let Some(c) = get_char_pressed() {
@@ -706,19 +715,19 @@ async fn main() {
                 }
 
                 if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-                    board.add_to_leaderboard(current_name.clone(), score, combo);
+                    board.add_to_leaderboard(current_name.clone(), score, combo, snail);
                     board.state = GameState::GameOver;
                     submitted = true;
                 }
                 if !submitted && is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
-                        board.add_to_leaderboard(current_name.clone(), score, combo);
+                        board.add_to_leaderboard(current_name.clone(), score, combo, snail);
                         board.state = GameState::GameOver;
                         submitted = true;
                     }
                 }
                 if !submitted {
-                    board.state = GameState::EnteringName { score, combo, name: current_name };
+                    board.state = GameState::EnteringName { score, combo, name: current_name, snail };
                 }
             }
             GameState::GameOver => {
@@ -731,79 +740,81 @@ async fn main() {
         }
 
         // Draw
-        if let GameState::Shuffling { ref mapping, timer, .. } = board.state {
-            let t = (timer / 1.0).min(1.0);
-            let ease_t = t * t * (3.0 - 2.0 * t);
-            for &(ox, oy, nx, ny, t_idx) in mapping {
-                let start_x = offset_x + ox as f32 * cell_size;
-                let start_y = offset_y + oy as f32 * cell_size;
-                let end_x = offset_x + nx as f32 * cell_size;
-                let end_y = offset_y + ny as f32 * cell_size;
+        if !matches!(board.state, GameState::Paused { .. }) {
+            if let GameState::Shuffling { ref mapping, timer, .. } = board.state {
+                let t = (timer / 1.0).min(1.0);
+                let ease_t = t * t * (3.0 - 2.0 * t);
+                for &(ox, oy, nx, ny, t_idx) in mapping {
+                    let start_x = offset_x + ox as f32 * cell_size;
+                    let start_y = offset_y + oy as f32 * cell_size;
+                    let end_x = offset_x + nx as f32 * cell_size;
+                    let end_y = offset_y + ny as f32 * cell_size;
 
-                let draw_x = start_x + (end_x - start_x) * ease_t;
-                let draw_y = start_y + (end_y - start_y) * ease_t;
+                    let draw_x = start_x + (end_x - start_x) * ease_t;
+                    let draw_y = start_y + (end_y - start_y) * ease_t;
 
-                let actual_cell = cell_size;
-                let pad = cell_size * 0.1;
-                draw_texture_ex(
-                    &textures[t_idx as usize],
-                    draw_x + pad,
-                    draw_y + pad,
-                    WHITE,
-                    DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
-                );
-            }
-        } else {
-            for y in 0..ROWS {
-                for x in 0..COLS {
-                    let mut draw_x = offset_x + x as f32 * cell_size;
-                    let mut draw_y = offset_y + y as f32 * cell_size;
-                    let mut alpha = 1.0;
-                    let mut scale = 1.0;
+                    let actual_cell = cell_size;
+                    let pad = cell_size * 0.1;
+                    draw_texture_ex(
+                        &textures[t_idx as usize],
+                        draw_x + pad,
+                        draw_y + pad,
+                        WHITE,
+                        DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
+                    );
+                }
+            } else {
+                for y in 0..ROWS {
+                    for x in 0..COLS {
+                        let mut draw_x = offset_x + x as f32 * cell_size;
+                        let mut draw_y = offset_y + y as f32 * cell_size;
+                        let mut alpha = 1.0;
+                        let mut scale = 1.0;
 
-                    match board.state {
-                        GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
-                            let t = timer / ANIM_DURATION;
-                            if x == x1 && y == y1 {
-                                draw_x += (x2 as f32 - x1 as f32) * cell_size * t;
-                                draw_y += (y2 as f32 - y1 as f32) * cell_size * t;
-                            } else if x == x2 && y == y2 {
-                                draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
-                                draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
+                        match board.state {
+                            GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
+                                let t = timer / ANIM_DURATION;
+                                if x == x1 && y == y1 {
+                                    draw_x += (x2 as f32 - x1 as f32) * cell_size * t;
+                                    draw_y += (y2 as f32 - y1 as f32) * cell_size * t;
+                                } else if x == x2 && y == y2 {
+                                    draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
+                                    draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
+                                }
                             }
-                        }
-                        GameState::Clearing { timer, ref matches, match_count } => {
-                            for i in 0..match_count {
-                                let (mx, my) = matches[i];
-                                if x == mx && y == my {
-                                    let t = timer / ANIM_DURATION;
-                                    scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
-                                    alpha = 1.0 - t;
-                                    if board.combo_count > 1 {
-                                        draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
-                                        draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                            GameState::Clearing { timer, ref matches, match_count } => {
+                                for i in 0..match_count {
+                                    let (mx, my) = matches[i];
+                                    if x == mx && y == my {
+                                        let t = timer / ANIM_DURATION;
+                                        scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
+                                        alpha = 1.0 - t;
+                                        if board.combo_count > 1 {
+                                            draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                            draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        GameState::Reshuffling { next_row, timer, .. } => {
-                            if y == next_row.saturating_sub(1) {
-                                let t = (timer / 0.05).min(1.0);
-                                draw_y -= (1.0 - t) * cell_size;
+                            GameState::Reshuffling { next_row, timer, .. } => {
+                                if y == next_row.saturating_sub(1) {
+                                    let t = (timer / 0.05).min(1.0);
+                                    draw_y -= (1.0 - t) * cell_size;
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                    if let Some(t_idx) = board.grid[y][x] {
-                        let actual_cell = cell_size * scale;
-                        let pad = cell_size * 0.1;
-                        draw_texture_ex(
-                            &textures[t_idx as usize],
-                            draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
-                            draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
-                            Color::new(1.0, 1.0, 1.0, alpha),
-                            DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
-                        );
+                        if let Some(t_idx) = board.grid[y][x] {
+                            let actual_cell = cell_size * scale;
+                            let pad = cell_size * 0.1;
+                            draw_texture_ex(
+                                &textures[t_idx as usize],
+                                draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
+                                draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
+                                Color::new(1.0, 1.0, 1.0, alpha),
+                                DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
+                            );
+                        }
                     }
                 }
             }
@@ -829,6 +840,12 @@ async fn main() {
         draw_text("TIME", offset_x, time_bar_y - 5.0, font_size * 0.4, time_color);
 
         draw_text(&format!("SCORE: {}", board.score), offset_x, line2_y, font_size * 0.8, WHITE);
+        if settings.slow_mode {
+            let score_text = format!("SCORE: {}", board.score);
+            let dims = measure_text(&score_text, None, (font_size * 0.8) as u16, 1.0);
+            let snail_s = font_size * 0.6;
+            draw_texture_ex(&tex_snail, offset_x + dims.width + 10.0, line2_y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
+        }
         draw_text(&format!("MAX COMBO: X{}", board.max_combo), offset_x, line1_y, font_size * 0.6, YELLOW);
 
         if let Some((sx, sy)) = board.selected {
@@ -840,7 +857,7 @@ async fn main() {
         draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
         if let GameState::Paused { .. } = board.state {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 1.0));
             draw_text_centered("PAUSED", sh / 2.0, font_size * 2.0, WHITE);
         }
 
@@ -851,7 +868,13 @@ async fn main() {
             draw_text_centered("LEADERBOARD", sh * 0.55, font_size * 0.8, YELLOW);
             for (i, entry) in board.high_scores.iter().enumerate() {
                 let y = sh * 0.62 + (i as f32 * font_size * 0.8);
-                draw_text_centered(&format!("{}. {} - {}", i+1, entry.name, entry.score), y, font_size * 0.6, WHITE);
+                let text = format!("{}. {} - {}", i+1, entry.name, entry.score);
+                draw_text_centered(&text, y, font_size * 0.6, WHITE);
+                if entry.snail {
+                    let dims = measure_text(&text, None, (font_size * 0.6) as u16, 1.0);
+                    let snail_s = font_size * 0.4;
+                    draw_texture_ex(&tex_snail, sw / 2.0 + dims.width / 2.0 + 5.0, y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
+                }
             }
             if (get_time() * 2.0) as i32 % 2 == 0 {
                 draw_text_centered("TAP TO RESTART", sh * 0.9, font_size * 0.7, YELLOW);
@@ -870,10 +893,11 @@ async fn main() {
             draw_text_centered("GET READY...", sh / 2.0 + font_size, font_size * 0.6, WHITE);
         }
 
-        if let GameState::EnteringName { score, combo, name } = &board.state {
+        if let GameState::EnteringName { score, combo, name, snail } = &board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
-            let stats = format!("SCORE: {}  COMBO: X{}", score, combo);
+            let mut stats = format!("SCORE: {}  COMBO: X{}", score, combo);
+            if *snail { stats.push_str(" (SNAIL)"); }
             draw_text_centered(&stats, sh * 0.25, font_size * 0.6, WHITE);
             draw_text_centered("Type your name", sh * 0.35, font_size * 0.6, GRAY);
             let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
