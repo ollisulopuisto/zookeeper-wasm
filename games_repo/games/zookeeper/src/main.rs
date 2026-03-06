@@ -77,14 +77,21 @@ enum GameState {
         combo: u32,
         name: String,
     },
-    /// The board is being refilled after a shuffle or level up.
+    /// The board is being shuffled because no moves are left.
+    Shuffling {
+        target_grid: [[u8; COLS]; ROWS],
+        /// (from_x, from_y, to_x, to_y, tile_type)
+        mapping: [(usize, usize, usize, usize, u8); COLS * ROWS],
+        timer: f32,
+    },
+    /// Celebration for clearing a level.
+    LevelUp { timer: f32 },
+    /// The board is being refilled after a level up.
     Reshuffling {
         target_grid: [[u8; COLS]; ROWS],
         next_row: usize,
         timer: f32,
     },
-    /// Celebration for clearing a level.
-    LevelUp { timer: f32 },
     /// The timer has reached zero.
     GameOver,
     /// The game is manually paused.
@@ -360,7 +367,7 @@ async fn main() {
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } | GameState::Shuffling { .. } | GameState::Reshuffling { .. });
         
         if is_playing {
             board.time_left -= dt;
@@ -535,29 +542,100 @@ async fn main() {
             GameState::NoMoreMoves { mut timer } => {
                 timer += dt;
                 if timer >= 1.5 {
+                    let mut tiles = Vec::new();
+                    for y in 0..ROWS {
+                        for x in 0..COLS {
+                            if let Some(t) = board.grid[y][x] {
+                                tiles.push((x, y, t));
+                            }
+                        }
+                    }
+
                     let mut target = [[0u8; COLS]; ROWS];
+                    let mut mapping = [(0, 0, 0, 0, 0u8); COLS * ROWS];
                     let mut attempts = 0;
-                    loop {
+                    let mut found = false;
+
+                    while attempts < 1000 {
+                        // Fisher-Yates Shuffle
+                        for i in (1..tiles.len()).rev() {
+                            let j = (qrand::rand() as usize) % (i + 1);
+                            tiles.swap(i, j);
+                        }
+
+                        let mut temp_grid = [[None; COLS]; ROWS];
+                        let mut possible = true;
+                        for i in 0..tiles.len() {
+                            let x = i % COLS;
+                            let y = i / COLS;
+                            let (_, _, t) = tiles[i];
+                            temp_grid[y][x] = Some(t);
+                            if has_match_static(&temp_grid, x, y) {
+                                possible = false;
+                                break;
+                            }
+                        }
+
+                        if possible {
+                            for y in 0..ROWS {
+                                for x in 0..COLS {
+                                    target[y][x] = temp_grid[y][x].unwrap();
+                                }
+                            }
+                            if count_available_moves_static(&target) >= 1 {
+                                for i in 0..tiles.len() {
+                                    let (old_x, old_y, t) = tiles[i];
+                                    let new_x = i % COLS;
+                                    let new_y = i / COLS;
+                                    mapping[i] = (old_x, old_y, new_x, new_y, t);
+                                }
+                                found = true;
+                                break;
+                            }
+                        }
+                        attempts += 1;
+                    }
+
+                    if !found {
+                        // Absolute fallback: just generate new ones if we somehow can't shuffle existing ones
                         for y in 0..ROWS {
                             for x in 0..COLS {
                                 loop {
-                                    let tile = (qrand::rand() % TILE_TYPES as u32) as u8;
-                                    target[y][x] = tile;
-                                    let mut temp_board = [[None; COLS]; ROWS];
-                                    for ty in 0..ROWS { for tx in 0..COLS { temp_board[ty][tx] = Some(target[ty][tx]); } }
-                                    if !has_match_static(&temp_board, x, y) { break; }
+                                    let t = (qrand::rand() % TILE_TYPES as u32) as u8;
+                                    target[y][x] = t;
+                                    let mut temp = [[None; COLS]; ROWS];
+                                    for ty in 0..ROWS { for tx in 0..COLS { temp[ty][tx] = if ty < y || (ty == y && tx <= x) { Some(target[ty][tx]) } else { None }; } }
+                                    if !has_match_static(&temp, x, y) { break; }
                                 }
                             }
                         }
-                        if count_available_moves_static(&target) >= 3 { break; }
-                        attempts += 1; if attempts > 100 { break; }
+                        // Create a dummy mapping from top of screen
+                        for y in 0..ROWS {
+                            for x in 0..COLS {
+                                mapping[y * COLS + x] = (x, 0, x, y, target[y][x]);
+                            }
+                        }
                     }
+
                     board.grid = [[None; COLS]; ROWS];
-                    board.state = GameState::Reshuffling { target_grid: target, next_row: 0, timer: 0.0 };
+                    board.state = GameState::Shuffling { target_grid: target, mapping, timer: 0.0 };
                     if !settings.muted {
                         if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
                     }
                 } else { board.state = GameState::NoMoreMoves { timer }; }
+            }
+            GameState::Shuffling { target_grid, mapping, mut timer } => {
+                timer += dt;
+                if timer >= 1.0 {
+                    for y in 0..ROWS {
+                        for x in 0..COLS {
+                            board.grid[y][x] = Some(target_grid[y][x]);
+                        }
+                    }
+                    board.state = GameState::Idle;
+                } else {
+                    board.state = GameState::Shuffling { target_grid, mapping, timer };
+                }
             }
             GameState::Reshuffling { target_grid, next_row, mut timer } => {
                 timer += dt;
@@ -653,56 +731,80 @@ async fn main() {
         }
 
         // Draw
-        for y in 0..ROWS {
-            for x in 0..COLS {
-                let mut draw_x = offset_x + x as f32 * cell_size;
-                let mut draw_y = offset_y + y as f32 * cell_size;
-                let mut alpha = 1.0;
-                let mut scale = 1.0;
+        if let GameState::Shuffling { ref mapping, timer, .. } = board.state {
+            let t = (timer / 1.0).min(1.0);
+            let ease_t = t * t * (3.0 - 2.0 * t);
+            for &(ox, oy, nx, ny, t_idx) in mapping {
+                let start_x = offset_x + ox as f32 * cell_size;
+                let start_y = offset_y + oy as f32 * cell_size;
+                let end_x = offset_x + nx as f32 * cell_size;
+                let end_y = offset_y + ny as f32 * cell_size;
 
-                match board.state {
-                    GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
-                        let t = timer / ANIM_DURATION;
-                        if x == x1 && y == y1 {
-                            draw_x += (x2 as f32 - x1 as f32) * cell_size * t;
-                            draw_y += (y2 as f32 - y1 as f32) * cell_size * t;
-                        } else if x == x2 && y == y2 {
-                            draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
-                            draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
+                let draw_x = start_x + (end_x - start_x) * ease_t;
+                let draw_y = start_y + (end_y - start_y) * ease_t;
+
+                let actual_cell = cell_size;
+                let pad = cell_size * 0.1;
+                draw_texture_ex(
+                    &textures[t_idx as usize],
+                    draw_x + pad,
+                    draw_y + pad,
+                    WHITE,
+                    DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
+                );
+            }
+        } else {
+            for y in 0..ROWS {
+                for x in 0..COLS {
+                    let mut draw_x = offset_x + x as f32 * cell_size;
+                    let mut draw_y = offset_y + y as f32 * cell_size;
+                    let mut alpha = 1.0;
+                    let mut scale = 1.0;
+
+                    match board.state {
+                        GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
+                            let t = timer / ANIM_DURATION;
+                            if x == x1 && y == y1 {
+                                draw_x += (x2 as f32 - x1 as f32) * cell_size * t;
+                                draw_y += (y2 as f32 - y1 as f32) * cell_size * t;
+                            } else if x == x2 && y == y2 {
+                                draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
+                                draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
+                            }
                         }
-                    }
-                    GameState::Clearing { timer, ref matches, match_count } => {
-                        for i in 0..match_count {
-                            let (mx, my) = matches[i];
-                            if x == mx && y == my {
-                                let t = timer / ANIM_DURATION;
-                                scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
-                                alpha = 1.0 - t;
-                                if board.combo_count > 1 {
-                                    draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
-                                    draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                        GameState::Clearing { timer, ref matches, match_count } => {
+                            for i in 0..match_count {
+                                let (mx, my) = matches[i];
+                                if x == mx && y == my {
+                                    let t = timer / ANIM_DURATION;
+                                    scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
+                                    alpha = 1.0 - t;
+                                    if board.combo_count > 1 {
+                                        draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                        draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
+                                    }
                                 }
                             }
                         }
-                    }
-                    GameState::Reshuffling { next_row, timer, .. } => {
-                        if y == next_row.saturating_sub(1) {
-                            let t = (timer / 0.05).min(1.0);
-                            draw_y -= (1.0 - t) * cell_size;
+                        GameState::Reshuffling { next_row, timer, .. } => {
+                            if y == next_row.saturating_sub(1) {
+                                let t = (timer / 0.05).min(1.0);
+                                draw_y -= (1.0 - t) * cell_size;
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
-                }
-                if let Some(t_idx) = board.grid[y][x] {
-                    let actual_cell = cell_size * scale;
-                    let pad = cell_size * 0.1;
-                    draw_texture_ex(
-                        &textures[t_idx as usize],
-                        draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
-                        draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
-                        Color::new(1.0, 1.0, 1.0, alpha),
-                        DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
-                    );
+                    if let Some(t_idx) = board.grid[y][x] {
+                        let actual_cell = cell_size * scale;
+                        let pad = cell_size * 0.1;
+                        draw_texture_ex(
+                            &textures[t_idx as usize],
+                            draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
+                            draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
+                            Color::new(1.0, 1.0, 1.0, alpha),
+                            DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
+                        );
+                    }
                 }
             }
         }
