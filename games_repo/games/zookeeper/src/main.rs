@@ -911,6 +911,22 @@ async fn main() {
         let line2_y = line1_y - font_size * 0.8;
         let time_bar_y = line2_y - font_size * 0.8 - 15.0;
 
+        // Level progress bar (fills up as player clears tiles — optimistic green → gold)
+        let progress_bar_y = time_bar_y - bar_h - font_size * 0.45 - 10.0;
+        let level_progress = (board.level_tiles_cleared as f32 / board.level_goal as f32).clamp(0.0, 1.0);
+        let progress_color = if level_progress >= 0.9 {
+            let pulse = ((get_time() * 5.0).sin() as f32) * 0.5 + 0.5;
+            Color::new(0.9 + pulse * 0.1, 0.9, pulse * 0.2, 1.0)
+        } else {
+            Color::new(0.1 + level_progress * 0.8, 0.9, 0.0, 1.0)
+        };
+        let progress_count = format!("{}/{}", board.level_tiles_cleared, board.level_goal);
+        let count_dims = measure_text(&progress_count, None, (font_size * 0.4) as u16, 1.0);
+        draw_text(&format!("LEVEL {}", board.level), offset_x, progress_bar_y - 5.0, font_size * 0.4, progress_color);
+        draw_text(&progress_count, offset_x + bar_w - count_dims.width, progress_bar_y - 5.0, font_size * 0.4, progress_color);
+        draw_rectangle(offset_x, progress_bar_y, bar_w, bar_h, Color::new(0.05, 0.2, 0.05, 1.0));
+        draw_rectangle(offset_x, progress_bar_y, bar_w * level_progress, bar_h, progress_color);
+
         let time_progress = (board.time_left / 60.0).clamp(0.0, 1.0);
         let mut time_color = RED;
         if board.time_left < 10.0 {
