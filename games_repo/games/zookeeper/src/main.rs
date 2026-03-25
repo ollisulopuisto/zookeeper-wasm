@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.116";
+const VERSION: &str = "26.3.25.117";
 
 /// Helper to convert screen coordinates to grid coordinates with tolerance for edge taps.
 fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> Option<(usize, usize)> {
@@ -730,7 +730,7 @@ async fn main() {
             }
             GameState::Reshuffling { target_grid, next_row, mut timer } => {
                 timer += dt;
-                if timer >= 0.05 {
+                if timer >= 0.12 {
                     if next_row < ROWS {
                         let r = next_row;
                         for x in 0..COLS { board.grid[r][x] = Some(target_grid[r][x]); }
@@ -878,10 +878,9 @@ async fn main() {
                                     }
                                 }
                             }
-                            GameState::Reshuffling { next_row, timer, .. } => {
+                            GameState::Reshuffling { next_row, .. } => {
                                 if y == next_row.saturating_sub(1) {
-                                    let t = (timer / 0.05).min(1.0);
-                                    draw_y -= (1.0 - t) * cell_size;
+                                    // No interpolation, just "pop" into place per row
                                 }
                             }
                             _ => {}
