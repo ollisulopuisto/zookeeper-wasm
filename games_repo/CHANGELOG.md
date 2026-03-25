@@ -2,6 +2,14 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.25.113] - 2026-03-25
+### Added
+- **Start Screen (Zookeeper):** Added an explicit "Waiting to Start" overlay with game instructions (Controls and Tips).
+- **Improved Controls (Zookeeper):** Helper text now mentions "Click" in addition to Swipe and WASD.
+- **Enhanced Pause (Zookeeper):** You can now unpause by tapping anywhere on the screen, not just the small Play icon.
+### Fixed
+- **Mobile Interaction (Zookeeper):** Moved the game board slightly down to avoid interference with browser/OS-level gestures when interacting with the top row.
+
 ## [26.3.25.112] - 2026-03-25
 ### Fixed
 - **Mobile Unpause (Zookeeper):** Moved UI buttons to be rendered last, ensuring they are always visible and tappable above overlays (fixing an issue where the pause overlay would block the resume button).
