@@ -13,6 +13,22 @@ use serde::{Deserialize, Serialize};
 const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
+/// The game version (CalVer).
+const VERSION: &str = "26.3.25.116";
+
+/// Helper to convert screen coordinates to grid coordinates with tolerance for edge taps.
+fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> Option<(usize, usize)> {
+    let buffer = 4.0;
+    if mx < ox - buffer || mx >= ox + size + buffer || my < oy - buffer || my >= oy + size + buffer {
+        return None;
+    }
+    let gx = ((mx - ox) / cell).floor() as i32;
+    let gy = ((my - oy) / cell).floor() as i32;
+    let gx = gx.clamp(0, (COLS - 1) as i32) as usize;
+    let gy = gy.clamp(0, (ROWS - 1) as i32) as usize;
+    Some((gx, gy))
+}
+
 /// The number of distinct animal types available in the game.
 const TILE_TYPES: u8 = 7;
 /// The duration (in seconds) of tile animations like swapping.
@@ -267,8 +283,9 @@ impl Board {
     }
 
     fn is_adjacent(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
-        (x1 == x2 && (y1 == y2 + 1 || y1 == y2.saturating_sub(1))) ||
-        (y1 == y2 && (x1 == x2 + 1 || x1 == x2.saturating_sub(1)))
+        let dx = (x1 as i32 - x2 as i32).abs();
+        let dy = (y1 as i32 - y2 as i32).abs();
+        (dx == 1 && dy == 0) || (dx == 0 && dy == 1)
     }
 
     fn reset_selection(&mut self) {
@@ -342,7 +359,7 @@ async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
     
     // Log version to console for easier tracking
-    println!("Zookeeper WASM v26.3.25.114");
+    println!("Zookeeper WASM v{}", VERSION);
 
     // Initialize settings storage
     storage::store(Settings { muted: false, slow_mode: false });
@@ -468,12 +485,10 @@ async fn main() {
                 }
             }
             GameState::Idle => {
+                let grid_coords = get_grid_coords(mx, my, offset_x, offset_y, board_size, cell_size);
+
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
-                    if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
-                        let gx = ((mx - offset_x) / cell_size).floor() as usize;
-                        let gy = ((my - offset_y) / cell_size).floor() as usize;
-                        let gx = gx.min(COLS - 1);
-                        let gy = gy.min(ROWS - 1);
+                    if let Some((gx, gy)) = grid_coords {
                         board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
                             if board.is_adjacent(gx, gy, sx, sy) {
@@ -490,15 +505,9 @@ async fn main() {
                 }
 
                 if is_mouse_button_down(MouseButton::Left) {
-                    if let Some((sx, sy)) = board.drag_start {
-                        if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
-                            let gx = ((mx - offset_x) / cell_size).floor() as usize;
-                            let gy = ((my - offset_y) / cell_size).floor() as usize;
-                            let gx = gx.min(COLS - 1);
-                            let gy = gy.min(ROWS - 1);
-                            if board.is_adjacent(gx, gy, sx, sy) {
-                                board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
-                            }
+                    if let (Some((gx, gy)), Some((sx, sy))) = (grid_coords, board.drag_start) {
+                        if board.is_adjacent(gx, gy, sx, sy) {
+                            board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                         }
                     }
                 } else {
