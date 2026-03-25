@@ -387,10 +387,10 @@ async fn main() {
 
         let sw = screen_width();
         let sh = screen_height();
-        let board_size = sw.min(sh * 0.8) * 0.95;
+        let board_size = sw.min(sh * 0.8) * 0.90;
         let cell_size = board_size / COLS as f32;
         let offset_x = (sw - board_size) / 2.0;
-        let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
+        let offset_y = (sh - board_size) / 2.0 + (sh * 0.12);
 
         let mut settings = storage::get_mut::<Settings>();
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
@@ -433,6 +433,9 @@ async fn main() {
                 if is_key_pressed(KeyCode::Space) || (is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_snail) {
                     if let GameState::Paused { previous_state } = board.state {
                         board.state = *previous_state;
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
+                        }
                     }
                 }
             }
@@ -456,15 +459,16 @@ async fn main() {
             GameState::WaitingToStart => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     board.state = GameState::Idle;
+                    if !settings.muted {
+                        if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
+                    }
                 }
             }
             GameState::Idle => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
-                    let gx = ((mx - offset_x) / cell_size) as i32;
-                    let gy = ((my - offset_y) / cell_size) as i32;
-                    if gx >= 0 && gx < COLS as i32 && gy >= 0 && gy < ROWS as i32 {
-                        let gx = gx as usize;
-                        let gy = gy as usize;
+                    if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
+                        let gx = ((mx - offset_x) / cell_size) as usize;
+                        let gy = ((my - offset_y) / cell_size) as usize;
                         board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
                             if board.is_adjacent(gx, gy, sx, sy) {
@@ -482,11 +486,9 @@ async fn main() {
 
                 if is_mouse_button_down(MouseButton::Left) {
                     if let Some((sx, sy)) = board.drag_start {
-                        let gx = ((mx - offset_x) / cell_size) as i32;
-                        let gy = ((my - offset_y) / cell_size) as i32;
-                        if gx >= 0 && gx < COLS as i32 && gy >= 0 && gy < ROWS as i32 {
-                            let gx = gx as usize;
-                            let gy = gy as usize;
+                        if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
+                            let gx = ((mx - offset_x) / cell_size) as usize;
+                            let gy = ((my - offset_y) / cell_size) as usize;
                             if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             }
