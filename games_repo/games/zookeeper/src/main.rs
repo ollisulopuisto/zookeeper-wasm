@@ -264,9 +264,19 @@ impl Board {
         matches
     }
 
+    fn is_adjacent(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
+        (x1 == x2 && (y1 == y2 + 1 || y1 == y2.saturating_sub(1))) ||
+        (y1 == y2 && (x1 == x2 + 1 || x1 == x2.saturating_sub(1)))
+    }
+
+    fn reset_selection(&mut self) {
+        self.selected = None;
+        self.drag_start = None;
+    }
+
     fn start_swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, settings: &Settings, snd_swap: &Option<Sound>) {
         self.state = GameState::Swapping { x1, y1, x2, y2, timer: 0.0, revert: false };
-        self.selected = None;
+        self.reset_selection();
         if !settings.muted {
             if let Some(ref snd) = snd_swap {
                 play_sound(snd, PlaySoundParams::default());
@@ -450,9 +460,7 @@ async fn main() {
                         let gy = gy as usize;
                         board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
-                            let is_adjacent = (gx == sx && (gy == sy + 1 || gy == sy.saturating_sub(1))) ||
-                                              (gy == sy && (gx == sx + 1 || gx == sx.saturating_sub(1)));
-                            if is_adjacent {
+                            if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             } else {
                                 board.selected = Some((gx, gy));
@@ -461,7 +469,7 @@ async fn main() {
                             board.selected = Some((gx, gy));
                         }
                     } else {
-                        board.selected = None;
+                        board.reset_selection();
                     }
                 }
 
@@ -472,10 +480,8 @@ async fn main() {
                         if gx >= 0 && gx < COLS as i32 && gy >= 0 && gy < ROWS as i32 {
                             let gx = gx as usize;
                             let gy = gy as usize;
-                            if (gx == sx && (gy == sy + 1 || gy == sy.saturating_sub(1))) ||
-                               (gy == sy && (gx == sx + 1 || gx == sx.saturating_sub(1))) {
+                            if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
-                                board.drag_start = None;
                             }
                         }
                     }
