@@ -52,6 +52,8 @@ struct Settings {
 /// Represents the current state of the game loop and any active animations.
 #[derive(Clone, PartialEq, Debug)]
 enum GameState {
+    /// The game is waiting for the player to tap to start.
+    WaitingToStart,
     /// The game is waiting for player input.
     Idle,
     /// Two tiles are in the process of being swapped.
@@ -138,7 +140,7 @@ impl Board {
     fn new() -> Self {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
-            state: GameState::Idle,
+            state: GameState::WaitingToStart,
             score: 0,
             time_left: 60.0,
             selected: None,
@@ -388,13 +390,13 @@ async fn main() {
         let board_size = sw.min(sh * 0.8) * 0.95;
         let cell_size = board_size / COLS as f32;
         let offset_x = (sw - board_size) / 2.0;
-        let offset_y = (sh - board_size) / 2.0 + (sh * 0.05);
+        let offset_y = (sh - board_size) / 2.0 + (sh * 0.1);
 
         let mut settings = storage::get_mut::<Settings>();
         let dt = if settings.slow_mode { get_frame_time() * 0.3 } else { get_frame_time() };
 
         // Game Logic State Machine.
-        let is_playing = !matches!(board.state, GameState::GameOver | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } | GameState::Shuffling { .. } | GameState::Reshuffling { .. });
+        let is_playing = !matches!(board.state, GameState::GameOver | GameState::Paused { .. } | GameState::EnteringName { .. } | GameState::LevelUp { .. } | GameState::NoMoreMoves { .. } | GameState::Shuffling { .. } | GameState::Reshuffling { .. } | GameState::WaitingToStart);
         
         if is_playing {
             board.time_left -= dt;
@@ -428,7 +430,7 @@ async fn main() {
 
         match board.state {
             GameState::Paused { .. } => {
-                if is_key_pressed(KeyCode::Space) || (is_mouse_button_pressed(MouseButton::Left) && over_pause) {
+                if is_key_pressed(KeyCode::Space) || (is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_snail) {
                     if let GameState::Paused { previous_state } = board.state {
                         board.state = *previous_state;
                     }
@@ -451,6 +453,11 @@ async fn main() {
 
         // Logic
         match board.state {
+            GameState::WaitingToStart => {
+                if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
+                    board.state = GameState::Idle;
+                }
+            }
             GameState::Idle => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     let gx = ((mx - offset_x) / cell_size) as i32;
@@ -905,7 +912,25 @@ async fn main() {
         }
         draw_text(&format!("MAX COMBO: X{}", board.max_combo), offset_x, line1_y, font_size * 0.6, YELLOW);
 
-        draw_text_centered("DRAG TILES OR USE WASD TO SWAP", offset_y + board_size + 30.0, font_size * 0.4, GRAY);
+        draw_text_centered("SWIPE, CLICK OR USE WASD TO SWAP", offset_y + board_size + 30.0, font_size * 0.4, GRAY);
+
+        if board.state == GameState::WaitingToStart {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+            draw_text_centered("ZOOKEEPER", sh * 0.15, font_size * 2.0, YELLOW);
+            
+            draw_text_centered("CONTROLS:", sh * 0.3, font_size * 0.8, WHITE);
+            draw_text_centered("- SWIPE tiles to swap", sh * 0.4, font_size * 0.6, WHITE);
+            draw_text_centered("- CLICK two adjacent tiles", sh * 0.48, font_size * 0.6, WHITE);
+            draw_text_centered("- WASD or ARROW KEYS to swap", sh * 0.56, font_size * 0.6, WHITE);
+            
+            draw_text_centered("TIPS:", sh * 0.68, font_size * 0.8, WHITE);
+            draw_text_centered("- Match 3 or more in a row", sh * 0.76, font_size * 0.6, WHITE);
+            draw_text_centered("- COMBOS multiply points!", sh * 0.84, font_size * 0.6, YELLOW);
+
+            if (get_time() * 2.0) as i32 % 2 == 0 {
+                draw_text_centered("TAP TO START", sh * 0.94, font_size * 0.8, WHITE);
+            }
+        }
 
         if let Some((sx, sy)) = board.selected {
             draw_rectangle_lines(offset_x + sx as f32 * cell_size, offset_y + sy as f32 * cell_size, cell_size, cell_size, 4.0, YELLOW);
