@@ -978,10 +978,9 @@ async fn main() {
 
         // --- UI Buttons ---
         // Render buttons last so they are always visible and tappable above overlays (essential for unpausing on mobile)
-        let button_params = DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() };
-        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, button_params);
-        draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, button_params);
-        draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, button_params);
+        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
         next_frame().await
     }
