@@ -2,6 +2,12 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.25.114] - 2026-03-25
+### Fixed
+- **Input Precision (Zookeeper):** Fixed a bug where tiles on the topmost row and leftmost column were difficult or impossible to click/tap.
+### Added
+- **Developer Tools (Zookeeper):** The game now logs its version (CalVer) to the browser console on startup for easier troubleshooting.
+
 ## [26.3.25.113] - 2026-03-25
 ### Added
 - **Start Screen (Zookeeper):** Added an explicit "Waiting to Start" overlay with game instructions (Controls and Tips).

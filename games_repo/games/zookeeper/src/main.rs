@@ -340,6 +340,9 @@ fn draw_text_centered(text: &str, y: f32, size: f32, color: Color) {
 #[macroquad::main(window_conf)]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
+    
+    // Log version to console for easier tracking
+    println!("Zookeeper WASM v26.3.25.114");
 
     // Initialize settings storage
     storage::store(Settings { muted: false, slow_mode: false });
@@ -467,8 +470,10 @@ async fn main() {
             GameState::Idle => {
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
-                        let gx = ((mx - offset_x) / cell_size) as usize;
-                        let gy = ((my - offset_y) / cell_size) as usize;
+                        let gx = ((mx - offset_x) / cell_size).floor() as usize;
+                        let gy = ((my - offset_y) / cell_size).floor() as usize;
+                        let gx = gx.min(COLS - 1);
+                        let gy = gy.min(ROWS - 1);
                         board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
                             if board.is_adjacent(gx, gy, sx, sy) {
@@ -487,8 +492,10 @@ async fn main() {
                 if is_mouse_button_down(MouseButton::Left) {
                     if let Some((sx, sy)) = board.drag_start {
                         if mx >= offset_x && mx < offset_x + board_size && my >= offset_y && my < offset_y + board_size {
-                            let gx = ((mx - offset_x) / cell_size) as usize;
-                            let gy = ((my - offset_y) / cell_size) as usize;
+                            let gx = ((mx - offset_x) / cell_size).floor() as usize;
+                            let gy = ((my - offset_y) / cell_size).floor() as usize;
+                            let gx = gx.min(COLS - 1);
+                            let gy = gy.min(ROWS - 1);
                             if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             }
