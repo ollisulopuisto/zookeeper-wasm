@@ -575,11 +575,6 @@ async fn main() {
             draw_text(&combo_text, sw / 2.0 - tw / 2.0, offset_y + board_size / 2.0, font_size * 1.2, YELLOW);
         }
 
-        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
-            draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-        }
-
         // --- Overlays ---
         if board.state == GameState::WaitingToStart {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
@@ -645,6 +640,12 @@ async fn main() {
             draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
             let otw = measure_text(ok_text, None, font_size as _, 1.0).width;
             draw_text(ok_text, sw / 2.0 - otw / 2.0, ok_y + sh * 0.07, font_size, WHITE);
+        }
+
+        // Draw UI buttons last so they always appear on top of any overlay, keeping them visible and tappable on mobile
+        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        if !matches!(board.state, GameState::WaitingToStart | GameState::GameOver | GameState::EnteringName { .. }) {
+            draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
         }
 
         next_frame().await
