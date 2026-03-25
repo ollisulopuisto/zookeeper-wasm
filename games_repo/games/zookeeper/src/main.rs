@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.122";
+const VERSION: &str = "26.3.25.123";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -476,6 +476,9 @@ async fn main() {
         if is_playing {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
+                // Clear keyboard buffer so leftover game inputs (WASD) don't end up in the name field
+                while get_char_pressed().is_some() {}
+                
                 if board.qualifies_for_leaderboard() {
                     board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string(), snail: board.snail_used };
                 } else {
@@ -982,14 +985,20 @@ async fn main() {
         let line2_y = line1_y - font_size * 0.8;
         let time_bar_y = line2_y - font_size * 0.8 - 15.0;
 
-        // Level progress bar (fills up as player clears tiles — optimistic green → gold)
+        // Level progress bar (fills up as player clears tiles — optimistic Red -> Yellow -> Green)
         let progress_bar_y = time_bar_y - bar_h - font_size * 0.45 - 10.0;
         let level_progress = (board.level_tiles_cleared as f32 / board.level_goal as f32).clamp(0.0, 1.0);
-        let progress_color = if level_progress >= 0.9 {
+        
+        let progress_color = if level_progress < 0.33 {
+            RED
+        } else if level_progress < 0.66 {
+            YELLOW
+        } else if level_progress < 0.95 {
+            GREEN
+        } else {
+            // Pulsing gold for almost done
             let pulse = ((get_time() * 5.0).sin() as f32) * 0.5 + 0.5;
             Color::new(0.9 + pulse * 0.1, 0.9, pulse * 0.2, 1.0)
-        } else {
-            Color::new(0.1 + level_progress * 0.8, 0.9, 0.0, 1.0)
         };
         
         draw_text(&ui.level_text, offset_x, progress_bar_y - 5.0, font_size * 0.4, progress_color);
@@ -998,7 +1007,14 @@ async fn main() {
         draw_rectangle(offset_x, progress_bar_y, bar_w * level_progress, bar_h, progress_color);
 
         let time_progress = (board.time_left / 60.0).clamp(0.0, 1.0);
-        let mut time_color = RED;
+        let mut time_color = if time_progress > 0.66 {
+            GREEN
+        } else if time_progress > 0.33 {
+            YELLOW
+        } else {
+            RED
+        };
+
         if board.time_left < 10.0 {
             let blink_speed = if board.time_left < 5.0 { 15.0 } else { 8.0 };
             if (get_time() * blink_speed) as i32 % 2 == 0 { time_color = WHITE; }
