@@ -911,10 +911,6 @@ async fn main() {
             draw_rectangle_lines(offset_x + sx as f32 * cell_size, offset_y + sy as f32 * cell_size, cell_size, cell_size, 4.0, YELLOW);
         }
 
-        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-        draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-        draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
-
         if let GameState::Paused { .. } = board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 1.0));
             draw_text_centered("PAUSED", sh / 2.0, font_size * 2.0, WHITE);
@@ -979,6 +975,12 @@ async fn main() {
             draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
             draw_text_centered(ok_text, ok_y + sh * 0.07, font_size, WHITE);
         }
+
+        // --- UI Buttons ---
+        // Render buttons last so they are always visible and tappable above overlays (essential for unpausing on mobile)
+        draw_texture_ex(if settings.muted { &tex_mute_on } else { &tex_mute_off }, mute_x, mute_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        draw_texture_ex(if matches!(board.state, GameState::Paused { .. }) { &tex_play } else { &tex_pause }, pause_x, pause_y, WHITE, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
+        draw_texture_ex(&tex_snail, snail_x, snail_y, if settings.slow_mode { WHITE } else { Color::new(1.0, 1.0, 1.0, 0.3) }, DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() });
 
         next_frame().await
     }

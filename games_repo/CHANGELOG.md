@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.25.112] - 2026-03-25
+### Fixed
+- **Mobile Unpause (Zookeeper):** Moved UI buttons to be rendered last, ensuring they are always visible and tappable above overlays (fixing an issue where the pause overlay would block the resume button).
+
 ## [26.3.25.111] - 2026-03-25
 ### Added
 - **Swipe-to-Swap (Zookeeper):** You can now swap tiles by clicking and dragging in any of the four cardinal directions.

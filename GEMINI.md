@@ -47,3 +47,5 @@ Tämä projekti noudattaa tiukkaa PR-pohjaista (Pull Request) kehitysmallia vika
 5. Vikasietoisuuden tavoite
  - Main-eheys: main-haaran on oltava aina julkaisukelpoinen. Jos CI epäonnistuu PR-haarassa, main ei saastu.
  - Rollback-valmius: Koska käytössä on blue/green-julkaisu, jokaisen mergetyn PR:n on oltava helposti peruttavissa (git revert) ilman sivuvaikutuksia muihin ominaisuuksiin.
+
+Kun PR on tehty, käy tarkistamassa siihen tulleet kommentit ja implementoi niissä mainitut korjaukset tarpeen mukaan ennen mergeä.
