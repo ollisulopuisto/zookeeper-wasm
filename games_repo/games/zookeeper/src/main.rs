@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.120";
+const VERSION: &str = "26.3.25.121";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -396,6 +396,7 @@ fn window_conf() -> Conf {
         window_width: 600,
         window_height: 800,
         high_dpi: true,
+        sample_count: 0, // Disable MSAA to save GPU resources and fix console warnings
         ..Default::default()
     }
 }
