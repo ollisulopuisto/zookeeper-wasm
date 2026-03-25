@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.25.110] - 2026-03-25
+### Added
+- **Keyboard Shortcuts (Zookeeper):** When a piece is selected, you can now use WASD or Arrow Keys to swap it with an adjacent piece.
+
 ## [26.3.4.1] - 2026-03-03
 ### Added
 - **Bubbles Game:** A new 16-bit "Bubble Bobble" clone with 2-player support and Amiga/NEO GEO aesthetics.

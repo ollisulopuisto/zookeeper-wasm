@@ -454,6 +454,28 @@ async fn main() {
                         board.selected = None;
                     }
                 }
+
+                // Keyboard shortcuts for swapping when a piece is selected
+                if let Some((sx, sy)) = board.selected {
+                    let mut target = None;
+                    if is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Up) {
+                        if sy > 0 { target = Some((sx, sy - 1)); }
+                    } else if is_key_pressed(KeyCode::S) || is_key_pressed(KeyCode::Down) {
+                        if sy < ROWS - 1 { target = Some((sx, sy + 1)); }
+                    } else if is_key_pressed(KeyCode::A) || is_key_pressed(KeyCode::Left) {
+                        if sx > 0 { target = Some((sx - 1, sy)); }
+                    } else if is_key_pressed(KeyCode::D) || is_key_pressed(KeyCode::Right) {
+                        if sx < COLS - 1 { target = Some((sx + 1, sy)); }
+                    }
+
+                    if let Some((gx, gy)) = target {
+                        board.state = GameState::Swapping { x1: sx, y1: sy, x2: gx, y2: gy, timer: 0.0, revert: false };
+                        board.selected = None;
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
+                        }
+                    }
+                }
             }
             GameState::Swapping { x1, y1, x2, y2, mut timer, revert } => {
                 timer += dt;
