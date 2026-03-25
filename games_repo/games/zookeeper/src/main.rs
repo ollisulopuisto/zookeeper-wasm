@@ -3,7 +3,7 @@
 //! This module provides a fully self-contained match-3 game using the Macroquad engine.
 //! It handles the 8x8 game board, animal matching logic, animations, high scores, persistent settings, and combo systems.
 
-use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams};
+use macroquad::audio::{load_sound_from_bytes, play_sound, PlaySoundParams, Sound};
 use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
@@ -262,6 +262,16 @@ impl Board {
         matches
     }
 
+    fn start_swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, settings: &Settings, snd_swap: &Option<Sound>) {
+        self.state = GameState::Swapping { x1, y1, x2, y2, timer: 0.0, revert: false };
+        self.selected = None;
+        if !settings.muted {
+            if let Some(ref snd) = snd_swap {
+                play_sound(snd, PlaySoundParams::default());
+            }
+        }
+    }
+
     fn count_available_moves(&mut self) -> usize {
         let mut moves = 0;
         for y in 0..ROWS {
@@ -437,13 +447,10 @@ async fn main() {
                         let gx = gx as usize;
                         let gy = gy as usize;
                         if let Some((sx, sy)) = board.selected {
-                            if (gx == sx && (gy == sy + 1 || gy == sy.saturating_sub(1))) ||
-                               (gy == sy && (gx == sx + 1 || gx == sx.saturating_sub(1))) {
-                                board.state = GameState::Swapping { x1: sx, y1: sy, x2: gx, y2: gy, timer: 0.0, revert: false };
-                                board.selected = None;
-                                if !settings.muted {
-                                    if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
-                                }
+                            let is_adjacent = (gx == sx && (gy == sy + 1 || gy == sy.saturating_sub(1))) ||
+                                              (gy == sy && (gx == sx + 1 || gx == sx.saturating_sub(1)));
+                            if is_adjacent {
+                                board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             } else {
                                 board.selected = Some((gx, gy));
                             }
@@ -452,6 +459,29 @@ async fn main() {
                         }
                     } else {
                         board.selected = None;
+                    }
+                }
+
+                // Keyboard shortcuts for swapping when a piece is selected
+                if let Some((sx, sy)) = board.selected {
+                    let mut target = None;
+                    let up = is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Up);
+                    let down = is_key_pressed(KeyCode::S) || is_key_pressed(KeyCode::Down);
+                    let left = is_key_pressed(KeyCode::A) || is_key_pressed(KeyCode::Left);
+                    let right = is_key_pressed(KeyCode::D) || is_key_pressed(KeyCode::Right);
+
+                    if up && sy > 0 {
+                        target = Some((sx, sy - 1));
+                    } else if down && sy < ROWS - 1 {
+                        target = Some((sx, sy + 1));
+                    } else if left && sx > 0 {
+                        target = Some((sx - 1, sy));
+                    } else if right && sx < COLS - 1 {
+                        target = Some((sx + 1, sy));
+                    }
+
+                    if let Some((gx, gy)) = target {
+                        board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                     }
                 }
             }
