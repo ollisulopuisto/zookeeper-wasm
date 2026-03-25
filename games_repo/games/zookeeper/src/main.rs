@@ -108,6 +108,7 @@ struct Board {
     score: u32,
     time_left: f32,
     selected: Option<(usize, usize)>,
+    drag_start: Option<(usize, usize)>,
     high_scores: Vec<LeaderboardEntry>,
     new_record: bool,
     combo_count: u32,
@@ -141,6 +142,7 @@ impl Board {
             score: 0,
             time_left: 60.0,
             selected: None,
+            drag_start: None,
             high_scores: Self::load_high_scores(),
             new_record: false,
             combo_count: 0,
@@ -262,9 +264,19 @@ impl Board {
         matches
     }
 
+    fn is_adjacent(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
+        (x1 == x2 && (y1 == y2 + 1 || y1 == y2.saturating_sub(1))) ||
+        (y1 == y2 && (x1 == x2 + 1 || x1 == x2.saturating_sub(1)))
+    }
+
+    fn reset_selection(&mut self) {
+        self.selected = None;
+        self.drag_start = None;
+    }
+
     fn start_swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize, settings: &Settings, snd_swap: &Option<Sound>) {
         self.state = GameState::Swapping { x1, y1, x2, y2, timer: 0.0, revert: false };
-        self.selected = None;
+        self.reset_selection();
         if !settings.muted {
             if let Some(ref snd) = snd_swap {
                 play_sound(snd, PlaySoundParams::default());
@@ -446,10 +458,9 @@ async fn main() {
                     if gx >= 0 && gx < COLS as i32 && gy >= 0 && gy < ROWS as i32 {
                         let gx = gx as usize;
                         let gy = gy as usize;
+                        board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
-                            let is_adjacent = (gx == sx && (gy == sy + 1 || gy == sy.saturating_sub(1))) ||
-                                              (gy == sy && (gx == sx + 1 || gx == sx.saturating_sub(1)));
-                            if is_adjacent {
+                            if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             } else {
                                 board.selected = Some((gx, gy));
@@ -458,8 +469,24 @@ async fn main() {
                             board.selected = Some((gx, gy));
                         }
                     } else {
-                        board.selected = None;
+                        board.reset_selection();
                     }
+                }
+
+                if is_mouse_button_down(MouseButton::Left) {
+                    if let Some((sx, sy)) = board.drag_start {
+                        let gx = ((mx - offset_x) / cell_size) as i32;
+                        let gy = ((my - offset_y) / cell_size) as i32;
+                        if gx >= 0 && gx < COLS as i32 && gy >= 0 && gy < ROWS as i32 {
+                            let gx = gx as usize;
+                            let gy = gy as usize;
+                            if board.is_adjacent(gx, gy, sx, sy) {
+                                board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
+                            }
+                        }
+                    }
+                } else {
+                    board.drag_start = None;
                 }
 
                 // Keyboard shortcuts for swapping when a piece is selected
@@ -877,6 +904,8 @@ async fn main() {
             draw_texture_ex(&tex_snail, offset_x + dims.width + 10.0, line2_y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
         }
         draw_text(&format!("MAX COMBO: X{}", board.max_combo), offset_x, line1_y, font_size * 0.6, YELLOW);
+
+        draw_text_centered("DRAG TILES OR USE WASD TO SWAP", offset_y + board_size + 30.0, font_size * 0.4, GRAY);
 
         if let Some((sx, sy)) = board.selected {
             draw_rectangle_lines(offset_x + sx as f32 * cell_size, offset_y + sy as f32 * cell_size, cell_size, cell_size, 4.0, YELLOW);
