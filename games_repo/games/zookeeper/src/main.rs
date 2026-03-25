@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.121";
+const VERSION: &str = "26.3.25.122";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -546,7 +546,9 @@ async fn main() {
                     if let Some((gx, gy)) = grid_coords {
                         board.drag_start = Some((gx, gy));
                         if let Some((sx, sy)) = board.selected {
-                            if board.is_adjacent(gx, gy, sx, sy) {
+                            if sx == gx && sy == gy {
+                                board.selected = None; // Deselect if same tile
+                            } else if board.is_adjacent(gx, gy, sx, sy) {
                                 board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                             } else {
                                 board.selected = Some((gx, gy));
@@ -940,10 +942,18 @@ async fn main() {
                             GameState::Reshuffling { next_row, .. } => {
                                 if y == next_row.saturating_sub(1) {
                                     // Add a small mechanical "thud" shake offset
+                                    draw_x += qrand::gen_range(-3.0, 3.0);
                                     draw_y += qrand::gen_range(-3.0, 3.0);
                                 }
                             }
-                            _ => {}
+                            _ => {
+                                // Nervous "panic shake" when time is low (< 10s)
+                                if is_playing && board.time_left < 10.0 {
+                                    let intensity = (1.0 - (board.time_left / 10.0)).powi(2) * 4.0;
+                                    draw_x += qrand::gen_range(-intensity, intensity);
+                                    draw_y += qrand::gen_range(-intensity, intensity);
+                                }
+                            }
                         }
                         if let Some(t_idx) = board.grid[y][x] {
                             let actual_cell = cell_size * scale;
