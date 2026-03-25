@@ -14,7 +14,59 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.118";
+const VERSION: &str = "26.3.25.119";
+
+/// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
+struct UIState {
+    score_text: String,
+    score_width: f32,
+    max_combo_text: String,
+    level_text: String,
+    progress_text: String,
+    progress_width: f32,
+    last_score: u32,
+    last_max_combo: u32,
+    last_level: u32,
+    last_progress: (u32, u32),
+}
+
+impl UIState {
+    fn new() -> Self {
+        Self {
+            score_text: "SCORE: 0".to_string(),
+            score_width: 0.0,
+            max_combo_text: "MAX COMBO: X0".to_string(),
+            level_text: "LEVEL 1".to_string(),
+            progress_text: "0/50".to_string(),
+            progress_width: 0.0,
+            last_score: 999999, // Force update
+            last_max_combo: 999999,
+            last_level: 999999,
+            last_progress: (9999, 9999),
+        }
+    }
+
+    fn update(&mut self, score: u32, max_combo: u32, level: u32, cleared: u32, goal: u32, font_size: f32) {
+        if score != self.last_score {
+            self.score_text = format!("SCORE: {}", score);
+            self.score_width = measure_text(&self.score_text, None, (font_size * 0.8) as u16, 1.0).width;
+            self.last_score = score;
+        }
+        if max_combo != self.last_max_combo {
+            self.max_combo_text = format!("MAX COMBO: X{}", max_combo);
+            self.last_max_combo = max_combo;
+        }
+        if level != self.last_level {
+            self.level_text = format!("LEVEL {}", level);
+            self.last_level = level;
+        }
+        if (cleared, goal) != self.last_progress {
+            self.progress_text = format!("{}/{}", cleared, goal);
+            self.progress_width = measure_text(&self.progress_text, None, (font_size * 0.4) as u16, 1.0).width;
+            self.last_progress = (cleared, goal);
+        }
+    }
+}
 
 /// Helper to convert screen coordinates to grid coordinates with tolerance for edge taps.
 fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> Option<(usize, usize)> {
@@ -90,7 +142,7 @@ enum GameState {
     /// Empty spaces are being filled by tiles falling from above.
     Falling { timer: f32 },
     /// No legal moves are available on the board.
-    NoMoreMoves { timer: f32 },
+    NoMoreMoves { timer: f32, attempts: u32 },
     /// New High Score name entry.
     EnteringName {
         score: u32,
@@ -401,6 +453,7 @@ async fn main() {
     }
 
     let mut board = Board::new();
+    let mut ui = UIState::new();
 
     loop {
         clear_background(Color::new(0.1, 0.1, 0.1, 1.0));
@@ -603,14 +656,13 @@ async fn main() {
                         let matches = board.find_matches();
                         if matches.is_empty() {
                             if board.level_tiles_cleared >= board.level_goal {
-                                board.state = GameState::LevelUp { timer: 0.0 };
-                                if !settings.muted {
-                                    if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
-                                }
+                            board.state = GameState::LevelUp { timer: 0.0 };
+                            if !settings.muted {
+                                if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
+                            }
                             } else if board.count_available_moves() == 0 {
-                                board.state = GameState::NoMoreMoves { timer: 0.0 };
-                            } else {
-                                board.state = GameState::Idle;
+                            board.state = GameState::NoMoreMoves { timer: 0.0, attempts: 0 };
+                            } else {                                board.state = GameState::Idle;
                                 board.combo_count = 0;
                             }
                         } else {
@@ -630,7 +682,7 @@ async fn main() {
                     board.state = GameState::Falling { timer };
                 }
             }
-            GameState::NoMoreMoves { mut timer } => {
+            GameState::NoMoreMoves { mut timer, mut attempts } => {
                 timer += dt;
                 if timer >= 1.5 {
                     let mut tiles = Vec::new();
@@ -644,10 +696,11 @@ async fn main() {
 
                     let mut target = [[0u8; COLS]; ROWS];
                     let mut mapping = [(0, 0, 0, 0, 0u8); COLS * ROWS];
-                    let mut attempts = 0;
                     let mut found = false;
 
-                    while attempts < 1000 {
+                    // Do 50 attempts per frame to avoid freezing low-end devices
+                    for _ in 0..50 {
+                        attempts += 1;
                         // Fisher-Yates Shuffle
                         for i in (1..tiles.len()).rev() {
                             let j = (qrand::rand() as usize) % (i + 1);
@@ -684,11 +737,17 @@ async fn main() {
                                 break;
                             }
                         }
-                        attempts += 1;
+                        if attempts >= 2000 { break; }
                     }
 
-                    if !found {
-                        // Absolute fallback: just generate new ones if we somehow can't shuffle existing ones
+                    if found {
+                        board.grid = [[None; COLS]; ROWS];
+                        board.state = GameState::Shuffling { target_grid: target, mapping, timer: 0.0 };
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
+                        }
+                    } else if attempts >= 2000 {
+                        // Absolute fallback
                         for y in 0..ROWS {
                             for x in 0..COLS {
                                 loop {
@@ -700,20 +759,20 @@ async fn main() {
                                 }
                             }
                         }
-                        // Create a dummy mapping from top of screen
                         for y in 0..ROWS {
                             for x in 0..COLS {
                                 mapping[y * COLS + x] = (x, 0, x, y, target[y][x]);
                             }
                         }
+                        board.grid = [[None; COLS]; ROWS];
+                        board.state = GameState::Shuffling { target_grid: target, mapping, timer: 0.0 };
+                        if !settings.muted {
+                            if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
+                        }
+                    } else {
+                        board.state = GameState::NoMoreMoves { timer, attempts };
                     }
-
-                    board.grid = [[None; COLS]; ROWS];
-                    board.state = GameState::Shuffling { target_grid: target, mapping, timer: 0.0 };
-                    if !settings.muted {
-                        if let Some(ref snd) = snd_reshuffle { play_sound(snd, PlaySoundParams::default()); }
-                    }
-                } else { board.state = GameState::NoMoreMoves { timer }; }
+                } else { board.state = GameState::NoMoreMoves { timer, attempts }; }
             }
             GameState::Shuffling { target_grid, mapping, mut timer } => {
                 timer += dt;
@@ -904,6 +963,8 @@ async fn main() {
 
         // --- HUD & Bars ---
         let font_size = sh * 0.05;
+        ui.update(board.score, board.max_combo, board.level, board.level_tiles_cleared, board.level_goal, font_size);
+        
         let bar_w = board_size;
         let bar_h = 12.0;
         
@@ -920,10 +981,9 @@ async fn main() {
         } else {
             Color::new(0.1 + level_progress * 0.8, 0.9, 0.0, 1.0)
         };
-        let progress_count = format!("{}/{}", board.level_tiles_cleared, board.level_goal);
-        let count_dims = measure_text(&progress_count, None, (font_size * 0.4) as u16, 1.0);
-        draw_text(&format!("LEVEL {}", board.level), offset_x, progress_bar_y - 5.0, font_size * 0.4, progress_color);
-        draw_text(&progress_count, offset_x + bar_w - count_dims.width, progress_bar_y - 5.0, font_size * 0.4, progress_color);
+        
+        draw_text(&ui.level_text, offset_x, progress_bar_y - 5.0, font_size * 0.4, progress_color);
+        draw_text(&ui.progress_text, offset_x + bar_w - ui.progress_width, progress_bar_y - 5.0, font_size * 0.4, progress_color);
         draw_rectangle(offset_x, progress_bar_y, bar_w, bar_h, Color::new(0.05, 0.2, 0.05, 1.0));
         draw_rectangle(offset_x, progress_bar_y, bar_w * level_progress, bar_h, progress_color);
 
@@ -937,14 +997,12 @@ async fn main() {
         draw_rectangle(offset_x, time_bar_y, bar_w * time_progress, bar_h, time_color);
         draw_text("TIME", offset_x, time_bar_y - 5.0, font_size * 0.4, time_color);
 
-        draw_text(&format!("SCORE: {}", board.score), offset_x, line2_y, font_size * 0.8, WHITE);
+        draw_text(&ui.score_text, offset_x, line2_y, font_size * 0.8, WHITE);
         if settings.slow_mode {
-            let score_text = format!("SCORE: {}", board.score);
-            let dims = measure_text(&score_text, None, (font_size * 0.8) as u16, 1.0);
             let snail_s = font_size * 0.6;
-            draw_texture_ex(&tex_snail, offset_x + dims.width + 10.0, line2_y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
+            draw_texture_ex(&tex_snail, offset_x + ui.score_width + 10.0, line2_y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
         }
-        draw_text(&format!("MAX COMBO: X{}", board.max_combo), offset_x, line1_y, font_size * 0.6, YELLOW);
+        draw_text(&ui.max_combo_text, offset_x, line1_y, font_size * 0.6, YELLOW);
 
         draw_text_centered("SWIPE, CLICK OR USE WASD TO SWAP", offset_y + board_size + 30.0, font_size * 0.4, GRAY);
 
