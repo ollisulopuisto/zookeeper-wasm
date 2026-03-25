@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.119";
+const VERSION: &str = "26.3.25.120";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -322,16 +322,17 @@ impl Board {
         v_count >= 3
     }
 
-    fn find_matches(&self) -> Vec<(usize, usize)> {
-        let mut matches = Vec::new();
+    fn find_matches(&self, matches: &mut [(usize, usize); COLS * ROWS]) -> usize {
+        let mut count = 0;
         for y in 0..ROWS {
             for x in 0..COLS {
                 if self.has_match_at(x, y) {
-                    matches.push((x, y));
+                    matches[count] = (x, y);
+                    count += 1;
                 }
             }
         }
-        matches
+        count
     }
 
     fn is_adjacent(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
@@ -600,13 +601,12 @@ async fn main() {
                     if revert {
                         board.state = GameState::Idle;
                     } else {
-                        let matches = board.find_matches();
-                        if matches.is_empty() {
+                        let mut match_arr = [(0, 0); COLS * ROWS];
+                        let count = board.find_matches(&mut match_arr);
+                        if count == 0 {
                             board.state = GameState::Swapping { x1, y1, x2, y2, timer: 0.0, revert: true };
                         } else {
-                            let mut match_arr = [(0, 0); COLS * ROWS];
-                            for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
-                            board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
+                            board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: count };
                             board.combo_count = 1;
                         }
                     }
@@ -653,8 +653,9 @@ async fn main() {
                         }
                     }
                     if !moved {
-                        let matches = board.find_matches();
-                        if matches.is_empty() {
+                        let mut match_arr = [(0, 0); COLS * ROWS];
+                        let count = board.find_matches(&mut match_arr);
+                        if count == 0 {
                             if board.level_tiles_cleared >= board.level_goal {
                             board.state = GameState::LevelUp { timer: 0.0 };
                             if !settings.muted {
@@ -666,9 +667,7 @@ async fn main() {
                                 board.combo_count = 0;
                             }
                         } else {
-                            let mut match_arr = [(0, 0); COLS * ROWS];
-                            for (i, m) in matches.iter().enumerate() { match_arr[i] = *m; }
-                            board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: matches.len() };
+                            board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: count };
                             board.combo_count += 1;
                             board.max_combo = board.max_combo.max(board.combo_count);
                         }
