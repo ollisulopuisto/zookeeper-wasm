@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.26.145] - 2026-03-26
+### Added
+- **Gravity-based Acceleration (Zookeeper):** Falling tiles now speed up as they drop, creating a more dynamic and natural-looking "thud" as they land. This complements the existing squash and stretch animations for a more physical feel.
+
 ## [26.3.26.144] - 2026-03-26
 ### Changed
 - **Animation Timing Refinement (Zookeeper):** Split clearing and falling speeds to improve game rhythm.

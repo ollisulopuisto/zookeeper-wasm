@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.26.144";
+const VERSION: &str = "26.3.26.145";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -185,6 +185,7 @@ enum GameState {
 struct Board {
     grid: [[Option<u8>; COLS]; ROWS],
     v_offsets: [[f32; COLS]; ROWS],
+    v_velocities: [[f32; COLS]; ROWS],
     impact_timers: [[f32; COLS]; ROWS],
     floating_scores: Vec<FloatingScore>,
     state: GameState,
@@ -223,6 +224,7 @@ impl Board {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
             v_offsets: [[0.0; COLS]; ROWS],
+            v_velocities: [[0.0; COLS]; ROWS],
             impact_timers: [[0.0; COLS]; ROWS],
             floating_scores: Vec::new(),
             state: GameState::WaitingToStart,
@@ -731,13 +733,16 @@ async fn main() {
                                 board.grid[y][x] = board.grid[y - 1][x];
                                 board.grid[y - 1][x] = None;
                                 board.v_offsets[y][x] = board.v_offsets[y-1][x] - 1.0;
+                                board.v_velocities[y][x] = board.v_velocities[y-1][x]; // Pass velocity
                                 board.v_offsets[y-1][x] = 0.0;
+                                board.v_velocities[y-1][x] = 0.0;
                                 moved = true;
                             }
                         }
                         if board.grid[0][x].is_none() {
                             board.grid[0][x] = Some((qrand::rand() % TILE_TYPES as u32) as u8);
                             board.v_offsets[0][x] = -1.0;
+                            board.v_velocities[0][x] = 3.0; // Initial falling speed
                             moved = true;
                         }
                     }
@@ -973,9 +978,13 @@ async fn main() {
         for y in 0..ROWS {
             for x in 0..COLS {
                 if board.v_offsets[y][x] < 0.0 {
-                    board.v_offsets[y][x] += dt * 7.5; // Slower decay (was 10.0)
+                    // Accelerate using gravity
+                    board.v_velocities[y][x] += dt * 20.0; // Gravity constant
+                    board.v_offsets[y][x] += dt * board.v_velocities[y][x];
+
                     if board.v_offsets[y][x] >= 0.0 {
                         board.v_offsets[y][x] = 0.0;
+                        board.v_velocities[y][x] = 0.0;
                         board.impact_timers[y][x] = 0.25; // Trigger landing "thud"
                     }
                 }
