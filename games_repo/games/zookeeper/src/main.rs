@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.26.141";
+const VERSION: &str = "26.3.26.142";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -87,6 +87,14 @@ const TILE_TYPES: u8 = 7;
 const ANIM_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
+
+struct FloatingScore {
+    x: f32,
+    y: f32,
+    score: u32,
+    timer: f32,
+    max_time: f32,
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct LeaderboardEntry {
@@ -175,6 +183,7 @@ enum GameState {
 struct Board {
     grid: [[Option<u8>; COLS]; ROWS],
     v_offsets: [[f32; COLS]; ROWS],
+    floating_scores: Vec<FloatingScore>,
     state: GameState,
     score: u32,
     time_left: f32,
@@ -211,6 +220,7 @@ impl Board {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
             v_offsets: [[0.0; COLS]; ROWS],
+            floating_scores: Vec::new(),
             state: GameState::WaitingToStart,
             score: 0,
             time_left: 60.0,
@@ -574,6 +584,9 @@ async fn main() {
             }
         }
 
+        // --- Layout & UI Constants ---
+        let font_size = sh * 0.05;
+
         // Logic
         match board.state {
             GameState::WaitingToStart => {
@@ -672,6 +685,26 @@ async fn main() {
                     let mut points = (match_count as u32 * 10) * board.combo_count;
                     if settings.slow_mode { points /= 2; }
                     board.score += points;
+
+                    // Spawn floating score at the center of the match
+                    let mut avg_x = 0.0;
+                    let mut avg_y = 0.0;
+                    for i in 0..match_count {
+                        let (mx, my) = matches[i];
+                        avg_x += mx as f32;
+                        avg_y += my as f32;
+                    }
+                    avg_x /= match_count as f32;
+                    avg_y /= match_count as f32;
+
+                    board.floating_scores.push(FloatingScore {
+                        x: offset_x + avg_x * cell_size + cell_size / 2.0,
+                        y: offset_y + avg_y * cell_size + cell_size / 2.0,
+                        score: points,
+                        timer: 0.0,
+                        max_time: 1.0,
+                    });
+
                     board.level_tiles_cleared += match_count as u32;
                     board.time_left = (board.time_left + (match_count as f32 * 0.5)).min(60.0);
                     board.state = GameState::Falling { timer: 0.0 };
@@ -942,6 +975,18 @@ async fn main() {
             }
         }
 
+        // Update floating scores
+        let mut i = 0;
+        while i < board.floating_scores.len() {
+            board.floating_scores[i].timer += dt;
+            board.floating_scores[i].y -= dt * 60.0; // Float up
+            if board.floating_scores[i].timer >= board.floating_scores[i].max_time {
+                board.floating_scores.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+
         // Draw
         if !matches!(board.state, GameState::Paused { .. }) {
             if let GameState::Shuffling { ref mapping, timer, .. } = board.state {
@@ -1040,8 +1085,18 @@ async fn main() {
             }
         }
 
+        // Draw floating scores
+        for fs in &board.floating_scores {
+            let t = fs.timer / fs.max_time;
+            let alpha = 1.0 - t;
+            let color = Color::new(1.0, 1.0, 1.0, alpha);
+            let size = (font_size * 0.6) * (1.0 + t * 0.2);
+            let text = format!("+{}", fs.score);
+            let dims = measure_text(&text, None, size as u16, 1.0);
+            draw_text(&text, fs.x - dims.width / 2.0, fs.y, size, color);
+        }
+
         // --- HUD & Bars ---
-        let font_size = sh * 0.05;
         ui.update(board.score, board.max_combo, board.level, board.level_tiles_cleared, board.level_goal, font_size);
         
         let bar_w = board_size;

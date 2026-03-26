@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.26.142] - 2026-03-26
+### Added
+- **Floating Scores (Zookeeper):** Points now float up from cleared matches, providing immediate and satisfying visual feedback for score gains.
+
 ## [26.3.26.141] - 2026-03-26
 ### Added
 - **"Juicy" Animations (Zookeeper):** Significant visual overhaul for all core game actions to make them feel more responsive and satisfying.
