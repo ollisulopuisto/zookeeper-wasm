@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.25.124";
+const VERSION: &str = "26.3.26.141";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -174,6 +174,7 @@ enum GameState {
 /// Manages the 8x8 grid of animal tiles and the player's session state.
 struct Board {
     grid: [[Option<u8>; COLS]; ROWS],
+    v_offsets: [[f32; COLS]; ROWS],
     state: GameState,
     score: u32,
     time_left: f32,
@@ -187,6 +188,7 @@ struct Board {
     level_tiles_cleared: u32,
     level_goal: u32,
     snail_used: bool,
+    last_submitted: Option<(String, u32)>,
 }
 
 /// Rules for board generation to allow future tweaks.
@@ -208,6 +210,7 @@ impl Board {
     fn new() -> Self {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
+            v_offsets: [[0.0; COLS]; ROWS],
             state: GameState::WaitingToStart,
             score: 0,
             time_left: 60.0,
@@ -221,6 +224,7 @@ impl Board {
             level_tiles_cleared: 0,
             level_goal: 50,
             snail_used: false,
+            last_submitted: None,
         };
         board.fill_initial(GenerationRules::default());
         board
@@ -245,6 +249,7 @@ impl Board {
 
     fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32, snail: bool) {
         let name = if name.trim().is_empty() { "ANON".to_string() } else { name.trim().to_string() };
+        self.last_submitted = Some((name.clone(), score));
         self.new_record = self.high_scores.first().map_or(true, |best| score > best.score);
         
         // Add locally first
@@ -406,6 +411,43 @@ fn draw_text_centered(text: &str, y: f32, size: f32, color: Color) {
     let sw = screen_width();
     let dims = measure_text(text, None, size as u16, 1.0);
     draw_text(text, sw / 2.0 - dims.width / 2.0, y, size, color);
+}
+
+// --- Easing Functions ---
+
+#[allow(dead_code)]
+fn ease_back_out(t: f32) -> f32 {
+    let c1 = 1.70158;
+    let c3 = c1 + 1.0;
+    1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
+}
+
+#[allow(dead_code)]
+fn ease_elastic_out(t: f32) -> f32 {
+    let c4 = (2.0 * std::f32::consts::PI) / 3.0;
+    if t == 0.0 { 0.0 }
+    else if t == 1.0 { 1.0 }
+    else {
+        2.0f32.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0
+    }
+}
+
+#[allow(dead_code)]
+fn ease_out_bounce(mut t: f32) -> f32 {
+    let n1 = 7.5625;
+    let d1 = 2.75;
+    if t < 1.0 / d1 {
+        n1 * t * t
+    } else if t < 2.0 / d1 {
+        t -= 1.5 / d1;
+        n1 * t * t + 0.75
+    } else if t < 2.5 / d1 {
+        t -= 2.25 / d1;
+        n1 * t * t + 0.9375
+    } else {
+        t -= 2.625 / d1;
+        n1 * t * t + 0.984375
+    }
 }
 
 #[macroquad::main(window_conf)]
@@ -643,18 +685,22 @@ async fn main() {
             }
             GameState::Falling { mut timer } => {
                 timer += dt;
-                if timer >= 0.1 {
+                // Falling speed: move tiles every 0.05s instead of 0.1s for smoother "stepping"
+                if timer >= 0.05 {
                     let mut moved = false;
                     for x in 0..COLS {
                         for y in (1..ROWS).rev() {
                             if board.grid[y][x].is_none() && board.grid[y - 1][x].is_some() {
                                 board.grid[y][x] = board.grid[y - 1][x];
                                 board.grid[y - 1][x] = None;
+                                board.v_offsets[y][x] = board.v_offsets[y-1][x] - 1.0;
+                                board.v_offsets[y-1][x] = 0.0;
                                 moved = true;
                             }
                         }
                         if board.grid[0][x].is_none() {
                             board.grid[0][x] = Some((qrand::rand() % TILE_TYPES as u32) as u8);
+                            board.v_offsets[0][x] = -1.0;
                             moved = true;
                         }
                     }
@@ -669,7 +715,8 @@ async fn main() {
                             }
                             } else if board.count_available_moves() == 0 {
                             board.state = GameState::NoMoreMoves { timer: 0.0, attempts: 0 };
-                            } else {                                board.state = GameState::Idle;
+                            } else {
+                                board.state = GameState::Idle;
                                 board.combo_count = 0;
                             }
                         } else {
@@ -885,6 +932,16 @@ async fn main() {
             GameState::Paused { .. } => {}
         }
 
+        // Decay visual offsets for smooth falling
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                if board.v_offsets[y][x] < 0.0 {
+                    board.v_offsets[y][x] += dt * 15.0;
+                    if board.v_offsets[y][x] > 0.0 { board.v_offsets[y][x] = 0.0; }
+                }
+            }
+        }
+
         // Draw
         if !matches!(board.state, GameState::Paused { .. }) {
             if let GameState::Shuffling { ref mapping, timer, .. } = board.state {
@@ -913,28 +970,30 @@ async fn main() {
                 for y in 0..ROWS {
                     for x in 0..COLS {
                         let mut draw_x = offset_x + x as f32 * cell_size;
-                        let mut draw_y = offset_y + y as f32 * cell_size;
+                        let mut draw_y = offset_y + (y as f32 + board.v_offsets[y][x]) * cell_size;
                         let mut alpha = 1.0;
                         let mut scale = 1.0;
 
                         match board.state {
                             GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
-                                let t = timer / ANIM_DURATION;
+                                let t = (timer / ANIM_DURATION).min(1.0);
+                                let ease_t = ease_back_out(t);
                                 if x == x1 && y == y1 {
-                                    draw_x += (x2 as f32 - x1 as f32) * cell_size * t;
-                                    draw_y += (y2 as f32 - y1 as f32) * cell_size * t;
+                                    draw_x += (x2 as f32 - x1 as f32) * cell_size * ease_t;
+                                    draw_y += (y2 as f32 - y1 as f32) * cell_size * ease_t;
                                 } else if x == x2 && y == y2 {
-                                    draw_x += (x1 as f32 - x2 as f32) * cell_size * t;
-                                    draw_y += (y1 as f32 - y2 as f32) * cell_size * t;
+                                    draw_x += (x1 as f32 - x2 as f32) * cell_size * ease_t;
+                                    draw_y += (y1 as f32 - y2 as f32) * cell_size * ease_t;
                                 }
                             }
                             GameState::Clearing { timer, ref matches, match_count } => {
                                 for i in 0..match_count {
                                     let (mx, my) = matches[i];
                                     if x == mx && y == my {
-                                        let t = timer / ANIM_DURATION;
-                                        scale = 1.0 + (t * (0.5 + (board.combo_count as f32 * 0.1)));
-                                        alpha = 1.0 - t;
+                                        let t = (timer / ANIM_DURATION).min(1.0);
+                                        // Pop: Scale up quickly, then fade
+                                        scale = 1.0 + (t * (0.6 + (board.combo_count as f32 * 0.1)));
+                                        alpha = (1.0 - t).powi(2);
                                         if board.combo_count > 1 {
                                             draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
                                             draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
@@ -955,6 +1014,13 @@ async fn main() {
                                     let intensity = (1.0 - (board.time_left / 10.0)).powi(2) * 4.0;
                                     draw_x += qrand::gen_range(-intensity, intensity);
                                     draw_y += qrand::gen_range(-intensity, intensity);
+                                }
+                                
+                                // Pulse for selected tile
+                                if let Some((sx, sy)) = board.selected {
+                                    if x == sx && y == sy {
+                                        scale = 1.0 + (get_time() * 12.0).sin() as f32 * 0.08;
+                                    }
                                 }
                             }
                         }
@@ -1067,11 +1133,13 @@ async fn main() {
             for (i, entry) in board.high_scores.iter().enumerate() {
                 let y = sh * 0.62 + (i as f32 * font_size * 0.8);
                 let text = format!("{}. {} - {}", i+1, entry.name, entry.score);
-                draw_text_centered(&text, y, font_size * 0.6, WHITE);
+                let is_highlight = board.last_submitted.as_ref().map_or(false, |(n, s)| n == &entry.name && s == &entry.score);
+                let color = if is_highlight { YELLOW } else { WHITE };
+                draw_text_centered(&text, y, font_size * 0.6, color);
                 if entry.snail {
                     let dims = measure_text(&text, None, (font_size * 0.6) as u16, 1.0);
                     let snail_s = font_size * 0.4;
-                    draw_texture_ex(&tex_snail, sw / 2.0 + dims.width / 2.0 + 5.0, y - snail_s * 0.8, WHITE, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
+                    draw_texture_ex(&tex_snail, sw / 2.0 + dims.width / 2.0 + 5.0, y - snail_s * 0.8, color, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
                 }
             }
             if (get_time() * 2.0) as i32 % 2 == 0 {

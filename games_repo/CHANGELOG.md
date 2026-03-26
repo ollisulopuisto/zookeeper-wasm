@@ -2,6 +2,21 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.26.141] - 2026-03-26
+### Added
+- **"Juicy" Animations (Zookeeper):** Significant visual overhaul for all core game actions to make them feel more responsive and satisfying.
+  - **Swapping:** Now uses "Back Out" easing for an expressive overshoot effect.
+  - **Clearing:** Tiles "pop" more vividly with updated scaling curves and quadratic fades.
+  - **Falling:** Discrete 1-cell jumps replaced with smooth interpolation and visual offsets for a natural "cascade" feel.
+  - **Selection:** Selected tiles now pulse gently, providing clearer visual feedback.
+### Changed
+- **Animation Timing (Zookeeper):** Increased internal falling logic frequency to 20Hz for smoother visual stepping.
+
+## [26.3.26.140] - 2026-03-26
+### Added
+- **Highscore Highlighting (Bubbles & Zookeeper):** Highscores now highlight the entry from the current game session (using yellow) if it made it onto the list.
+- **Improved Leaderboard UX:** Clearer visual feedback when you break a record and make it to the top scores.
+
 ## [26.3.25.114] - 2026-03-25
 ### Fixed
 - **Input Precision (Zookeeper):** Fixed a bug where tiles on the topmost row and leftmost column were difficult or impossible to click/tap.
