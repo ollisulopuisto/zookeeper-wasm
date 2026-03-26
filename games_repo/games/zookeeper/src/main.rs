@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.26.143";
+const VERSION: &str = "26.3.26.144";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -85,6 +85,8 @@ fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> 
 const TILE_TYPES: u8 = 7;
 /// The duration (in seconds) of tile animations like swapping.
 const ANIM_DURATION: f32 = 0.35;
+/// The duration (in seconds) of the tile clearing (pop) animation.
+const CLEAR_DURATION: f32 = 0.2;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
 
@@ -679,7 +681,7 @@ async fn main() {
             }
             GameState::Clearing { mut timer, matches, match_count } => {
                 timer += dt;
-                if timer >= ANIM_DURATION {
+                if timer >= CLEAR_DURATION {
                     for i in 0..match_count {
                         let (mx, my) = matches[i];
                         board.grid[my][mx] = None;
@@ -971,7 +973,7 @@ async fn main() {
         for y in 0..ROWS {
             for x in 0..COLS {
                 if board.v_offsets[y][x] < 0.0 {
-                    board.v_offsets[y][x] += dt * 10.0; // Slightly slower decay
+                    board.v_offsets[y][x] += dt * 7.5; // Slower decay (was 10.0)
                     if board.v_offsets[y][x] >= 0.0 {
                         board.v_offsets[y][x] = 0.0;
                         board.impact_timers[y][x] = 0.25; // Trigger landing "thud"
@@ -1052,7 +1054,7 @@ async fn main() {
                                 for i in 0..match_count {
                                     let (mx, my) = matches[i];
                                     if x == mx && y == my {
-                                        let t = (timer / ANIM_DURATION).min(1.0);
+                                        let t = (timer / CLEAR_DURATION).min(1.0);
                                         // Pop with anticipation: squash first (0.0-0.2), then burst
                                         if t < 0.2 {
                                             let s = t / 0.2;

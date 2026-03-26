@@ -2,6 +2,12 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.26.144] - 2026-03-26
+### Changed
+- **Animation Timing Refinement (Zookeeper):** Split clearing and falling speeds to improve game rhythm.
+  - **Faster Disappearance:** Tile clearing (pop) duration reduced to 0.2s for a snappier feel.
+  - **Weightier Falling:** Visual falling decay slowed down to give tiles more "gravitas" as they settle into place.
+
 ## [26.3.26.143] - 2026-03-26
 ### Added
 - **Disney-style "Squash and Stretch" (Zookeeper):** Major animation overhaul focusing on weight and fluidity.
