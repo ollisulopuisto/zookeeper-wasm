@@ -16,7 +16,7 @@ enum AppState {
     Playing,
     GameOver,
     EnteringName { name: String },
-    Leaderboard,
+    Leaderboard { last_scores: Vec<(String, u32)> },
 }
 
 #[macroquad::main("Bubbles")]
@@ -111,13 +111,15 @@ async fn main() {
 
                 if submitted {
                     let final_name = if name.is_empty() { "BUB".to_string() } else { name.clone() };
+                    let mut last_scores = Vec::new();
                     for p in &game.players {
                         storage::add_score(final_name.clone(), p.score);
+                        last_scores.push((final_name.clone(), p.score));
                     }
-                    state = AppState::Leaderboard;
+                    state = AppState::Leaderboard { last_scores };
                 }
             }
-            AppState::Leaderboard => {
+            AppState::Leaderboard { .. } => {
                 if input.any_key {
                     state = AppState::Menu;
                 }
@@ -175,13 +177,15 @@ async fn main() {
                 draw_rectangle(btn_x, vy + 180.0 * scale, btn_w, btn_h, Color::new(0.3, 0.8, 0.3, 1.0));
                 draw_text("OK", btn_x + 40.0 * scale, vy + 200.0 * scale, 20.0 * scale, WHITE);
             }
-            AppState::Leaderboard => {
+            AppState::Leaderboard { ref last_scores } => {
                 let title_size = 30.0 * scale;
                 let text_size = 15.0 * scale;
                 draw_text("HISCORES", vx + 80.0 * scale, vy + 40.0 * scale, title_size, MAGENTA);
                 let scores = storage::load_scores();
                 for (i, s) in scores.iter().enumerate() {
-                    draw_text(&format!("{}. {} {:06}", i + 1, s.name, s.score), vx + 60.0 * scale, vy + 70.0 * scale + (i as f32 * 15.0 * scale), text_size, WHITE);
+                    let is_highlight = last_scores.iter().any(|(ln, ls)| ln == &s.name && ls == &s.score);
+                    let color = if is_highlight { YELLOW } else { WHITE };
+                    draw_text(&format!("{}. {} {:06}", i + 1, s.name, s.score), vx + 60.0 * scale, vy + 70.0 * scale + (i as f32 * 15.0 * scale), text_size, color);
                 }
                 draw_text("PRESS ANY KEY", vx + 75.0 * scale, vy + 210.0 * scale, text_size, GRAY);
             }
