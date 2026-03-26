@@ -86,7 +86,7 @@ const TILE_TYPES: u8 = 7;
 /// The duration (in seconds) of tile animations like swapping.
 const ANIM_DURATION: f32 = 0.35;
 /// The duration (in seconds) of the tile clearing (pop) animation.
-const CLEAR_DURATION: f32 = 0.2;
+const CLEAR_DURATION: f32 = 0.1;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
 
@@ -742,29 +742,35 @@ async fn main() {
                         if board.grid[0][x].is_none() {
                             board.grid[0][x] = Some((qrand::rand() % TILE_TYPES as u32) as u8);
                             board.v_offsets[0][x] = -1.0;
-                            board.v_velocities[0][x] = 3.0; // Initial falling speed
+                            board.v_velocities[0][x] = 6.0; // Initial falling speed
                             moved = true;
                         }
                     }
                     if !moved {
-                        let mut match_arr = [(0, 0); COLS * ROWS];
-                        let count = board.find_matches(&mut match_arr);
-                        if count == 0 {
-                            if board.level_tiles_cleared >= board.level_goal {
-                            board.state = GameState::LevelUp { timer: 0.0 };
-                            if !settings.muted {
-                                if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
-                            }
-                            } else if board.count_available_moves() == 0 {
-                            board.state = GameState::NoMoreMoves { timer: 0.0, attempts: 0 };
-                            } else {
-                                board.state = GameState::Idle;
-                                board.combo_count = 0;
-                            }
+                        // Wait for all visual falling animations to finish before checking cascades
+                        let all_settled = board.v_offsets.iter().flatten().all(|&v| v >= 0.0);
+                        if !all_settled {
+                            board.state = GameState::Falling { timer: 0.0 };
                         } else {
-                            board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: count };
-                            board.combo_count += 1;
-                            board.max_combo = board.max_combo.max(board.combo_count);
+                            let mut match_arr = [(0, 0); COLS * ROWS];
+                            let count = board.find_matches(&mut match_arr);
+                            if count == 0 {
+                                if board.level_tiles_cleared >= board.level_goal {
+                                board.state = GameState::LevelUp { timer: 0.0 };
+                                if !settings.muted {
+                                    if let Some(ref snd) = snd_level_up { play_sound(snd, PlaySoundParams::default()); }
+                                }
+                                } else if board.count_available_moves() == 0 {
+                                board.state = GameState::NoMoreMoves { timer: 0.0, attempts: 0 };
+                                } else {
+                                    board.state = GameState::Idle;
+                                    board.combo_count = 0;
+                                }
+                            } else {
+                                board.state = GameState::Clearing { timer: 0.0, matches: match_arr, match_count: count };
+                                board.combo_count += 1;
+                                board.max_combo = board.max_combo.max(board.combo_count);
+                            }
                         }
                     } else {
                         board.state = GameState::Falling { timer: 0.0 };
@@ -979,7 +985,7 @@ async fn main() {
             for x in 0..COLS {
                 if board.v_offsets[y][x] < 0.0 {
                     // Accelerate using gravity
-                    board.v_velocities[y][x] += dt * 20.0; // Gravity constant
+                    board.v_velocities[y][x] += dt * 35.0; // Gravity constant
                     board.v_offsets[y][x] += dt * board.v_velocities[y][x];
 
                     if board.v_offsets[y][x] >= 0.0 {
