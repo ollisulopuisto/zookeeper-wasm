@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.26.141";
+const VERSION: &str = "26.3.26.143";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -84,9 +84,17 @@ fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> 
 /// The number of distinct animal types available in the game.
 const TILE_TYPES: u8 = 7;
 /// The duration (in seconds) of tile animations like swapping.
-const ANIM_DURATION: f32 = 0.2;
+const ANIM_DURATION: f32 = 0.35;
 /// Maximum number of high scores to keep in the local leaderboard.
 const MAX_HIGH_SCORES: usize = 5;
+
+struct FloatingScore {
+    x: f32,
+    y: f32,
+    score: u32,
+    timer: f32,
+    max_time: f32,
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct LeaderboardEntry {
@@ -175,6 +183,8 @@ enum GameState {
 struct Board {
     grid: [[Option<u8>; COLS]; ROWS],
     v_offsets: [[f32; COLS]; ROWS],
+    impact_timers: [[f32; COLS]; ROWS],
+    floating_scores: Vec<FloatingScore>,
     state: GameState,
     score: u32,
     time_left: f32,
@@ -211,6 +221,8 @@ impl Board {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
             v_offsets: [[0.0; COLS]; ROWS],
+            impact_timers: [[0.0; COLS]; ROWS],
+            floating_scores: Vec::new(),
             state: GameState::WaitingToStart,
             score: 0,
             time_left: 60.0,
@@ -574,6 +586,9 @@ async fn main() {
             }
         }
 
+        // --- Layout & UI Constants ---
+        let font_size = sh * 0.05;
+
         // Logic
         match board.state {
             GameState::WaitingToStart => {
@@ -672,6 +687,26 @@ async fn main() {
                     let mut points = (match_count as u32 * 10) * board.combo_count;
                     if settings.slow_mode { points /= 2; }
                     board.score += points;
+
+                    // Spawn floating score at the center of the match
+                    let mut avg_x = 0.0;
+                    let mut avg_y = 0.0;
+                    for i in 0..match_count {
+                        let (mx, my) = matches[i];
+                        avg_x += mx as f32;
+                        avg_y += my as f32;
+                    }
+                    avg_x /= match_count as f32;
+                    avg_y /= match_count as f32;
+
+                    board.floating_scores.push(FloatingScore {
+                        x: offset_x + avg_x * cell_size + cell_size / 2.0,
+                        y: offset_y + avg_y * cell_size + cell_size / 2.0,
+                        score: points,
+                        timer: 0.0,
+                        max_time: 1.0,
+                    });
+
                     board.level_tiles_cleared += match_count as u32;
                     board.time_left = (board.time_left + (match_count as f32 * 0.5)).min(60.0);
                     board.state = GameState::Falling { timer: 0.0 };
@@ -936,9 +971,27 @@ async fn main() {
         for y in 0..ROWS {
             for x in 0..COLS {
                 if board.v_offsets[y][x] < 0.0 {
-                    board.v_offsets[y][x] += dt * 15.0;
-                    if board.v_offsets[y][x] > 0.0 { board.v_offsets[y][x] = 0.0; }
+                    board.v_offsets[y][x] += dt * 10.0; // Slightly slower decay
+                    if board.v_offsets[y][x] >= 0.0 {
+                        board.v_offsets[y][x] = 0.0;
+                        board.impact_timers[y][x] = 0.25; // Trigger landing "thud"
+                    }
                 }
+                if board.impact_timers[y][x] > 0.0 {
+                    board.impact_timers[y][x] -= dt;
+                }
+            }
+        }
+
+        // Update floating scores
+        let mut i = 0;
+        while i < board.floating_scores.len() {
+            board.floating_scores[i].timer += dt;
+            board.floating_scores[i].y -= dt * 60.0; // Float up
+            if board.floating_scores[i].timer >= board.floating_scores[i].max_time {
+                board.floating_scores.remove(i);
+            } else {
+                i += 1;
             }
         }
 
@@ -972,18 +1025,27 @@ async fn main() {
                         let mut draw_x = offset_x + x as f32 * cell_size;
                         let mut draw_y = offset_y + (y as f32 + board.v_offsets[y][x]) * cell_size;
                         let mut alpha = 1.0;
-                        let mut scale = 1.0;
+                        let mut scale_x = 1.0;
+                        let mut scale_y = 1.0;
 
                         match board.state {
                             GameState::Swapping { x1, y1, x2, y2, timer, .. } => {
                                 let t = (timer / ANIM_DURATION).min(1.0);
                                 let ease_t = ease_back_out(t);
-                                if x == x1 && y == y1 {
-                                    draw_x += (x2 as f32 - x1 as f32) * cell_size * ease_t;
-                                    draw_y += (y2 as f32 - y1 as f32) * cell_size * ease_t;
-                                } else if x == x2 && y == y2 {
-                                    draw_x += (x1 as f32 - x2 as f32) * cell_size * ease_t;
-                                    draw_y += (y1 as f32 - y2 as f32) * cell_size * ease_t;
+                                if (x == x1 && y == y1) || (x == x2 && y == y2) {
+                                    let (ox, oy, tx, ty) = if x == x1 && y == y1 { (x1, y1, x2, y2) } else { (x2, y2, x1, y1) };
+                                    draw_x += (tx as f32 - ox as f32) * cell_size * ease_t;
+                                    draw_y += (ty as f32 - oy as f32) * cell_size * ease_t;
+
+                                    // Squash and Stretch: Stretch in direction of movement
+                                    let stretch = (t * std::f32::consts::PI).sin() * 0.2;
+                                    if tx != ox { // Horizontal move
+                                        scale_x += stretch;
+                                        scale_y -= stretch * 0.5;
+                                    } else { // Vertical move
+                                        scale_y += stretch;
+                                        scale_x -= stretch * 0.5;
+                                    }
                                 }
                             }
                             GameState::Clearing { timer, ref matches, match_count } => {
@@ -991,9 +1053,18 @@ async fn main() {
                                     let (mx, my) = matches[i];
                                     if x == mx && y == my {
                                         let t = (timer / ANIM_DURATION).min(1.0);
-                                        // Pop: Scale up quickly, then fade
-                                        scale = 1.0 + (t * (0.6 + (board.combo_count as f32 * 0.1)));
-                                        alpha = (1.0 - t).powi(2);
+                                        // Pop with anticipation: squash first (0.0-0.2), then burst
+                                        if t < 0.2 {
+                                            let s = t / 0.2;
+                                            scale_y = 1.0 - s * 0.2;
+                                            scale_x = 1.0 + s * 0.1;
+                                        } else {
+                                            let s = (t - 0.2) / 0.8;
+                                            scale_x = 1.1 + s * 0.5;
+                                            scale_y = 0.9 + s * 0.7;
+                                            alpha = (1.0 - s).powi(2);
+                                        }
+
                                         if board.combo_count > 1 {
                                             draw_x += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
                                             draw_y += qrand::gen_range(-2.0, 2.0) * board.combo_count as f32;
@@ -1003,36 +1074,46 @@ async fn main() {
                             }
                             GameState::Reshuffling { next_row, .. } => {
                                 if y == next_row.saturating_sub(1) {
-                                    // Add a small mechanical "thud" shake offset
                                     draw_x += qrand::gen_range(-3.0, 3.0);
                                     draw_y += qrand::gen_range(-3.0, 3.0);
                                 }
                             }
                             _ => {
-                                // Nervous "panic shake" when time is low (< 10s)
                                 if is_playing && board.time_left < 10.0 {
                                     let intensity = (1.0 - (board.time_left / 10.0)).powi(2) * 4.0;
                                     draw_x += qrand::gen_range(-intensity, intensity);
                                     draw_y += qrand::gen_range(-intensity, intensity);
                                 }
                                 
-                                // Pulse for selected tile
                                 if let Some((sx, sy)) = board.selected {
                                     if x == sx && y == sy {
-                                        scale = 1.0 + (get_time() * 12.0).sin() as f32 * 0.08;
+                                        let pulse = (get_time() * 12.0).sin() as f32 * 0.08;
+                                        scale_x += pulse;
+                                        scale_y += pulse;
                                     }
                                 }
                             }
                         }
+
+                        // Apply landing "thud" (Impact)
+                        if board.impact_timers[y][x] > 0.0 {
+                            let t = board.impact_timers[y][x] / 0.25;
+                            let s = (t * std::f32::consts::PI).sin();
+                            scale_y -= s * 0.15;
+                            scale_x += s * 0.1;
+                        }
+
                         if let Some(t_idx) = board.grid[y][x] {
-                            let actual_cell = cell_size * scale;
                             let pad = cell_size * 0.1;
+                            let draw_w = (cell_size - pad * 2.0) * scale_x;
+                            let draw_h = (cell_size - pad * 2.0) * scale_y;
+                            
                             draw_texture_ex(
                                 &textures[t_idx as usize],
-                                draw_x + cell_size / 2.0 - actual_cell / 2.0 + pad,
-                                draw_y + cell_size / 2.0 - actual_cell / 2.0 + pad,
+                                draw_x + cell_size / 2.0 - draw_w / 2.0,
+                                draw_y + (cell_size - pad) - draw_h, // Anchor to bottom of cell for squash/stretch
                                 Color::new(1.0, 1.0, 1.0, alpha),
-                                DrawTextureParams { dest_size: Some(vec2(actual_cell - pad * 2.0, actual_cell - pad * 2.0)), ..Default::default() },
+                                DrawTextureParams { dest_size: Some(vec2(draw_w, draw_h)), ..Default::default() },
                             );
                         }
                     }
@@ -1040,8 +1121,18 @@ async fn main() {
             }
         }
 
+        // Draw floating scores
+        for fs in &board.floating_scores {
+            let t = fs.timer / fs.max_time;
+            let alpha = 1.0 - t;
+            let color = Color::new(1.0, 1.0, 1.0, alpha);
+            let size = (font_size * 0.6) * (1.0 + t * 0.2);
+            let text = format!("+{}", fs.score);
+            let dims = measure_text(&text, None, size as u16, 1.0);
+            draw_text(&text, fs.x - dims.width / 2.0, fs.y, size, color);
+        }
+
         // --- HUD & Bars ---
-        let font_size = sh * 0.05;
         ui.update(board.score, board.max_combo, board.level, board.level_tiles_cleared, board.level_goal, font_size);
         
         let bar_w = board_size;

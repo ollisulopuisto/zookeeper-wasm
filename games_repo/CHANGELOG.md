@@ -2,6 +2,19 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.26.143] - 2026-03-26
+### Added
+- **Disney-style "Squash and Stretch" (Zookeeper):** Major animation overhaul focusing on weight and fluidity.
+  - **Swapping:** Tiles now elongate in the direction of movement and squash upon arrival.
+  - **Landing "Thud":** Falling tiles now squash vertically when hitting the bottom or other tiles, giving them a sense of weight.
+  - **Enhanced Pop:** Added "anticipation" squash before tiles clear, making the pop feel more reactive.
+### Changed
+- **Animation Pacing (Zookeeper):** Slowed down core animations (increased duration to 0.35s) to allow the new squash/stretch effects to be visually registered by the player.
+
+## [26.3.26.142] - 2026-03-26
+### Added
+- **Floating Scores (Zookeeper):** Points now float up from cleared matches, providing immediate and satisfying visual feedback for score gains.
+
 ## [26.3.26.141] - 2026-03-26
 ### Added
 - **"Juicy" Animations (Zookeeper):** Significant visual overhaul for all core game actions to make them feel more responsive and satisfying.
