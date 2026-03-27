@@ -981,14 +981,17 @@ async fn main() {
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    draw_rectangle(_prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
-                    draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
-                    if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
-                        let mut buffer = [0u8; 16];
-                        let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
-                        if len > 0 {
-                            if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
-                                current_name = js_name.trim().to_string();
+                    let is_mobile = sw < 600.0 && sw < sh;
+                    if is_mobile {
+                        draw_rectangle(_prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                        draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
+                        if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
+                            let mut buffer = [0u8; 16];
+                            let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
+                            if len > 0 {
+                                if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
+                                    current_name = js_name.trim().to_string();
+                                }
                             }
                         }
                     }
@@ -1318,12 +1321,15 @@ async fn main() {
 
             #[cfg(target_arch = "wasm32")]
             {
-                let prompt_w = sw * 0.4;
-                let prompt_x = sw / 2.0 - prompt_w / 2.0;
-                let prompt_y = sh * 0.6;
-                let prompt_h = sh * 0.06;
-                draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
-                draw_text_centered("TAP FOR POPUP", prompt_y + prompt_h * 0.7, font_size * 0.4, WHITE);
+                let is_mobile = sw < 600.0 && sw < sh;
+                if is_mobile {
+                    let prompt_w = sw * 0.4;
+                    let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                    let prompt_y = sh * 0.6;
+                    let prompt_h = sh * 0.06;
+                    draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                    draw_text_centered("TAP FOR POPUP", prompt_y + prompt_h * 0.7, font_size * 0.4, WHITE);
+                }
             }
 
             let ok_text = "OK";
