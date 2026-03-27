@@ -750,7 +750,8 @@ async fn main() {
                         // Wait for all visual falling animations to finish before checking cascades
                         let all_settled = board.v_offsets.iter().flatten().all(|&v| v >= 0.0);
                         if !all_settled {
-                            board.state = GameState::Falling { timer: 0.0 };
+                            // Keep current timer so we don't add an extra delay before checking cascades
+                            board.state = GameState::Falling { timer };
                         } else {
                             let mut match_arr = [(0, 0); COLS * ROWS];
                             let count = board.find_matches(&mut match_arr);
