@@ -7,6 +7,8 @@ All notable changes to the games in this monorepo will be documented in this fil
 - **Expanded Bestiary (Zookeeper):** Added 8 new animal types: Rabbit, Cat, Dog, Mouse, Sheep, Chick, Fox, and Cow, bringing the total to 20.
 - **Dynamic Difficulty Extension (Zookeeper):** Level progression now scales up to 20 animal types (at level 29+), starting with a more relaxed 6 animals at Level 1 for a smoother difficulty curve.
 - **Asset Downloader (Zookeeper):** Updated `download_assets.py` to support the new animals.
+### Fixed
+- **Asset Tests (Zookeeper):** Updated `test_assets.py` to correctly assert the new emoji count (25) and allow shorter hex codes for UI icons.
 
 ## [26.3.27.149] - 2026-03-27
 ### Added
