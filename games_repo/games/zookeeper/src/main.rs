@@ -14,7 +14,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.26.145";
+const VERSION: &str = "26.3.27.150";
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -81,8 +81,8 @@ fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> 
     Some((gx, gy))
 }
 
-/// The number of distinct animal types available in the game.
-const TILE_TYPES: u8 = 7;
+/// The number of distinct animal types available in the game (MAX).
+const TILE_TYPES: u8 = 20;
 /// The duration (in seconds) of tile animations like swapping.
 const ANIM_DURATION: f32 = 0.35;
 /// The duration (in seconds) of the tile clearing (pop) animation.
@@ -246,6 +246,18 @@ impl Board {
         board
     }
 
+    fn active_tile_types(&self) -> u8 {
+        // Starts at 6 animals.
+        // Adds one more animal every 2 levels.
+        // Level 1-2: 6
+        // Level 3-4: 7
+        // ...
+        // Level 29-30: 20
+        let extra = (self.level as u32).saturating_sub(1) / 2;
+        let active = (6u32 + extra).min(TILE_TYPES as u32);
+        active as u8
+    }
+
     fn load_high_scores() -> Vec<LeaderboardEntry> {
         let mut buffer = [0u8; 4096];
         let len = unsafe { js_load_leaderboard(buffer.as_mut_ptr(), buffer.len() as u32) };
@@ -281,11 +293,12 @@ impl Board {
 
     fn fill_initial(&mut self, rules: GenerationRules) {
         let mut attempts = 0;
+        let types = self.active_tile_types();
         loop {
             for y in 0..ROWS {
                 for x in 0..COLS {
                     loop {
-                        let tile = (qrand::rand() % TILE_TYPES as u32) as u8;
+                        let tile = (qrand::rand() % types as u32) as u8;
                         self.grid[y][x] = Some(tile);
                         if !self.has_match_at(x, y) {
                             break;
@@ -477,13 +490,26 @@ async fn main() {
     storage::store(Settings { muted: false, slow_mode: false });
 
     let textures = [
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f427.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f42f.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f418.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f992.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None),
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None),
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None), // Monkey
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f427.png"), None), // Penguin
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f42f.png"), None), // Tiger
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f418.png"), None), // Elephant
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f992.png"), None), // Giraffe
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None), // Panda
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None), // Frog
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f981.png"), None), // Lion
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f99b.png"), None), // Hippo
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f993.png"), None), // Zebra
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f437.png"), None), // Pig
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f428.png"), None), // Koala
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f430.png"), None), // Rabbit
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f431.png"), None), // Cat
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f436.png"), None), // Dog
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f42d.png"), None), // Mouse
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f411.png"), None), // Sheep
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f424.png"), None), // Chick
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f98a.png"), None), // Fox
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f404.png"), None), // Cow
     ];
 
     let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../assets/1f507.png"), None);
@@ -750,7 +776,7 @@ async fn main() {
                             }
                         }
                         if board.grid[0][x].is_none() {
-                            board.grid[0][x] = Some((qrand::rand() % TILE_TYPES as u32) as u8);
+                            board.grid[0][x] = Some((qrand::rand() % board.active_tile_types() as u32) as u8);
                             board.v_offsets[0][x] = -1.0;
                             board.v_velocities[0][x] = 6.0; // Initial falling speed
                             moved = true;
@@ -859,10 +885,11 @@ async fn main() {
                         }
                     } else if attempts >= 2000 {
                         // Absolute fallback
+                        let types = board.active_tile_types();
                         for y in 0..ROWS {
                             for x in 0..COLS {
                                 loop {
-                                    let t = (qrand::rand() % TILE_TYPES as u32) as u8;
+                                    let t = (qrand::rand() % types as u32) as u8;
                                     target[y][x] = t;
                                     let mut temp = [[None; COLS]; ROWS];
                                     for ty in 0..ROWS { for tx in 0..COLS { temp[ty][tx] = if ty < y || (ty == y && tx <= x) { Some(target[ty][tx]) } else { None }; } }
@@ -916,9 +943,10 @@ async fn main() {
                     board.level_goal += 25;
                     board.time_left = 60.0;
                     let mut target = [[0u8; COLS]; ROWS];
+                    let types = board.active_tile_types();
                     loop {
                         for y in 0..ROWS { for x in 0..COLS { loop {
-                            let tile = (qrand::rand() % TILE_TYPES as u32) as u8;
+                            let tile = (qrand::rand() % types as u32) as u8;
                             target[y][x] = tile;
                             let mut temp_board = [[None; COLS]; ROWS];
                             for ty in 0..ROWS { for tx in 0..COLS { temp_board[ty][tx] = Some(target[ty][tx]); } }
