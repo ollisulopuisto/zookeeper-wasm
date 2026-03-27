@@ -253,8 +253,9 @@ impl Board {
         // Level 3-4: 7
         // ...
         // Level 29-30: 20
-        let extra = (self.level as u8).saturating_sub(1) / 2;
-        (6 + extra).min(TILE_TYPES)
+        let extra = (self.level as u32).saturating_sub(1) / 2;
+        let active = (6u32 + extra).min(TILE_TYPES as u32);
+        active as u8
     }
 
     fn load_high_scores() -> Vec<LeaderboardEntry> {
