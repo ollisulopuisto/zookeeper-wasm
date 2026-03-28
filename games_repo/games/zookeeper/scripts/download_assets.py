@@ -9,7 +9,6 @@ EMOJIS = {
     "giraffe": "1f992",
     "panda": "1f43c",
     "frog": "1f438",
-    "lion": "1f981",
     "hippo": "1f99b",
     "zebra": "1f993",
     "pig": "1f437",
