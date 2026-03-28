@@ -489,6 +489,8 @@ async fn main() {
     // Initialize settings storage
     storage::store(Settings { muted: false, slow_mode: false });
 
+    let tex_snail = Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None);
+
     let textures = [
         Texture2D::from_file_with_format(include_bytes!("../assets/1f435.png"), None), // Monkey
         Texture2D::from_file_with_format(include_bytes!("../assets/1f427.png"), None), // Penguin
@@ -497,7 +499,7 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f992.png"), None), // Giraffe
         Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None), // Panda
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None), // Frog
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None), // Snail
+        tex_snail.clone(), // Snail (reuse existing texture handle)
         Texture2D::from_file_with_format(include_bytes!("../assets/1f99b.png"), None), // Hippo
         Texture2D::from_file_with_format(include_bytes!("../assets/1f993.png"), None), // Zebra
         Texture2D::from_file_with_format(include_bytes!("../assets/1f437.png"), None), // Pig
@@ -514,7 +516,6 @@ async fn main() {
 
     let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../assets/1f507.png"), None);
     let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../assets/1f50a.png"), None);
-    let tex_snail = Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None);
     let tex_pause = Texture2D::from_file_with_format(include_bytes!("../assets/23f8.png"), None);
     let tex_play = Texture2D::from_file_with_format(include_bytes!("../assets/25b6.png"), None);
 
