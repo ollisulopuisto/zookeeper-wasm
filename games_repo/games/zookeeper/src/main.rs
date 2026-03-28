@@ -497,7 +497,7 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f992.png"), None), // Giraffe
         Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None), // Panda
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None), // Frog
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f981.png"), None), // Lion
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None), // Snail
         Texture2D::from_file_with_format(include_bytes!("../assets/1f99b.png"), None), // Hippo
         Texture2D::from_file_with_format(include_bytes!("../assets/1f993.png"), None), // Zebra
         Texture2D::from_file_with_format(include_bytes!("../assets/1f437.png"), None), // Pig
