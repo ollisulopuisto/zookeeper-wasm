@@ -938,7 +938,7 @@ async fn main() {
             }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
-                if timer >= 2.0 {
+                if timer >= 1.0 {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
                     board.level_goal += 25;
@@ -1304,10 +1304,22 @@ async fn main() {
             draw_text_centered("RESHUFFLING...", sh / 2.0 + font_size, font_size * 0.6, WHITE);
         }
 
-        if let GameState::LevelUp { .. } = board.state {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.5));
-            draw_text_centered(&format!("LEVEL {} CLEAR!", board.level), sh / 2.0, font_size * 1.5, GREEN);
-            draw_text_centered("GET READY...", sh / 2.0 + font_size, font_size * 0.6, WHITE);
+        if let GameState::LevelUp { timer } = board.state {
+            let progress = (timer / 1.0).clamp(0.0, 1.0);
+            let alpha = (progress * 3.0).min(0.7);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, alpha));
+
+            let bounce = (progress * std::f32::consts::PI).sin();
+            let title_size = font_size * (1.2 + bounce * 0.5);
+            let title_y = sh / 2.0 - (1.0 - progress).powi(2) * (sh * 0.2);
+            let title_text = format!("LEVEL {} CLEAR!", board.level);
+            let dims = measure_text(&title_text, None, title_size as u16, 1.0);
+            draw_text(&title_text, sw / 2.0 - dims.width / 2.0, title_y, title_size, Color::new(0.0, 0.89, 0.21, progress.min(1.0)));
+
+            let sub_alpha = (progress * 2.0 - 1.0).max(0.0);
+            let sub_y = sh / 2.0 + font_size * 1.2 + (1.0 - sub_alpha) * (sh * 0.05);
+            let dims_sub = measure_text("GET READY...", None, (font_size * 0.6) as u16, 1.0);
+            draw_text("GET READY...", sw / 2.0 - dims_sub.width / 2.0, sub_y, font_size * 0.6, Color::new(1.0, 1.0, 1.0, sub_alpha));
         }
 
         if let GameState::EnteringName { score, combo, name, snail } = &board.state {
