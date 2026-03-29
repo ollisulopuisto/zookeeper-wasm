@@ -48,7 +48,7 @@ jobs:
         run: |
           cd games_repo && make build
           # Post-process all wasm files with wasm-opt -O3
-          find games_repo/docs -name "*.wasm" -exec wasm-opt -O3 {} -o {} \;
+          find docs -name "*.wasm" -exec wasm-opt -O3 {} -o {} \;
           
       - name: Setup Pages
         uses: actions/configure-pages@v4
