@@ -16,6 +16,13 @@ const FRICTION: f32 = 0.75;
 const MAX_SPEED: f32 = 2.0;
 const TERMINAL_VELOCITY: f32 = 6.0;
 
+// Animation Constants
+const TRANSITION_OUT_DURATION: f32 = 0.8;
+const TRANSITION_HOLD_START: f32 = 0.8;
+const TRANSITION_HOLD_END: f32 = 1.2;
+const TRANSITION_IN_START: f32 = 1.2;
+const TRANSITION_TOTAL_DURATION: f32 = 2.0;
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Direction { Left, Right }
 
@@ -541,11 +548,27 @@ impl Game {
 
     pub fn draw(&self, gfx: &SpriteManager, input: &InputManager, vx: f32, vy: f32, scale: f32, virtual_height: f32) {
         let game_vy = vy + HUD_HEIGHT * scale;
-        let (warp_scale, warp_rot) = if self.transition_timer > 0.0 {
-            if self.transition_timer < 1.0 { (1.0 - self.transition_timer, self.transition_timer * 5.0) }
-            else { (self.transition_timer - 1.0, (2.0 - self.transition_timer) * 5.0) }
-        } else { (1.0, 0.0) };
-
+        let t = self.transition_timer;
+        
+        let (warp_scale, warp_rot) = if t > 0.0 {
+        let (warp_scale, warp_rot) = if t > 0.0 {
+            // Animation phases: 
+            // 0.0 - 0.8: Shrink/Warp out
+            // 0.8 - 1.2: Pause/Hold (Level change happens at 1.0)
+            // 1.2 - 2.0: Grow/Warp in
+            
+            if t < TRANSITION_HOLD_START {
+                let p = t / TRANSITION_OUT_DURATION;
+                (1.0 - p * 0.2, p * 0.5) // Gentle shrink and slight rotation
+            } else if t < TRANSITION_HOLD_END {
+                (0.8, 0.5) // Hold state during level change (fixed rotation to 0.5 for continuity)
+            } else {
+                let p = (t - TRANSITION_IN_START) / (TRANSITION_TOTAL_DURATION - TRANSITION_IN_START);
+                (0.8 + p * 0.2, 0.5 * (1.0 - p)) // Gentle grow and return rotation
+            }
+        } else {
+            (1.0, 0.0)
+        };
         for y in 0..14 {
             for x in 0..16 {
                 if self.level.tiles[y * 16 + x] == 1 {

@@ -13,6 +13,7 @@ setup:
 build:
 	@mkdir -p docs/assets
 	cp index.html docs/
+	cp scripts/platform.js docs/assets/platform.js
 	cp assets/icon.png docs/assets/icon.png
 	cp assets/1f680.png docs/assets/1f680.png
 	cp assets/bubbles_icon.png docs/assets/bubbles_icon.png
@@ -20,6 +21,7 @@ build:
 		echo "Building $$game..."; \
 		$(MAKE) -C games/$$game build || exit 1; \
 		mkdir -p docs/$$game || exit 1; \
+		cp scripts/platform.js docs/$$game/platform.js || exit 1; \
 		cp -r games/$$game/dist/* docs/$$game/ || exit 1; \
 	done
 

@@ -41,9 +41,14 @@ jobs:
       - name: Run Tests
         run: cargo test --workspace --all-targets --all-features
 
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get install -y binaryen
+
       - name: Build WASM Games
         run: |
           cd games_repo && make build
+          # Post-process all wasm files with wasm-opt -O3
+          find games_repo/docs -name "*.wasm" -exec wasm-opt -O3 {} -o {} \;
           
       - name: Setup Pages
         uses: actions/configure-pages@v4

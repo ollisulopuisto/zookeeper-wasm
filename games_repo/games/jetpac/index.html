@@ -76,6 +76,7 @@
         <p class="hint">(Ensure mute switch is OFF on iOS for audio)</p>
     </div>
     
+    <script src="platform.js"></script>
     <script src="mq_js_bundle.js"></script>
     <script>
         // Capture AudioContext to resume it on iOS Safari
@@ -150,6 +151,11 @@
         gameCanvas.addEventListener('mousedown', () => {
             gameCanvas.focus();
         });
+
+        // Auto-start on non-iOS platforms
+        if (!window.GamePlatform.isIOS()) {
+            startGame();
+        }
     </script>
 </body>
 </html>
