@@ -14,7 +14,11 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.27.150";
+const VERSION: &str = "26.3.300161";
+
+// Animation Constants
+const LEVEL_UP_TOTAL_DELAY: f32 = 2.0;
+const LEVEL_UP_ANIM_DURATION: f32 = 1.5;
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -938,7 +942,7 @@ async fn main() {
             }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
-                if timer >= 1.0 {
+                if timer >= LEVEL_UP_TOTAL_DELAY {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
                     board.level_goal += 25;
@@ -1305,21 +1309,18 @@ async fn main() {
         }
 
         if let GameState::LevelUp { timer } = board.state {
-        if let GameState::LevelUp { timer } = board.state {
-            let total_delay = 2.0;
-            let anim_end = 1.5;
-            let progress = (timer / anim_end).clamp(0.0, 1.0);
+            let progress = (timer / LEVEL_UP_ANIM_DURATION).clamp(0.0, 1.0);
             
             let alpha = (progress * 3.0).min(0.7);
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, alpha));
 
             // Gentle animation that settles before the level change
-            let bounce = if timer < anim_end { (progress * std::f32::consts::PI).sin() } else { 0.0 };
+            let bounce = if timer < LEVEL_UP_ANIM_DURATION { (progress * std::f32::consts::PI).sin() } else { 0.0 };
             let title_size = font_size * (1.1 + bounce * 0.2);
             let title_y = sh / 2.0 - (1.0 - progress).powi(2) * (sh * 0.1);
             let title_text = format!("LEVEL {} CLEAR!", board.level);
             
-            let text_alpha = if timer < anim_end { 1.0 } else { (1.0 - (timer - anim_end) / (total_delay - anim_end)).max(0.0) };
+            let text_alpha = if timer < LEVEL_UP_ANIM_DURATION { 1.0 } else { (1.0 - (timer - LEVEL_UP_ANIM_DURATION) / (LEVEL_UP_TOTAL_DELAY - LEVEL_UP_ANIM_DURATION)).max(0.0) };
             let dims = measure_text(&title_text, None, title_size as u16, 1.0);
             draw_text(&title_text, sw / 2.0 - dims.width / 2.0, title_y, title_size, Color::new(0.0, 0.89, 0.21, text_alpha));
 

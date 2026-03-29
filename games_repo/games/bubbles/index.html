@@ -67,6 +67,7 @@
         <button id="start-button" onclick="startGame()">START GAME</button>
     </div>
     
+    <script src="platform.js"></script>
     <script src="mq_js_bundle.js"></script>
     <script>
         // Capture AudioContext to resume it on iOS Safari
@@ -153,8 +154,7 @@
         window.addEventListener('touchend', resumeAudio, true);
 
         // Auto-start on non-iOS platforms
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        if (!isIOS) {
+        if (!window.GamePlatform.isIOS()) {
             startGame();
         }
     </script>

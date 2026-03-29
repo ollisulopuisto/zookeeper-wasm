@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.3.30.161] - 2026-03-30
+## [26.3.300161] - 2026-03-30
 ### Changed
 - **iOS Sound Initialization:** Added auto-start logic to skip the "Start Game" button on non-iOS platforms across all games (Bubbles, Zookeeper, Jetpac).
 - **Level Transition Refinement (Bubbles):** Smoothed out the level cleared warp animation to be less "restless" by reducing rotation and scaling intensity.
