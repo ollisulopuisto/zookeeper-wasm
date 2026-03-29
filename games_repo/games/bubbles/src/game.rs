@@ -553,7 +553,7 @@ impl Game {
             
             if t < 0.8 {
                 let p = t / 0.8;
-                (1.0 - p * 0.2, p * 0.5) // Gentle shrink and slight rotation
+                (1.0 - p * 0.2, p * 0.4) // Gentle shrink and slight rotation
             } else if t < 1.2 {
                 (0.8, 0.4) // Hold state during level change
             } else {
