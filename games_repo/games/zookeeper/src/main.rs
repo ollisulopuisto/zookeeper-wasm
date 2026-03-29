@@ -938,7 +938,7 @@ async fn main() {
             }
             GameState::LevelUp { mut timer } => {
                 timer += dt;
-                if timer >= 2.0 {
+                if timer >= 1.0 {
                     board.level += 1;
                     board.level_tiles_cleared = 0;
                     board.level_goal += 25;
@@ -1305,6 +1305,7 @@ async fn main() {
         }
 
         if let GameState::LevelUp { timer } = board.state {
+        if let GameState::LevelUp { timer } = board.state {
             let total_delay = 2.0;
             let anim_end = 1.5;
             let progress = (timer / anim_end).clamp(0.0, 1.0);
@@ -1327,7 +1328,6 @@ async fn main() {
             let dims_sub = measure_text("GET READY...", None, (font_size * 0.6) as u16, 1.0);
             draw_text("GET READY...", sw / 2.0 - dims_sub.width / 2.0, sub_y, font_size * 0.6, Color::new(1.0, 1.0, 1.0, sub_alpha));
         }
-
         if let GameState::EnteringName { score, combo, name, snail } = &board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
