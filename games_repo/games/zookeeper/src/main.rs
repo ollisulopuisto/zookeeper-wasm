@@ -1309,7 +1309,6 @@ async fn main() {
         }
 
         if let GameState::LevelUp { timer } = board.state {
-        if let GameState::LevelUp { timer } = board.state {
             let progress = (timer / LEVEL_UP_ANIM_DURATION).clamp(0.0, 1.0);
             
             let alpha = (progress * 3.0).min(0.7);
