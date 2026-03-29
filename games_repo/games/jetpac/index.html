@@ -150,6 +150,12 @@
         gameCanvas.addEventListener('mousedown', () => {
             gameCanvas.focus();
         });
+
+        // Auto-start on non-iOS platforms
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (!isIOS) {
+            startGame();
+        }
     </script>
 </body>
 </html>

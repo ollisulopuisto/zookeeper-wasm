@@ -157,6 +157,12 @@
         window.addEventListener('click', resumeAudio, true);
         window.addEventListener('touchstart', resumeAudio, true);
         window.addEventListener('touchend', resumeAudio, true);
+
+        // Auto-start on non-iOS platforms
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (!isIOS) {
+            startGame();
+        }
     </script>
 </body>
 </html>
