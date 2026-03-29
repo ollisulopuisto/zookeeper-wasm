@@ -1309,6 +1309,7 @@ async fn main() {
         }
 
         if let GameState::LevelUp { timer } = board.state {
+        if let GameState::LevelUp { timer } = board.state {
             let progress = (timer / LEVEL_UP_ANIM_DURATION).clamp(0.0, 1.0);
             
             let alpha = (progress * 3.0).min(0.7);
@@ -1328,15 +1329,7 @@ async fn main() {
             let sub_y = title_y + title_size * 0.8 + font_size * 0.5;
             let dims_sub = measure_text("GET READY...", None, (font_size * 0.6) as u16, 1.0);
             draw_text("GET READY...", sw / 2.0 - dims_sub.width / 2.0, sub_y, font_size * 0.6, Color::new(1.0, 1.0, 1.0, sub_alpha));
-        }
-        if let GameState::EnteringName { score, combo, name, snail } = &board.state {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
-            draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
-            let mut stats = format!("SCORE: {}  COMBO: X{}", score, combo);
-            if *snail { stats.push_str(" (SNAIL)"); }
-            draw_text_centered(&stats, sh * 0.25, font_size * 0.6, WHITE);
-            draw_text_centered("Type your name", sh * 0.35, font_size * 0.6, GRAY);
-            let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
+        }            let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
             draw_text_centered(&display_name, sh * 0.5, font_size, WHITE);
 
             #[cfg(target_arch = "wasm32")]

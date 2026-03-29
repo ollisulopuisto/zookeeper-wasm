@@ -551,6 +551,7 @@ impl Game {
         let t = self.transition_timer;
         
         let (warp_scale, warp_rot) = if t > 0.0 {
+        let (warp_scale, warp_rot) = if t > 0.0 {
             // Animation phases: 
             // 0.0 - 0.8: Shrink/Warp out
             // 0.8 - 1.2: Pause/Hold (Level change happens at 1.0)
@@ -560,7 +561,7 @@ impl Game {
                 let p = t / TRANSITION_OUT_DURATION;
                 (1.0 - p * 0.2, p * 0.5) // Gentle shrink and slight rotation
             } else if t < TRANSITION_HOLD_END {
-                (0.8, 0.5) // Hold state during level change (fixed rotation from 0.4 to 0.5)
+                (0.8, 0.5) // Hold state during level change (fixed rotation to 0.5 for continuity)
             } else {
                 let p = (t - TRANSITION_IN_START) / (TRANSITION_TOTAL_DURATION - TRANSITION_IN_START);
                 (0.8 + p * 0.2, 0.5 * (1.0 - p)) // Gentle grow and return rotation
@@ -568,7 +569,6 @@ impl Game {
         } else {
             (1.0, 0.0)
         };
-
         for y in 0..14 {
             for x in 0..16 {
                 if self.level.tiles[y * 16 + x] == 1 {
