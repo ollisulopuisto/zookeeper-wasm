@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.300169] - 2026-03-30
+### Changed
+- **CI/CD Optimization:** Integrated `wasm-opt` into the deployment pipeline to further reduce WASM binary sizes and improve load times.
+
 ## [26.3.300161] - 2026-03-30
 ### Changed
 - **iOS Sound Initialization:** Added auto-start logic to skip the "Start Game" button on non-iOS platforms across all games (Bubbles, Zookeeper, Jetpac).
