@@ -1305,7 +1305,6 @@ async fn main() {
         }
 
         if let GameState::LevelUp { timer } = board.state {
-        if let GameState::LevelUp { timer } = board.state {
             let total_delay = 2.0;
             let anim_end = 1.5;
             let progress = (timer / anim_end).clamp(0.0, 1.0);
