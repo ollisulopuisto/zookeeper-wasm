@@ -551,7 +551,6 @@ impl Game {
         let t = self.transition_timer;
         
         let (warp_scale, warp_rot) = if t > 0.0 {
-        let (warp_scale, warp_rot) = if t > 0.0 {
             // Animation phases: 
             // 0.0 - 0.8: Shrink/Warp out
             // 0.8 - 1.2: Pause/Hold (Level change happens at 1.0)
