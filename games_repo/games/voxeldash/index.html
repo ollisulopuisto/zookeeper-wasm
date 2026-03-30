@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VoxelDash</title>
+    <style>
+        body { margin: 0; background: #111; color: white; overflow: hidden; font-family: sans-serif; }
+        #container { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        #controls { position: absolute; bottom: 20px; left: 20px; color: #888; }
+        svg { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="controls">
+        WASD: Move | SPACE: Jump | (Camera follows movement)
+    </div>
+
+    <script type="module">
+        import { Heerich } from 'https://esm.sh/heerich';
+        import init, { Game } from './pkg/voxeldash.js';
+
+        async function start() {
+            await init();
+            const game = new Game();
+            
+            const container = document.getElementById('container');
+            const keys = new Set();
+            
+            window.addEventListener('keydown', (e) => keys.add(e.keyCode));
+            window.addEventListener('keyup', (e) => keys.delete(e.keyCode));
+
+            let lastTime = performance.now();
+            
+            function loop(currentTime) {
+                const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+                lastTime = currentTime;
+                
+                const sceneData = game.tick(dt, new Uint8Array(Array.from(keys)));
+                
+                if (sceneData) {
+                    if (sceneData.won) {
+                        container.innerHTML = "<h1>YOU WIN!</h1><button onclick='location.reload()'>Restart</button>";
+                        return;
+                    }
+                    const heerich = new Heerich({
+                        tile: [30, 30],
+                        camera: { 
+                            type: 'perspective', 
+                            angle: sceneData.camera_angle, 
+                            distance: 25 
+                        },
+                        style: { fill: '#ddd', stroke: '#111', strokeWidth: 0.1 }
+                    });
+
+                    if (sceneData.voxels) {
+                        sceneData.voxels.forEach(v => {
+                            heerich.addBox({ 
+                                position: v.position, 
+                                size: v.size,
+                                style: { fill: v.color }
+                            });
+                        });
+                    }
+
+                    container.innerHTML = heerich.toSVG({ padding: 100 });
+                }
+                
+                requestAnimationFrame(loop);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        start();
+    </script>
+</body>
+</html>
