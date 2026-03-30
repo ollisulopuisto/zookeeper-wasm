@@ -1,6 +1,6 @@
 [package]
 name = "zookeeper_wasm"
-version = "26.3.300169"
+version = "26.3.300177"
 edition = "2021"
 
 [dependencies]

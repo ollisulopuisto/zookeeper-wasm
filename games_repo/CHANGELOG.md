@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.3.300177] - 2026-03-30
+### Changed
+- **Level Transition (Zookeeper):** Snappier and less busy level cleared animation. Reduced total duration to 1.0s and animation to 0.4s.
+
 ## [26.3.300169] - 2026-03-30
 ### Changed
 - **CI/CD Optimization:** Integrated `wasm-opt` into the deployment pipeline to further reduce WASM binary sizes and improve load times.
