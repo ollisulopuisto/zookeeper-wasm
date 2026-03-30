@@ -14,11 +14,11 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.300169";
+const VERSION: &str = "26.3.300177";
 
 // Animation Constants
-const LEVEL_UP_TOTAL_DELAY: f32 = 2.0;
-const LEVEL_UP_ANIM_DURATION: f32 = 1.5;
+const LEVEL_UP_TOTAL_DELAY: f32 = 1.0;
+const LEVEL_UP_ANIM_DURATION: f32 = 0.4;
 
 /// Caches UI text and dimensions to avoid expensive formatting and measurement in the loop.
 struct UIState {
@@ -1314,10 +1314,10 @@ async fn main() {
             let alpha = (progress * 3.0).min(0.7);
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, alpha));
 
-            // Gentle animation that settles before the level change
+            // Simplified animation for the level change
             let bounce = if timer < LEVEL_UP_ANIM_DURATION { (progress * std::f32::consts::PI).sin() } else { 0.0 };
-            let title_size = font_size * (1.1 + bounce * 0.2);
-            let title_y = sh / 2.0 - (1.0 - progress).powi(2) * (sh * 0.1);
+            let title_size = font_size * (1.1 + bounce * 0.1);
+            let title_y = sh / 2.0 - (1.0 - progress) * (sh * 0.02);
             let title_text = format!("LEVEL {} CLEAR!", board.level);
             
             let text_alpha = if timer < LEVEL_UP_ANIM_DURATION { 1.0 } else { (1.0 - (timer - LEVEL_UP_ANIM_DURATION) / (LEVEL_UP_TOTAL_DELAY - LEVEL_UP_ANIM_DURATION)).max(0.0) };
