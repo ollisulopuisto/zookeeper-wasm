@@ -19,6 +19,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      changed_games: ${{ steps.detect_changes.outputs.changed_games }}
+      shared_changed: ${{ steps.detect_changes.outputs.shared_changed }}
+      rebuild_all: ${{ steps.detect_changes.outputs.rebuild_all }}
     steps:
       - uses: actions/checkout@v4
       
@@ -33,6 +37,59 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Detect changed paths
+        id: detect_changes
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"
+          else
+            BASE="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+          fi
+          CHANGED_FILES="$(git diff --name-only "$BASE" "${{ github.sha }}" || true)"
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SHARED_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -Eq '^(Cargo\.toml|Cargo\.lock|games_repo/Cargo\.toml|games_repo/Cargo\.lock|games_repo/Makefile|games_repo/index\.template\.html|games_repo/scripts/|games_repo/assets/|\.github/workflows/deploy\.yml)'; then
+            SHARED_CHANGED=true
+          fi
+
+          CHANGED_GAMES=""
+          for game in zookeeper bubbles lumines; do
+            if echo "$CHANGED_FILES" | grep -q "^games_repo/games/$game/"; then
+              CHANGED_GAMES="$CHANGED_GAMES $game"
+            fi
+          done
+          CHANGED_GAMES="$(echo "$CHANGED_GAMES" | xargs || true)"
+
+          REBUILD_ALL=false
+          if [ "$SHARED_CHANGED" = true ] || [ -z "$CHANGED_GAMES" ]; then
+            REBUILD_ALL=true
+          fi
+
+          echo "shared_changed=$SHARED_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "changed_games=$CHANGED_GAMES" >> "$GITHUB_OUTPUT"
+          echo "rebuild_all=$REBUILD_ALL" >> "$GITHUB_OUTPUT"
+
+      - name: Cache zookeeper dist
+        uses: actions/cache@v4
+        with:
+          path: games_repo/games/zookeeper/dist
+          key: zookeeper-dist-${{ hashFiles('games_repo/games/zookeeper/**', 'games_repo/scripts/**', 'games_repo/assets/**', 'games_repo/Cargo.toml', 'games_repo/Cargo.lock', 'Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache bubbles dist
+        uses: actions/cache@v4
+        with:
+          path: games_repo/games/bubbles/dist
+          key: bubbles-dist-${{ hashFiles('games_repo/games/bubbles/**', 'games_repo/scripts/**', 'games_repo/assets/**', 'games_repo/Cargo.toml', 'games_repo/Cargo.lock', 'Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache lumines dist
+        uses: actions/cache@v4
+        with:
+          path: games_repo/games/lumines/dist
+          key: lumines-dist-${{ hashFiles('games_repo/games/lumines/**', 'games_repo/scripts/**', 'games_repo/assets/**', 'games_repo/Cargo.toml', 'games_repo/Cargo.lock', 'Cargo.toml', 'Cargo.lock') }}
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -46,7 +103,12 @@ jobs:
 
       - name: Build WASM Games
         run: |
-          cd games_repo && make build
+          if [ "${{ steps.detect_changes.outputs.rebuild_all }}" = "true" ]; then
+            BUILD_GAMES=""
+          else
+            BUILD_GAMES="${{ steps.detect_changes.outputs.changed_games }}"
+          fi
+          cd games_repo && make build BUILD_GAMES="$BUILD_GAMES"
           # Post-process all wasm files with wasm-opt -O3
           find docs -name "*.wasm" -exec wasm-opt -O3 {} -o {} \;
           

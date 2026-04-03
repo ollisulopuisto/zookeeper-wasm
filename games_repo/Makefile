@@ -1,5 +1,6 @@
 GAMES := zookeeper bubbles lumines
 VERSION := v26.04.03.5
+BUILD_GAMES ?=
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">
@@ -52,9 +53,17 @@ build: index.html
 	cp assets/icon.png docs/assets/icon.png
 	cp assets/bubbles_icon.png docs/assets/bubbles_icon.png
 	@for game in $(GAMES); do \
-		echo "Building $$game..."; \
-		$(MAKE) -C games/$$game build || exit 1; \
+		if [ -z "$(BUILD_GAMES)" ] || echo " $(BUILD_GAMES) " | grep -q " $$game "; then \
+			echo "Building $$game..."; \
+			$(MAKE) -C games/$$game build || exit 1; \
+		elif [ -d games/$$game/dist ]; then \
+			echo "Skipping build for $$game (using existing dist)..."; \
+		else \
+			echo "Cache miss for $$game dist; building $$game..."; \
+			$(MAKE) -C games/$$game build || exit 1; \
+		fi; \
 		mkdir -p docs/$$game || exit 1; \
+		rm -rf docs/$$game/* || exit 1; \
 		cp scripts/platform.js docs/$$game/platform.js || exit 1; \
 		cp -r games/$$game/dist/* docs/$$game/ || exit 1; \
 	done
