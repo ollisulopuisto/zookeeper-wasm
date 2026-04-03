@@ -441,10 +441,15 @@ impl Game {
         let sw = screen_width();
         let sh = screen_height();
         
-        // Reserve a fixed strip at the top for the HUD (score, combo, freeze meter, next block).
-        // The board fills as much of the remaining space as possible, then centres horizontally.
-        let hud_h = 110.0_f32;
-        let cell_size = (sw / COLS as f32).min((sh - hud_h).max(0.0) / ROWS as f32);
+        // Proportional layout inspired by Zookeeper: reserve a fraction of screen height
+        // for the HUD above the board so the split scales correctly on every device.
+        let hud_h = sh * 0.20;
+        let font_lg = hud_h * 0.25;  // large HUD text
+        let font_sm = hud_h * 0.13;  // small HUD text
+        let margin  = sw  * 0.03;    // horizontal gutter
+
+        // Board fills the remaining screen, centred horizontally.
+        let cell_size = (sw / COLS as f32).min((sh - hud_h) / ROWS as f32);
         let board_w = cell_size * COLS as f32;
         let board_h = cell_size * ROWS as f32;
         let offset_x = (sw - board_w) / 2.0;
@@ -523,31 +528,31 @@ impl Game {
         } else {
             let tx = offset_x + self.timeline_x * cell_size;
             draw_line(tx, offset_y, tx, offset_y + board_h, 4.0, SKYBLUE);
-            draw_text("TIME FROZEN", sw / 2.0 - 60.0, offset_y - 20.0, 30.0, SKYBLUE);
+            draw_text("TIME FROZEN", sw / 2.0 - font_lg * 2.5, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
         // Draw HUD
-        draw_text(&format!("SCORE: {}", self.score), 20.0, 30.0, 30.0, WHITE);
+        draw_text(&format!("SCORE: {}", self.score), margin, hud_h * 0.30, font_lg, WHITE);
         if self.combo > 1 {
-            draw_text(&format!("COMBO x{}", self.combo), 20.0, 60.0, 40.0, YELLOW);
+            draw_text(&format!("COMBO x{}", self.combo), margin, hud_h * 0.60, font_lg * 1.1, YELLOW);
         }
 
         // Freeze Meter
-        let meter_w = 200.0;
-        let meter_h = 10.0;
-        let meter_x = 20.0;
-        let meter_y = 80.0;
-        draw_rectangle(meter_x, meter_y, meter_w, meter_h, DARKGRAY);
-        draw_rectangle(meter_x, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
-        draw_text("FREEZE", meter_x, meter_y + 25.0, 15.0, GRAY);
+        let meter_w = sw * 0.30;
+        let meter_h = hud_h * 0.11;
+        let meter_y = hud_h * 0.68;
+        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
+        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
 
-        draw_text(&format!("VERSION: {}", VERSION), sw - 150.0, 20.0, 15.0, GRAY);
+        draw_text(&format!("v{}", VERSION), sw - margin - font_sm * 5.5, font_sm * 1.1, font_sm, GRAY);
 
         // Next Block
-        let next_x = sw - 100.0;
-        let next_y = 50.0;
-        let small_cell = 25.0;
-        draw_text("NEXT", next_x, next_y - 10.0, 20.0, WHITE);
+        let small_cell = hud_h * 0.35;
+        let next_w = small_cell * 2.0;
+        let next_x = sw - next_w - margin;
+        let next_y = hud_h * 0.35;
+        draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
             for c in 0..2 {
                 let color = match self.next_block[r][c] {
