@@ -19,8 +19,8 @@ where
     T: Serialize,
     F: FnMut(*const u8, u32),
 {
-    if let Ok(json_str) = serde_json::to_string(entries) {
-        saver(json_str.as_ptr(), json_str.len() as u32);
+    if let Ok(json_bytes) = serde_json::to_vec(entries) {
+        saver(json_bytes.as_ptr(), json_bytes.len() as u32);
     }
 }
 
