@@ -1,5 +1,5 @@
 GAMES := zookeeper bubbles lumines
-VERSION := v26.04.03.2
+VERSION := v26.04.03.3
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">
@@ -14,6 +14,11 @@ NAME_bubbles   := Bubbles
 NAME_lumines   := Lumines
 NAME_jetpac    := Jetpac
 NAME_voxeldash := VoxelDash
+
+# Define control descriptions
+CTRL_zookeeper := Swap gems with mouse / touch.
+CTRL_bubbles   := Arrow keys / WASD to move & jump.<br>SPACE to blow bubbles.
+CTRL_lumines   := Arrow keys / WASD to move & rotate.<br>SPACE to drop.
 
 .PHONY: all setup build test lint clean rename index.html $(GAMES)
 
@@ -31,7 +36,8 @@ index.html: index.template.html
 	@$(foreach game,$(GAMES), \
 		echo '        <a href="$(game)/" class="card">' >> .grid.tmp; \
 		echo '            $(subst ','\'',$(ICON_$(game)))' >> .grid.tmp; \
-		echo '            <span>$(NAME_$(game))</span>' >> .grid.tmp; \
+		echo '            <div class="title">$(NAME_$(game))</div>' >> .grid.tmp; \
+		echo '            <div class="controls">$(CTRL_$(game))</div>' >> .grid.tmp; \
 		echo '        </a>' >> .grid.tmp; \
 	)
 	@sed -e '/{{GAMES_GRID}}/{r .grid.tmp' -e 'd;}' \
