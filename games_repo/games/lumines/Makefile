@@ -1,4 +1,4 @@
-VERSION=26.04.03.1
+VERSION=26.04.03.2
 
 .PHONY: build serve
 
@@ -10,6 +10,10 @@ build:
 		cp ../../../target/wasm32-unknown-unknown/release/lumines_wasm.wasm dist/; \
 	elif [ -f ../../../target/wasm32-unknown-unknown/release/lumines-wasm.wasm ]; then \
 		cp ../../../target/wasm32-unknown-unknown/release/lumines-wasm.wasm dist/lumines_wasm.wasm; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/lumines_wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/lumines_wasm.wasm dist/; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/lumines-wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/lumines-wasm.wasm dist/lumines_wasm.wasm; \
 	else \
 		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi

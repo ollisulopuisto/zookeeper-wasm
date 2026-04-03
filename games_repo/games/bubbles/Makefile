@@ -6,8 +6,12 @@ build:
 	@mkdir -p dist
 	@if [ -f ../../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then \
 		cp ../../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; \
+	elif [ -f ../../../target/wasm32-unknown-unknown/release/bubbles-wasm.wasm ]; then \
+		cp ../../../target/wasm32-unknown-unknown/release/bubbles-wasm.wasm dist/bubbles.wasm; \
 	elif [ -f ../../target/wasm32-unknown-unknown/release/bubbles.wasm ]; then \
 		cp ../../target/wasm32-unknown-unknown/release/bubbles.wasm dist/bubbles.wasm; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/bubbles-wasm.wasm ]; then \
+		cp ../../target/wasm32-unknown-unknown/release/bubbles-wasm.wasm dist/bubbles.wasm; \
 	else \
 		echo "Error: WASM binary not found in target directory"; exit 1; \
 	fi

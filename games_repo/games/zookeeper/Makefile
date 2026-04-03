@@ -30,7 +30,11 @@ build: assets
 	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
 	@# Try both underscored and hyphenated names as Cargo behavior can vary
-	@if [ -f ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm ]; then \
+	@if [ -f ../../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm ]; then \
+		cp ../../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm dist/; \
+	elif [ -f ../../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm ]; then \
+		cp ../../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm dist/zookeeper_wasm.wasm; \
+	elif [ -f ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm ]; then \
 		cp ../../target/wasm32-unknown-unknown/release/zookeeper_wasm.wasm dist/; \
 	elif [ -f ../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm ]; then \
 		cp ../../target/wasm32-unknown-unknown/release/zookeeper-wasm.wasm dist/zookeeper_wasm.wasm; \
