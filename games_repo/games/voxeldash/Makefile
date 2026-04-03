@@ -14,8 +14,8 @@ build:
 	cp index.html dist/
 
 serve: build
-	@echo "Serving VoxelDash at http://0.0.0.0:8000 (accessible on LAN)"
-	python3 -m http.server 8000 -d dist
+	@echo "Serving VoxelDash at http://0.0.0.0:23232 (accessible on LAN)"
+	python3 -m http.server 23232 -d dist
 
 clean:
 	rm -rf dist
