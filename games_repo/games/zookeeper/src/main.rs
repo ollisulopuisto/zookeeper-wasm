@@ -8,6 +8,9 @@ use macroquad::prelude::*;
 use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
+use shared::easing::ease_back_out;
+use shared::leaderboard::{load_list, save_list};
+use shared::touch_input::{get_grid_coords, keyboard_swap_target};
 
 /// The standard grid width for the game board.
 const COLS: usize = 8;
@@ -70,19 +73,6 @@ impl UIState {
             self.last_progress = (cleared, goal);
         }
     }
-}
-
-/// Helper to convert screen coordinates to grid coordinates with tolerance for edge taps.
-fn get_grid_coords(mx: f32, my: f32, ox: f32, oy: f32, size: f32, cell: f32) -> Option<(usize, usize)> {
-    let buffer = 4.0;
-    if mx < ox - buffer || mx >= ox + size + buffer || my < oy - buffer || my >= oy + size + buffer {
-        return None;
-    }
-    let gx = ((mx - ox) / cell).floor() as i32;
-    let gy = ((my - oy) / cell).floor() as i32;
-    let gx = gx.clamp(0, (COLS - 1) as i32) as usize;
-    let gy = gy.clamp(0, (ROWS - 1) as i32) as usize;
-    Some((gx, gy))
 }
 
 /// The number of distinct animal types available in the game (MAX).
@@ -263,16 +253,12 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<LeaderboardEntry> {
-        let mut buffer = [0u8; 4096];
-        let len = unsafe { js_load_leaderboard(buffer.as_mut_ptr(), buffer.len() as u32) };
-        if len == 0 {
-            return vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES];
+        let mut scores =
+            load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe { js_load_leaderboard(ptr, max_len) });
+        if scores.is_empty() {
+            scores = vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES];
         }
-        
-        let json_str = String::from_utf8_lossy(&buffer[..len as usize]);
-        serde_json::from_str(&json_str).unwrap_or_else(|_| {
-            vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES]
-        })
+        scores
     }
 
     fn qualifies_for_leaderboard(&self) -> bool {
@@ -290,9 +276,7 @@ impl Board {
         self.high_scores.truncate(MAX_HIGH_SCORES);
 
         // Save to JS
-        if let Ok(json_str) = serde_json::to_string(&self.high_scores) {
-            unsafe { js_save_leaderboard(json_str.as_ptr(), json_str.len() as u32) };
-        }
+        save_list(&self.high_scores, |ptr, len| unsafe { js_save_leaderboard(ptr, len) });
     }
 
     fn fill_initial(&mut self, rules: GenerationRules) {
@@ -444,43 +428,6 @@ fn draw_text_centered(text: &str, y: f32, size: f32, color: Color) {
     let sw = screen_width();
     let dims = measure_text(text, None, size as u16, 1.0);
     draw_text(text, sw / 2.0 - dims.width / 2.0, y, size, color);
-}
-
-// --- Easing Functions ---
-
-#[allow(dead_code)]
-fn ease_back_out(t: f32) -> f32 {
-    let c1 = 1.70158;
-    let c3 = c1 + 1.0;
-    1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
-}
-
-#[allow(dead_code)]
-fn ease_elastic_out(t: f32) -> f32 {
-    let c4 = (2.0 * std::f32::consts::PI) / 3.0;
-    if t == 0.0 { 0.0 }
-    else if t == 1.0 { 1.0 }
-    else {
-        2.0f32.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0
-    }
-}
-
-#[allow(dead_code)]
-fn ease_out_bounce(mut t: f32) -> f32 {
-    let n1 = 7.5625;
-    let d1 = 2.75;
-    if t < 1.0 / d1 {
-        n1 * t * t
-    } else if t < 2.0 / d1 {
-        t -= 1.5 / d1;
-        n1 * t * t + 0.75
-    } else if t < 2.5 / d1 {
-        t -= 2.25 / d1;
-        n1 * t * t + 0.9375
-    } else {
-        t -= 2.625 / d1;
-        n1 * t * t + 0.984375
-    }
 }
 
 #[macroquad::main(window_conf)]
@@ -635,7 +582,7 @@ async fn main() {
                 }
             }
             GameState::Idle => {
-                let grid_coords = get_grid_coords(mx, my, offset_x, offset_y, board_size, cell_size);
+                let grid_coords = get_grid_coords(mx, my, offset_x, offset_y, board_size, cell_size, COLS, ROWS);
 
                 if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause && !over_snail {
                     if let Some((gx, gy)) = grid_coords {
@@ -668,22 +615,12 @@ async fn main() {
 
                 // Keyboard shortcuts for swapping when a piece is selected
                 if let Some((sx, sy)) = board.selected {
-                    let mut target = None;
                     let up = is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::Up);
                     let down = is_key_pressed(KeyCode::S) || is_key_pressed(KeyCode::Down);
                     let left = is_key_pressed(KeyCode::A) || is_key_pressed(KeyCode::Left);
                     let right = is_key_pressed(KeyCode::D) || is_key_pressed(KeyCode::Right);
 
-                    if up && sy > 0 {
-                        target = Some((sx, sy - 1));
-                    } else if down && sy < ROWS - 1 {
-                        target = Some((sx, sy + 1));
-                    } else if left && sx > 0 {
-                        target = Some((sx - 1, sy));
-                    } else if right && sx < COLS - 1 {
-                        target = Some((sx + 1, sy));
-                    }
-
+                    let target = keyboard_swap_target(sx, sy, COLS, ROWS, up, down, left, right);
                     if let Some((gx, gy)) = target {
                         board.start_swap(sx, sy, gx, gy, &settings, &snd_swap);
                     }

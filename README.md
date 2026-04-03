@@ -34,6 +34,7 @@ A collection of self-contained, 60 FPS WebAssembly games built with Rust and Mac
 │   ├── Makefile        # Top-level build targets (setup / build / test)
 │   ├── docs/           # Build output → served by GitHub Pages
 │   └── games/
+│       ├── shared/     # Shared Rust helpers for multiple games
 │       ├── bubbles/
 │       ├── jetpac/
 │       ├── lumines/
