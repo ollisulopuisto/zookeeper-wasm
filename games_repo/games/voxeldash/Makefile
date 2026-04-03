@@ -4,7 +4,7 @@ WASM_BINDGEN := ../../../bin/wasm-bindgen
 
 build:
 	@echo "Building VoxelDash WASM..."
-	RUSTUP_HOME=$(shell pwd)/../../../.rustup_local CARGO_HOME=$(shell pwd)/../../../.cargo_local cargo build --target wasm32-unknown-unknown --release
+	cargo build --target wasm32-unknown-unknown --release
 	@mkdir -p dist
 	@if [ -f ../../target/wasm32-unknown-unknown/release/voxeldash.wasm ]; then \
 		$(WASM_BINDGEN) --target web --out-dir dist/pkg ../../target/wasm32-unknown-unknown/release/voxeldash.wasm; \
