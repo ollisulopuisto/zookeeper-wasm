@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "games_repo/games/shared",
     "games_repo/games/zookeeper",
     "games_repo/games/bubbles",
     "games_repo/games/lumines",
