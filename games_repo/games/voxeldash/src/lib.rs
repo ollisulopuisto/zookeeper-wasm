@@ -129,10 +129,10 @@ impl Game {
         }
 
         // Goal check
-        let dist_to_goal = ((self.player_pos[0] - self.goal_pos[0] as f32).powi(2) + 
-                           (self.player_pos[1] - self.goal_pos[1] as f32).powi(2) + 
-                           (self.player_pos[2] - self.goal_pos[2] as f32).powi(2)).sqrt();
-        if dist_to_goal < 1.5 {
+        let dx = self.player_pos[0] - self.goal_pos[0] as f32;
+        let dy = self.player_pos[1] - self.goal_pos[1] as f32;
+        let dz = self.player_pos[2] - self.goal_pos[2] as f32;
+        if dx * dx + dy * dy + dz * dz < 1.5 * 1.5 {
             self.won = true;
         }
 
