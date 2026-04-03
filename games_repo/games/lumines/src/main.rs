@@ -441,11 +441,14 @@ impl Game {
         let sw = screen_width();
         let sh = screen_height();
         
-        let cell_size = (sw / COLS as f32).min(sh / (ROWS as f32 + 4.0));
+        // Reserve a fixed strip at the top for the HUD (score, combo, freeze meter, next block).
+        // The board fills as much of the remaining space as possible, then centres horizontally.
+        let hud_h = 110.0_f32;
+        let cell_size = (sw / COLS as f32).min((sh - hud_h).max(0.0) / ROWS as f32);
         let board_w = cell_size * COLS as f32;
         let board_h = cell_size * ROWS as f32;
         let offset_x = (sw - board_w) / 2.0;
-        let offset_y = (sh - board_h) / 2.0;
+        let offset_y = hud_h;
 
         // Draw Background
         let bg_color = if self.is_frozen { Color::new(0.05, 0.05, 0.05, 1.0) } else { Color::new(0.05, 0.05, 0.1, 1.0) };
@@ -485,7 +488,7 @@ impl Game {
                 for c in 0..2 {
                     let gx = self.active.x + c as i32;
                     let gy = self.active.y + r as f32;
-                    if gy >= -1.0 {
+                    if gy >= 0.0 {
                         let mut color = match self.active.colors[r][c] {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
