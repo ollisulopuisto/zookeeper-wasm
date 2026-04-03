@@ -168,8 +168,8 @@ impl Game {
 
     fn get_floor_height(&self, x: f32, z: f32) -> f32 {
         let mut max_h = -20.0;
-        let px = x.round() as i32;
-        let pz = z.round() as i32;
+        let px = x.floor() as i32;
+        let pz = z.floor() as i32;
 
         for v in &self.world {
             // Check if player is within the horizontal bounds of the voxel
