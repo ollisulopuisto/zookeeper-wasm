@@ -6,7 +6,10 @@ A collection of self-contained, 60 FPS WASM games built with Rust and Macroquad.
 **[Main Portal on GitHub Pages](https://ollisulopuisto.github.io/games/)**
 
 Available Games:
+- **[VoxelDash](https://ollisulopuisto.github.io/games/voxeldash/)** - 2.5D procedural voxel platformer (SVG-based).
 - **[Zookeeper Clone](https://ollisulopuisto.github.io/games/zookeeper/)**
+- **[Jetpac Clone](https://ollisulopuisto.github.io/games/jetpac/)**
+- **[Bubbles](https://ollisulopuisto.github.io/games/bubbles/)**
 
 ## 🚀 Features
 - **Monorepo Architecture:** Powered by Cargo Workspaces.

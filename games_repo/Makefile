@@ -1,4 +1,4 @@
-GAMES := jetpac zookeeper bubbles
+GAMES := jetpac zookeeper bubbles voxeldash
 
 .PHONY: all setup build test lint clean rename $(GAMES)
 

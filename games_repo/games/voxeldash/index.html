@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VoxelDash</title>
+    <style>
+        body { margin: 0; background: #050505; color: white; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        #container { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        #ui { position: absolute; top: 20px; left: 20px; text-shadow: 2px 2px #000; }
+        #controls { position: absolute; bottom: 20px; left: 20px; color: #666; font-size: 0.9rem; }
+        svg { width: 100vw; height: 100vh; filter: drop-shadow(0 0 5px rgba(0,255,0,0.2)); }
+        .win { font-size: 4rem; color: #0f0; text-align: center; }
+        button { background: #0f0; border: none; padding: 1rem 2rem; font-family: inherit; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="status">EXPLORE THE VOXEL VOID</div>
+    </div>
+    <div id="container"></div>
+    <div id="controls">
+        WASD / ARROWS: Move | SPACE: Jump | (Camera auto-rotates)
+    </div>
+
+    <script type="module">
+        import { Heerich } from 'https://esm.sh/heerich';
+        import init, { Game } from './pkg/voxeldash.js';
+
+        async function start() {
+            await init();
+            const game = new Game();
+            
+            const container = document.getElementById('container');
+            const keys = new Set();
+            
+            window.addEventListener('keydown', (e) => keys.add(e.keyCode));
+            window.addEventListener('keyup', (e) => keys.delete(e.keyCode));
+
+            let lastTime = performance.now();
+            
+            function loop(currentTime) {
+                const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+                lastTime = currentTime;
+                
+                const sceneData = game.tick(dt, new Uint8Array(Array.from(keys)));
+                
+                if (sceneData) {
+                    if (sceneData.won) {
+                        container.innerHTML = "<div class='win'><h1>GOAL REACHED!</h1><button onclick='location.reload()'>RESTART</button></div>";
+                        return;
+                    }
+                    
+                    const heerich = new Heerich({
+                        tile: [30, 30],
+                        camera: { 
+                            type: 'perspective', 
+                            angle: sceneData.camera_angle, 
+                            distance: 25,
+                            // Use camera_target to keep player in view
+                            offset: [-sceneData.camera_target[0], -sceneData.camera_target[1] + 2, -sceneData.camera_target[2]]
+                        },
+                        style: { fill: '#ddd', stroke: '#000', strokeWidth: 0.05 }
+                    });
+
+                    if (sceneData.voxels) {
+                        sceneData.voxels.forEach(v => {
+                            heerich.addBox({ 
+                                position: v.position, 
+                                size: v.size,
+                                style: { fill: v.color }
+                            });
+                        });
+                    }
+
+                    container.innerHTML = heerich.toSVG({ padding: 50 });
+                }
+                
+                requestAnimationFrame(loop);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        start();
+    </script>
+</body>
+</html>
