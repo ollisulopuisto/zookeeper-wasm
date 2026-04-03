@@ -438,7 +438,7 @@ impl Game {
                         draw_rectangle_lines(bx, by, cell_size, cell_size, 3.0, h_color);
                     } else {
                         draw_rectangle(bx, by, cell_size, cell_size, c);
-                        draw_rectangle_lines(bx, by, cell_size, cell_size, 1.0, Color::new(0, 0, 0, 0.5));
+                        draw_rectangle_lines(bx, by, cell_size, cell_size, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
                     }
                 }
             }
