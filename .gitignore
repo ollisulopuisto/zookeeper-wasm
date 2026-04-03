@@ -3,3 +3,4 @@ target/
 .cargo_home/
 .cargo_local/
 .rustup_local/
+games_repo/index.html

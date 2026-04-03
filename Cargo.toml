@@ -1,9 +1,7 @@
 [workspace]
 members = [
-    "games_repo/games/jetpac",
     "games_repo/games/zookeeper",
     "games_repo/games/bubbles",
-    "games_repo/games/voxeldash",
     "games_repo/games/lumines",
 ]
 resolver = "2"
