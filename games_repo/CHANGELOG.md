@@ -2,6 +2,15 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.3.168] - 2026-04-03
+### Added
+- **New Game: Lumines WASM:** A rhythm-puzzle game clone based on the Lumines mechanism.
+  - Implemented 16x10 grid with 2x2 falling blocks.
+  - Added rotation, movement, and fast drop mechanics.
+  - Implemented "Sweep Line" (Timeline) mechanism for clearing matched blocks.
+  - Added scoring and basic game over logic.
+  - Integrated into the games portal.
+
 ## [26.3.300177] - 2026-03-30
 ### Changed
 - **Level Transition (Zookeeper):** Snappier and less busy level cleared animation. Reduced total duration to 1.0s and animation to 0.4s.
