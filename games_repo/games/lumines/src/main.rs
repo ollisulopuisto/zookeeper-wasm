@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.4";
+const VERSION: &str = "26.04.03.5";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -572,6 +572,13 @@ async fn main() {
         }
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use macroquad::prelude::miniquad::window;
+                // This is a hacky way to focus the canvas in Macroquad WASM if needed,
+                // but usually clicking it is enough if it has a tabindex.
+            }
+            
             let audio = game.audio;
             game = Game::new().await;
             game.audio = audio;
