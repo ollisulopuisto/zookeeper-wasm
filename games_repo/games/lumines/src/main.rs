@@ -1,17 +1,37 @@
 //! Lumines WASM: A rhythm-puzzle game clone in Rust using Macroquad.
 
+mod audio;
+
 use macroquad::prelude::*;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
+use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.1";
+const VERSION: &str = "26.04.03.3";
+const BPM: f32 = 130.0;
+const BEATS_PER_SWEEP: f32 = 8.0;
+const FREEZE_DURATION: f32 = 4.0;
+const MAX_FREEZE_METER: f32 = 100.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
     ColorA,
     ColorB,
+}
+
+impl BlockColor {
+    fn random() -> Self {
+        if qrand::gen_range(0, 2) == 0 { BlockColor::ColorA } else { BlockColor::ColorB }
+    }
+
+    fn random_2x2() -> [[BlockColor; 2]; 2] {
+        [
+            [Self::random(), Self::random()],
+            [Self::random(), Self::random()],
+        ]
+    }
 }
 
 struct ActiveBlock {
@@ -21,13 +41,7 @@ struct ActiveBlock {
 }
 
 impl ActiveBlock {
-    fn new() -> Self {
-        let mut colors = [[BlockColor::ColorA; 2]; 2];
-        for r in 0..2 {
-            for c in 0..2 {
-                colors[r][c] = if qrand::gen_range(0, 2) == 0 { BlockColor::ColorA } else { BlockColor::ColorB };
-            }
-        }
+    fn new(colors: [[BlockColor; 2]; 2]) -> Self {
         Self {
             x: COLS as i32 / 2 - 1,
             y: -2.0,
@@ -52,6 +66,15 @@ impl ActiveBlock {
     }
 }
 
+struct Particle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    life: f32,
+    color: Color,
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
@@ -60,33 +83,66 @@ struct Game {
     timeline_x: f32,
     timeline_speed: f32,
     score: u32,
+    combo: u32,
     game_over: bool,
     waiting_to_start: bool,
     drop_timer: f32,
     drop_interval: f32,
+    audio: AudioManager,
+    particles: Vec<Particle>,
+    
+    // Time Freeze
+    freeze_meter: f32,
+    is_frozen: bool,
+    freeze_timer: f32,
+
+    // Touch/Mouse state
+    last_mouse_pos: Vec2,
+    swipe_start: Option<Vec2>,
+    tap_timer: f32,
 }
 
 impl Game {
-    fn new() -> Self {
-        let mut next_block = [[BlockColor::ColorA; 2]; 2];
-        for r in 0..2 {
-            for c in 0..2 {
-                next_block[r][c] = if qrand::gen_range(0, 2) == 0 { BlockColor::ColorA } else { BlockColor::ColorB };
-            }
-        }
+    async fn new() -> Self {
+        let audio = AudioManager::new().await;
+        
+        let seconds_per_sweep = (60.0 / BPM) * BEATS_PER_SWEEP;
+        let timeline_speed = COLS as f32 / seconds_per_sweep;
 
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
-            active: ActiveBlock::new(),
-            next_block,
+            active: ActiveBlock::new(BlockColor::random_2x2()),
+            next_block: BlockColor::random_2x2(),
             timeline_x: 0.0,
-            timeline_speed: 2.0, // columns per second
+            timeline_speed,
             score: 0,
+            combo: 0,
             game_over: false,
             waiting_to_start: true,
             drop_timer: 0.0,
             drop_interval: 1.0,
+            audio,
+            particles: Vec::new(),
+            freeze_meter: 0.0,
+            is_frozen: false,
+            freeze_timer: 0.0,
+            last_mouse_pos: Vec2::ZERO,
+            swipe_start: None,
+            tap_timer: 0.0,
+        }
+    }
+
+    fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
+        for _ in 0..5 {
+            self.particles.push(Particle {
+                x,
+                y,
+                vx: qrand::gen_range(-100.0, 100.0),
+                vy: qrand::gen_range(-100.0, 100.0),
+                life: 1.0,
+                color,
+            });
         }
     }
 
@@ -95,29 +151,61 @@ impl Game {
             return;
         }
 
-        // Update Timeline
-        let old_x = self.timeline_x;
-        self.timeline_x += self.timeline_speed * dt;
-        
-        // Clear marked blocks when timeline passes
-        let start_col = old_x.floor() as usize;
-        let end_col = self.timeline_x.floor() as usize;
-        
-        for col in start_col..=end_col {
-            let actual_col = col % COLS;
-            for row in 0..ROWS {
-                if self.marked[row][actual_col] {
-                    self.grid[row][actual_col] = None;
-                    self.marked[row][actual_col] = false;
-                    self.score += 10;
-                }
+        // --- Time Freeze Logic ---
+        if self.is_frozen {
+            self.freeze_timer -= dt;
+            if self.freeze_timer <= 0.0 {
+                self.is_frozen = false;
+                self.audio.play_music();
             }
         }
 
-        if self.timeline_x >= COLS as f32 {
-            self.timeline_x -= COLS as f32;
-            // Apply gravity after a full sweep
-            self.apply_gravity();
+        if !self.is_frozen && (is_key_pressed(KeyCode::LeftShift) || is_key_pressed(KeyCode::R)) && self.freeze_meter >= MAX_FREEZE_METER {
+            self.is_frozen = true;
+            self.freeze_timer = FREEZE_DURATION;
+            self.freeze_meter = 0.0;
+            self.audio.stop_music(); 
+        }
+
+        // Update Timeline
+        if !self.is_frozen {
+            let old_x = self.timeline_x;
+            self.timeline_x += self.timeline_speed * dt;
+            
+            let mut cleared_this_step = 0;
+            let start_col = old_x.floor() as usize;
+            let end_col = self.timeline_x.floor() as usize;
+            
+            for col in start_col..=end_col {
+                let actual_col = col % COLS;
+                for row in 0..ROWS {
+                    if self.marked[row][actual_col] {
+                        if let Some(color) = self.grid[row][actual_col] {
+                            let p_color = match color {
+                                BlockColor::ColorA => WHITE,
+                                BlockColor::ColorB => ORANGE,
+                            };
+                            self.spawn_particles(actual_col as f32 * 40.0, row as f32 * 40.0, p_color);
+                        }
+                        self.grid[row][actual_col] = None;
+                        self.marked[row][actual_col] = false;
+                        cleared_this_step += 1;
+                    }
+                }
+            }
+
+            if cleared_this_step > 0 {
+                self.score += cleared_this_step * 10 * (1 + self.combo);
+                self.combo += 1;
+                self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
+                self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
+            }
+
+            if self.timeline_x >= COLS as f32 {
+                self.timeline_x -= COLS as f32;
+                self.combo = 0; 
+                self.apply_gravity();
+            }
         }
 
         // Mark matches
@@ -126,13 +214,15 @@ impl Game {
         // Handle Active Block
         self.drop_timer += dt;
         if self.drop_timer >= self.drop_interval {
-            self.drop_timer -= self.drop_interval;
+            self.drop_timer = 0.0;
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
         }
 
-        // Input Handling
+        // --- Input Handling ---
+        
+        // Keyboard
         if is_key_pressed(KeyCode::Left) || is_key_pressed(KeyCode::A) {
             self.move_active(-1, 0);
         }
@@ -147,6 +237,7 @@ impl Game {
         }
         if is_key_pressed(KeyCode::Up) || is_key_pressed(KeyCode::W) || is_key_pressed(KeyCode::K) {
             self.active.rotate_cw();
+            self.audio.play_rotate();
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.active.rotate_ccw();
             }
@@ -155,6 +246,50 @@ impl Game {
             while self.move_active(0, 1) {}
             self.lock_active();
         }
+
+        // Touch & Mouse
+        let mouse_pos = mouse_position().into();
+        if is_mouse_button_pressed(MouseButton::Left) {
+            self.swipe_start = Some(mouse_pos);
+            self.tap_timer = 0.0;
+        }
+        
+        if let Some(start) = self.swipe_start {
+            self.tap_timer += dt;
+            let diff = mouse_pos - start;
+            if is_mouse_button_released(MouseButton::Left) {
+                if diff.length() < 10.0 && self.tap_timer < 0.2 {
+                    // Tap to rotate
+                    self.active.rotate_cw();
+                    self.audio.play_rotate();
+                    if self.collides(self.active.x, self.active.y.floor() as i32) {
+                        self.active.rotate_ccw();
+                    }
+                } else if diff.y > 50.0 {
+                    // Swipe down to drop
+                    while self.move_active(0, 1) {}
+                    self.lock_active();
+                }
+                self.swipe_start = None;
+            } else if diff.length() > 30.0 {
+                // Dragging to move
+                let cell_w = screen_width() / COLS as f32;
+                let dx = (diff.x / cell_w) as i32;
+                if dx != 0 {
+                    if self.move_active(dx, 0) {
+                        self.swipe_start = Some(mouse_pos);
+                    }
+                }
+            }
+        }
+
+        // Update Particles
+        for p in self.particles.iter_mut() {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt;
+        }
+        self.particles.retain(|p| p.life > 0.0);
     }
 
     fn collides(&self, x: i32, y: i32) -> bool {
@@ -185,6 +320,7 @@ impl Game {
     }
 
     fn lock_active(&mut self) {
+        self.audio.play_land();
         for r in 0..2 {
             for c in 0..2 {
                 let gx = self.active.x + c as i32;
@@ -201,22 +337,21 @@ impl Game {
             self.apply_gravity();
             self.update_matches();
             
-            // New block
             let mut colors = [[BlockColor::ColorA; 2]; 2];
             for r in 0..2 {
                 for c in 0..2 {
                     colors[r][c] = self.next_block[r][c];
-                    self.next_block[r][c] = if qrand::gen_range(0, 2) == 0 { BlockColor::ColorA } else { BlockColor::ColorB };
                 }
             }
-            self.active = ActiveBlock {
-                x: COLS as i32 / 2 - 1,
-                y: -1.0,
-                colors,
-            };
+            self.next_block = BlockColor::random_2x2();
+            
+            self.active = ActiveBlock::new(colors);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
             }
+        }
+        if self.game_over {
+            self.audio.stop_music();
         }
     }
 
@@ -234,8 +369,7 @@ impl Game {
     }
 
     fn update_matches(&mut self) {
-        // A 2x2 square of the same color forms a match.
-        // Matches can overlap and expand.
+        let mut new_match = false;
         let mut new_marked = [[false; COLS]; ROWS];
         for y in 0..ROWS - 1 {
             for x in 0..COLS - 1 {
@@ -247,14 +381,16 @@ impl Game {
                         new_marked[y][x+1] = true;
                         new_marked[y+1][x] = true;
                         new_marked[y+1][x+1] = true;
+                        if !self.marked[y][x] { new_match = true; }
                     }
                 }
             }
         }
         
-        // Retain marked status if it hasn't been swept yet.
-        // If a block was marked, it stays marked until the timeline passes.
-        // However, we only mark *new* 2x2 squares.
+        if new_match {
+            self.audio.play_match();
+        }
+
         for y in 0..ROWS {
             for x in 0..COLS {
                 if new_marked[y][x] {
@@ -275,7 +411,8 @@ impl Game {
         let offset_y = (sh - board_h) / 2.0;
 
         // Draw Background
-        draw_rectangle(offset_x, offset_y, board_w, board_h, Color::new(0.1, 0.1, 0.15, 1.0));
+        let bg_color = if self.is_frozen { Color::new(0.05, 0.05, 0.05, 1.0) } else { Color::new(0.05, 0.05, 0.1, 1.0) };
+        draw_rectangle(offset_x, offset_y, board_w, board_h, bg_color);
 
         // Draw Grid Blocks
         for y in 0..ROWS {
@@ -285,14 +422,23 @@ impl Game {
                         BlockColor::ColorA => WHITE,
                         BlockColor::ColorB => ORANGE,
                     };
+                    if self.is_frozen {
+                        let avg = (c.r + c.g + c.b) / 3.0;
+                        c = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
+                    }
+                    
+                    let bx = offset_x + x as f32 * cell_size;
+                    let by = offset_y + y as f32 * cell_size;
+                    
                     if self.marked[y][x] {
-                        // Highlight marked blocks
-                        c.r *= 1.2; c.g *= 1.2; c.b *= 1.2;
-                        draw_rectangle(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, c);
-                        draw_rectangle_lines(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, 2.0, YELLOW);
+                        let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
+                        let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
+                        let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
+                        draw_rectangle(bx, by, cell_size, cell_size, highlight);
+                        draw_rectangle_lines(bx, by, cell_size, cell_size, 3.0, h_color);
                     } else {
-                        draw_rectangle(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, c);
-                        draw_rectangle_lines(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, 1.0, BLACK);
+                        draw_rectangle(bx, by, cell_size, cell_size, c);
+                        draw_rectangle_lines(bx, by, cell_size, cell_size, 1.0, Color::new(0, 0, 0, 0.5));
                     }
                 }
             }
@@ -305,10 +451,14 @@ impl Game {
                     let gx = self.active.x + c as i32;
                     let gy = self.active.y + r as f32;
                     if gy >= -1.0 {
-                        let color = match self.active.colors[r][c] {
+                        let mut color = match self.active.colors[r][c] {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
                         };
+                         if self.is_frozen {
+                            let avg = (color.r + color.g + color.b) / 3.0;
+                            color = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
+                        }
                         draw_rectangle(offset_x + gx as f32 * cell_size, offset_y + gy * cell_size, cell_size, cell_size, color);
                         draw_rectangle_lines(offset_x + gx as f32 * cell_size, offset_y + gy * cell_size, cell_size, cell_size, 2.0, SKYBLUE);
                     }
@@ -316,20 +466,47 @@ impl Game {
             }
         }
 
+        // Draw Particles
+        for p in &self.particles {
+            let mut c = p.color;
+            c.a = p.life;
+            draw_circle(offset_x + p.x * (cell_size/40.0), offset_y + p.y * (cell_size/40.0), 3.0, c);
+        }
+
         // Draw Timeline
-        let tx = offset_x + self.timeline_x * cell_size;
-        draw_line(tx, offset_y, tx, offset_y + board_h, 3.0, WHITE);
-        draw_rectangle(tx - 2.0, offset_y, 4.0, board_h, Color::new(1.0, 1.0, 1.0, 0.3));
+        if !self.is_frozen {
+            let tx = offset_x + self.timeline_x * cell_size;
+            draw_line(tx, offset_y, tx, offset_y + board_h, 4.0, WHITE);
+            let gradient_w = 20.0;
+            draw_rectangle(tx - gradient_w, offset_y, gradient_w, board_h, Color::new(1.0, 1.0, 1.0, 0.15));
+        } else {
+            let tx = offset_x + self.timeline_x * cell_size;
+            draw_line(tx, offset_y, tx, offset_y + board_h, 4.0, SKYBLUE);
+            draw_text("TIME FROZEN", sw / 2.0 - 60.0, offset_y - 20.0, 30.0, SKYBLUE);
+        }
 
         // Draw HUD
         draw_text(&format!("SCORE: {}", self.score), 20.0, 30.0, 30.0, WHITE);
+        if self.combo > 1 {
+            draw_text(&format!("COMBO x{}", self.combo), 20.0, 60.0, 40.0, YELLOW);
+        }
+
+        // Freeze Meter
+        let meter_w = 200.0;
+        let meter_h = 10.0;
+        let meter_x = 20.0;
+        let meter_y = 80.0;
+        draw_rectangle(meter_x, meter_y, meter_w, meter_h, DARKGRAY);
+        draw_rectangle(meter_x, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+        draw_text("FREEZE", meter_x, meter_y + 25.0, 15.0, GRAY);
+
         draw_text(&format!("VERSION: {}", VERSION), sw - 150.0, 20.0, 15.0, GRAY);
 
         // Next Block
         let next_x = sw - 100.0;
         let next_y = 50.0;
-        let small_cell = 20.0;
-        draw_text("NEXT:", next_x, next_y - 10.0, 20.0, WHITE);
+        let small_cell = 25.0;
+        draw_text("NEXT", next_x, next_y - 10.0, 20.0, WHITE);
         for r in 0..2 {
             for c in 0..2 {
                 let color = match self.next_block[r][c] {
@@ -342,17 +519,18 @@ impl Game {
         }
 
         if self.waiting_to_start {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            draw_text("LUMINES WASM", sw / 2.0 - 120.0, sh / 2.0 - 40.0, 40.0, ORANGE);
-            draw_text("PRESS SPACE TO START", sw / 2.0 - 130.0, sh / 2.0 + 20.0, 25.0, WHITE);
-            draw_text("WASD to Move/Rotate", sw / 2.0 - 100.0, sh / 2.0 + 60.0, 20.0, GRAY);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
+            draw_text("LUMINES WASM", sw / 2.0 - 140.0, sh / 2.0 - 60.0, 50.0, ORANGE);
+            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, sh / 2.0, 30.0, WHITE);
+            draw_text("SHIFT: Time Freeze (when full)", sw / 2.0 - 120.0, sh / 2.0 + 40.0, 20.0, SKYBLUE);
+            draw_text("Swipe/Arrows: Move", sw / 2.0 - 100.0, sh / 2.0 + 70.0, 20.0, GRAY);
         }
 
         if self.game_over {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
-            draw_text("GAME OVER", sw / 2.0 - 100.0, sh / 2.0, 40.0, RED);
-            draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 80.0, sh / 2.0 + 40.0, 25.0, WHITE);
-            draw_text("PRESS SPACE TO RESTART", sw / 2.0 - 120.0, sh / 2.0 + 80.0, 20.0, YELLOW);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
+            draw_text("GAME OVER", sw / 2.0 - 120.0, sh / 2.0 - 40.0, 50.0, RED);
+            draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 100.0, sh / 2.0 + 20.0, 30.0, WHITE);
+            draw_text("TAP or SPACE to Restart", sw / 2.0 - 140.0, sh / 2.0 + 80.0, 25.0, YELLOW);
         }
     }
 }
@@ -360,7 +538,7 @@ impl Game {
 #[macroquad::main("Lumines WASM")]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
-    let mut game = Game::new();
+    let mut game = Game::new().await;
 
     loop {
         clear_background(BLACK);
@@ -369,9 +547,12 @@ async fn main() {
         game.update(dt);
         game.draw();
 
-        if (game.game_over || game.waiting_to_start) && is_key_pressed(KeyCode::Space) {
-            game = Game::new();
+        if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
+            let audio = game.audio;
+            game = Game::new().await;
+            game.audio = audio;
             game.waiting_to_start = false;
+            game.audio.play_music();
         }
 
         next_frame().await
