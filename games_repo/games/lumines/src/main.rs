@@ -75,6 +75,32 @@ struct Particle {
     color: Color,
 }
 
+fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
+    draw_rectangle(x, y, size, size, color);
+
+    let inset = (size * 0.04).max(1.0);
+    let inner_size = (size - inset * 2.0).max(0.0);
+    let inner_x = x + inset;
+    let inner_y = y + inset;
+
+    draw_rectangle(
+        inner_x,
+        inner_y,
+        inner_size,
+        inner_size * 0.45,
+        Color::new(1.0, 1.0, 1.0, 0.18),
+    );
+    draw_rectangle(
+        inner_x,
+        inner_y + inner_size * 0.55,
+        inner_size,
+        inner_size * 0.45,
+        Color::new(0.0, 0.0, 0.0, 0.18),
+    );
+
+    draw_rectangle_lines(x, y, size, size, border_width, border_color);
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
@@ -445,11 +471,9 @@ impl Game {
                         let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
                         let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
                         let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
-                        draw_rectangle(bx, by, cell_size, cell_size, highlight);
-                        draw_rectangle_lines(bx, by, cell_size, cell_size, 3.0, h_color);
+                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color);
                     } else {
-                        draw_rectangle(bx, by, cell_size, cell_size, c);
-                        draw_rectangle_lines(bx, by, cell_size, cell_size, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
+                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
                     }
                 }
             }
@@ -466,12 +490,15 @@ impl Game {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
                         };
-                         if self.is_frozen {
+                        if self.is_frozen {
                             let avg = (color.r + color.g + color.b) / 3.0;
                             color = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
                         }
-                        draw_rectangle(offset_x + gx as f32 * cell_size, offset_y + gy * cell_size, cell_size, cell_size, color);
-                        draw_rectangle_lines(offset_x + gx as f32 * cell_size, offset_y + gy * cell_size, cell_size, cell_size, 2.0, SKYBLUE);
+                        let bx = offset_x + gx as f32 * cell_size;
+                        let by = offset_y + gy * cell_size;
+                        let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE);
+                        draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                     }
                 }
             }
@@ -524,8 +551,7 @@ impl Game {
                     BlockColor::ColorA => WHITE,
                     BlockColor::ColorB => ORANGE,
                 };
-                draw_rectangle(next_x + c as f32 * small_cell, next_y + r as f32 * small_cell, small_cell, small_cell, color);
-                draw_rectangle_lines(next_x + c as f32 * small_cell, next_y + r as f32 * small_cell, small_cell, small_cell, 1.0, BLACK);
+                draw_stylized_block(next_x + c as f32 * small_cell, next_y + r as f32 * small_cell, small_cell, color, 1.0, BLACK);
             }
         }
 
@@ -545,7 +571,7 @@ impl Game {
         }
 
         if self.is_paused {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.92));
             draw_text("PAUSED", sw / 2.0 - 80.0, sh / 2.0, 50.0, WHITE);
             draw_text("Press P or Tap to Resume", sw / 2.0 - 110.0, sh / 2.0 + 40.0, 20.0, GRAY);
         }
