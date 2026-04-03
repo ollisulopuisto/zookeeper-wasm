@@ -12,11 +12,12 @@ pub fn get_grid_coords(
     if mx < ox - buffer || mx >= ox + size + buffer || my < oy - buffer || my >= oy + size + buffer {
         return None;
     }
+    debug_assert!(cols > 0 && rows > 0, "grid dimensions must be non-zero");
 
     let gx = ((mx - ox) / cell).floor() as i32;
     let gy = ((my - oy) / cell).floor() as i32;
-    let gx = gx.clamp(0, (cols.saturating_sub(1)) as i32) as usize;
-    let gy = gy.clamp(0, (rows.saturating_sub(1)) as i32) as usize;
+    let gx = gx.clamp(0, (cols - 1) as i32) as usize;
+    let gy = gy.clamp(0, (rows - 1) as i32) as usize;
     Some((gx, gy))
 }
 
