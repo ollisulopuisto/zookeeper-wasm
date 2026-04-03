@@ -528,7 +528,8 @@ impl Game {
         } else {
             let tx = offset_x + self.timeline_x * cell_size;
             draw_line(tx, offset_y, tx, offset_y + board_h, 4.0, SKYBLUE);
-            draw_text("TIME FROZEN", sw / 2.0 - font_lg * 2.5, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
+            let tf_dims = measure_text("TIME FROZEN", None, font_lg as u16, 1.0);
+            draw_text("TIME FROZEN", sw / 2.0 - tf_dims.width / 2.0, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
         // Draw HUD
@@ -545,10 +546,13 @@ impl Game {
         draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
         draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
 
-        draw_text(&format!("v{}", VERSION), sw - margin - font_sm * 5.5, font_sm * 1.1, font_sm, GRAY);
+        let version_label = format!("v{}", VERSION);
+        let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
+        let version_x = (sw - margin - version_dims.width).max(margin);
+        draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
 
-        // Next Block
-        let small_cell = hud_h * 0.35;
+        // Next Block – cap small_cell so 2×2 preview always fits in the right margin space
+        let small_cell = (hud_h * 0.35).min((sw * 0.5 - 2.0 * margin) / 2.0);
         let next_w = small_cell * 2.0;
         let next_x = sw - next_w - margin;
         let next_y = hud_h * 0.35;
