@@ -25,6 +25,7 @@ const COMBO_FONT_SCALE: f32 = 1.1;
 const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
 const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
 const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
+const HUD_SECTION_GAP_FACTOR: f32 = 1.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -621,14 +622,6 @@ impl Game {
             );
         }
 
-        // Freeze Meter
-        let meter_w = sw * 0.30;
-        let meter_h = hud_h * 0.11;
-        let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
-        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
-        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
-        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
-
         let version_label = format!("v{}", VERSION);
         let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
         let version_x = (pause_x - pad - version_dims.width).max(margin);
@@ -659,6 +652,18 @@ impl Game {
         let next_w = small_cell * 2.0;
         let next_x = (pause_x - pad * NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR - next_w).max(margin);
         let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
+
+        // Freeze Meter: cap width so it never overlaps the NEXT preview on narrow screens.
+        let meter_desired_w = sw * 0.30;
+        let meter_h = hud_h * 0.11;
+        let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
+        let meter_gap = pad * HUD_SECTION_GAP_FACTOR;
+        let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
+        let meter_w = meter_desired_w.min(meter_max_w_before_next);
+        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
+        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
+
         draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
             for c in 0..2 {
