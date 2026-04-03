@@ -18,8 +18,8 @@ const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
 const NEXT_PREVIEW_CELL_HUD_RATIO: f32 = 0.35;
-const NEXT_PREVIEW_HALF_WIDTH_RATIO: f32 = 0.35;
-const NEXT_PREVIEW_HALF_WIDTH_MIN: f32 = 24.0;
+const NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO: f32 = 0.35;
+const NEXT_PREVIEW_MIN_HALF_WIDTH: f32 = 24.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -638,8 +638,11 @@ impl Game {
         );
 
         // Next Block – place preview to the left of controls to avoid overlap.
-        let small_cell = (hud_h * NEXT_PREVIEW_CELL_HUD_RATIO)
-            .min((sw * NEXT_PREVIEW_HALF_WIDTH_RATIO - 2.0 * margin).max(NEXT_PREVIEW_HALF_WIDTH_MIN) / 2.0);
+        let preview_cell_from_hud = hud_h * NEXT_PREVIEW_CELL_HUD_RATIO;
+        let max_preview_width_from_screen = sw * NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO - 2.0 * margin;
+        let clamped_preview_width = max_preview_width_from_screen.max(NEXT_PREVIEW_MIN_HALF_WIDTH);
+        let preview_cell_from_screen = clamped_preview_width / 2.0;
+        let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
         let next_w = small_cell * 2.0;
         let next_x = (pause_x - pad - next_w).max(margin);
         let next_y = hud_h * 0.35;
