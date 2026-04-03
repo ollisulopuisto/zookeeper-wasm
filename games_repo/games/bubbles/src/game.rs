@@ -7,6 +7,11 @@ pub const VIRTUAL_WIDTH: f32 = 256.0;
 pub const PLAY_HEIGHT: f32 = 224.0;
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
+const PLAYER_SIZE: f32 = 16.0;
+const PLAYER_CENTER_X_OFFSET: f32 = 8.0;
+const PLAYER_SIDE_SAMPLE_Y_OFFSET: f32 = 8.0; // sample around torso to avoid head-corner side snaps
+const PLAYER_WALL_CHECK_LEFT_OFFSET: f32 = 4.0; // inset from left edge for horizontal wall probes
+const PLAYER_WALL_CHECK_RIGHT_OFFSET: f32 = 12.0; // inset from left edge for horizontal wall probes
 
 // Physics Constants
 const GRAVITY: f32 = 0.22;
@@ -700,9 +705,9 @@ impl Game {
 }
 
 fn handle_player_collision(p: &mut Player, level: &Level) {
-    let ty = (p.pos.y / TILE_SIZE) as i32;
-    let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
-    let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
+    let ty = ((p.pos.y + PLAYER_SIDE_SAMPLE_Y_OFFSET) / TILE_SIZE) as i32;
+    let ground_tile_x = (p.pos.x + PLAYER_CENTER_X_OFFSET) / TILE_SIZE;
+    let ground_tile_y = (p.pos.y + PLAYER_SIZE) / TILE_SIZE;
     
     // CEILING COLLISION - Only for the TOP BORDER (row 0)
     if p.vel.y < 0.0 {
@@ -715,8 +720,8 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
 
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
         // Only land if falling and bottom of sprite was above the tile in the previous frame
-        if p.vel.y >= 0.0 && p.pos.y + 16.0 - p.vel.y <= (ground_tile_y as i32 * 16) as f32 {
-            p.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0;
+        if p.vel.y >= 0.0 && p.pos.y + PLAYER_SIZE - p.vel.y <= ground_tile_y as i32 as f32 * TILE_SIZE {
+            p.pos.y = ground_tile_y as i32 as f32 * TILE_SIZE - PLAYER_SIZE;
             p.vel.y = 0.0;
             p.grounded = true;
         }
@@ -724,14 +729,21 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
         p.grounded = false;
     }
     
-    let left_tile_x = ((p.pos.x + 4.0) / 16.0) as i32;
-    let right_tile_x = ((p.pos.x + 12.0) / 16.0) as i32;
+    let left_tile_x = ((p.pos.x + PLAYER_WALL_CHECK_LEFT_OFFSET) / TILE_SIZE) as i32;
+    let right_tile_x = ((p.pos.x + PLAYER_WALL_CHECK_RIGHT_OFFSET) / TILE_SIZE) as i32;
     
     if level.is_wall(left_tile_x, ty) {
-        if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 16) as f32; p.vel.x = 0.0; }
+        if p.vel.x < 0.0 {
+            p.pos.x =
+                (left_tile_x as f32 + 1.0) * TILE_SIZE - PLAYER_WALL_CHECK_LEFT_OFFSET;
+            p.vel.x = 0.0;
+        }
     }
     if level.is_wall(right_tile_x, ty) {
-        if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 16) as f32; p.vel.x = 0.0; }
+        if p.vel.x > 0.0 {
+            p.pos.x = right_tile_x as f32 * TILE_SIZE - PLAYER_WALL_CHECK_RIGHT_OFFSET;
+            p.vel.x = 0.0;
+        }
     }
 }
 
