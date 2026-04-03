@@ -7,6 +7,10 @@ pub const VIRTUAL_WIDTH: f32 = 256.0;
 pub const PLAY_HEIGHT: f32 = 224.0;
 pub const HUD_HEIGHT: f32 = 16.0;
 pub const TILE_SIZE: f32 = 16.0;
+const PLAYER_SIDE_SAMPLE_Y_OFFSET: f32 = 8.0;
+const PLAYER_WALL_CHECK_LEFT_OFFSET: f32 = 4.0;
+const PLAYER_WALL_CHECK_RIGHT_OFFSET: f32 = 12.0;
+const PLAYER_WALL_RESOLVE_OFFSET: f32 = 12.0;
 
 // Physics Constants
 const GRAVITY: f32 = 0.22;
@@ -696,7 +700,7 @@ impl Game {
 }
 
 fn handle_player_collision(p: &mut Player, level: &Level) {
-    let ty = ((p.pos.y + 8.0) / TILE_SIZE) as i32;
+    let ty = ((p.pos.y + PLAYER_SIDE_SAMPLE_Y_OFFSET) / TILE_SIZE) as i32;
     let ground_tile_x = (p.pos.x + 8.0) / TILE_SIZE;
     let ground_tile_y = (p.pos.y + 16.0) / TILE_SIZE;
     
@@ -720,14 +724,20 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
         p.grounded = false;
     }
     
-    let left_tile_x = ((p.pos.x + 4.0) / 16.0) as i32;
-    let right_tile_x = ((p.pos.x + 12.0) / 16.0) as i32;
+    let left_tile_x = ((p.pos.x + PLAYER_WALL_CHECK_LEFT_OFFSET) / TILE_SIZE) as i32;
+    let right_tile_x = ((p.pos.x + PLAYER_WALL_CHECK_RIGHT_OFFSET) / TILE_SIZE) as i32;
     
     if level.is_wall(left_tile_x, ty) {
-        if p.vel.x < 0.0 { p.pos.x = (left_tile_x * 16 + 12) as f32; p.vel.x = 0.0; }
+        if p.vel.x < 0.0 {
+            p.pos.x = (left_tile_x as f32 + 1.0) * TILE_SIZE - PLAYER_WALL_RESOLVE_OFFSET;
+            p.vel.x = 0.0;
+        }
     }
     if level.is_wall(right_tile_x, ty) {
-        if p.vel.x > 0.0 { p.pos.x = (right_tile_x * 16 - 12) as f32; p.vel.x = 0.0; }
+        if p.vel.x > 0.0 {
+            p.pos.x = right_tile_x as f32 * TILE_SIZE - PLAYER_WALL_RESOLVE_OFFSET;
+            p.vel.x = 0.0;
+        }
     }
 }
 
