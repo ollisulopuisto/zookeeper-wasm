@@ -12,7 +12,9 @@ pub fn get_grid_coords(
     if mx < ox - buffer || mx >= ox + size + buffer || my < oy - buffer || my >= oy + size + buffer {
         return None;
     }
-    debug_assert!(cols > 0 && rows > 0, "grid dimensions must be non-zero");
+    if cols == 0 || rows == 0 {
+        return None;
+    }
 
     let gx = ((mx - ox) / cell).floor() as i32;
     let gy = ((my - oy) / cell).floor() as i32;
@@ -53,6 +55,12 @@ mod tests {
         assert_eq!(get_grid_coords(50.0, 50.0, 0.0, 0.0, 100.0, 12.5, 8, 8), Some((4, 4)));
         assert_eq!(get_grid_coords(-2.0, -2.0, 0.0, 0.0, 100.0, 12.5, 8, 8), Some((0, 0)));
         assert_eq!(get_grid_coords(200.0, 200.0, 0.0, 0.0, 100.0, 12.5, 8, 8), None);
+    }
+
+    #[test]
+    fn returns_none_for_zero_sized_grid() {
+        assert_eq!(get_grid_coords(5.0, 5.0, 0.0, 0.0, 100.0, 10.0, 0, 8), None);
+        assert_eq!(get_grid_coords(5.0, 5.0, 0.0, 0.0, 100.0, 10.0, 8, 0), None);
     }
 
     #[test]
