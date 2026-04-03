@@ -441,6 +441,10 @@ impl Game {
                     e.pos.x = e.pos.x.clamp(clamp_min, clamp_max);
                 }
             }
+
+            if (e.pos.x <= clamp_min && e.vel.x < 0.0) || (e.pos.x >= clamp_max && e.vel.x > 0.0) {
+                e.vel.x = -e.vel.x;
+            }
             
             let tx = ((e.pos.x + 8.0) / TILE_SIZE) as i32;
             if e.pos.y > PLAY_HEIGHT {
