@@ -205,7 +205,7 @@ impl Game {
     fn update(&mut self, dt: f32) {
         let sw = screen_width();
         let sh = screen_height();
-        let pad = 10.0;
+        let pad = (sw * 0.01).clamp(8.0, 14.0);
         let btn_size = sh * 0.06;
         let (mx, my) = mouse_position();
         let mute_x = sw - btn_size - pad;
@@ -610,7 +610,7 @@ impl Game {
         draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
 
         // Pause & Mute buttons
-        let pad = 10.0;
+        let pad = (sw * 0.01).clamp(8.0, 14.0);
         let btn_size = sh * 0.06;
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
@@ -631,10 +631,10 @@ impl Game {
             DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
-        // Next Block – cap small_cell so 2×2 preview always fits in the right margin space
-        let small_cell = (hud_h * 0.35).min((sw * 0.5 - 2.0 * margin) / 2.0);
+        // Next Block – place preview to the left of controls to avoid overlap.
+        let small_cell = (hud_h * 0.35).min((sw * 0.35 - 2.0 * margin).max(24.0) / 2.0);
         let next_w = small_cell * 2.0;
-        let next_x = sw - next_w - margin;
+        let next_x = (pause_x - pad - next_w).max(margin);
         let next_y = hud_h * 0.35;
         draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
