@@ -11,8 +11,7 @@ where
         return Vec::new();
     }
 
-    let json_str = String::from_utf8_lossy(&buffer[..len as usize]);
-    serde_json::from_str(&json_str).unwrap_or_default()
+    serde_json::from_slice(&buffer[..len as usize]).unwrap_or_default()
 }
 
 pub fn save_list<T, F>(entries: &[T], mut saver: F)
