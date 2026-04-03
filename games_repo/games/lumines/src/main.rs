@@ -90,6 +90,7 @@ struct Game {
     drop_interval: f32,
     audio: AudioManager,
     particles: Vec<Particle>,
+    is_paused: bool,
     
     // Time Freeze
     freeze_meter: f32,
@@ -124,6 +125,7 @@ impl Game {
             drop_interval: 1.0,
             audio,
             particles: Vec::new(),
+            is_paused: false,
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
@@ -147,7 +149,16 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
-        if self.game_over || self.waiting_to_start {
+        if is_key_pressed(KeyCode::P) {
+            self.is_paused = !self.is_paused;
+            if self.is_paused {
+                self.audio.stop_music();
+            } else if !self.game_over && !self.waiting_to_start && !self.is_frozen {
+                self.audio.play_music();
+            }
+        }
+
+        if self.is_paused || self.game_over || self.waiting_to_start {
             return;
         }
 
@@ -532,6 +543,12 @@ impl Game {
             draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 100.0, sh / 2.0 + 20.0, 30.0, WHITE);
             draw_text("TAP or SPACE to Restart", sw / 2.0 - 140.0, sh / 2.0 + 80.0, 25.0, YELLOW);
         }
+
+        if self.is_paused {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+            draw_text("PAUSED", sw / 2.0 - 80.0, sh / 2.0, 50.0, WHITE);
+            draw_text("Press P or Tap to Resume", sw / 2.0 - 110.0, sh / 2.0 + 40.0, 20.0, GRAY);
+        }
     }
 }
 
@@ -546,6 +563,13 @@ async fn main() {
         let dt = get_frame_time();
         game.update(dt);
         game.draw();
+
+        if game.is_paused && is_mouse_button_pressed(MouseButton::Left) {
+            game.is_paused = false;
+            if !game.game_over && !game.waiting_to_start && !game.is_frozen {
+                game.audio.play_music();
+            }
+        }
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             let audio = game.audio;

@@ -14,6 +14,7 @@ use crate::game::{Game, VIRTUAL_WIDTH, HUD_HEIGHT, PLAY_HEIGHT};
 enum AppState {
     Menu,
     Playing,
+    Paused,
     GameOver,
     EnteringName { name: String },
     Leaderboard { last_scores: Vec<(String, u32)> },
@@ -60,10 +61,22 @@ async fn main() {
                 } else {
                     vec![input.p1]
                 };
-                game.update(&inputs, &audio);
-                if game.game_over {
-                    state = AppState::GameOver;
+
+                if is_key_pressed(KeyCode::P) {
+                    state = AppState::Paused;
                     audio.stop_music();
+                } else {
+                    game.update(&inputs, &audio);
+                    if game.game_over {
+                        state = AppState::GameOver;
+                        audio.stop_music();
+                    }
+                }
+            }
+            AppState::Paused => {
+                if is_key_pressed(KeyCode::P) || is_mouse_button_pressed(MouseButton::Left) {
+                    state = AppState::Playing;
+                    audio.play_music();
                 }
             }
             AppState::GameOver => {
@@ -146,6 +159,14 @@ async fn main() {
             }
             AppState::Playing => {
                 game.draw(&gfx, &input, vx, vy, scale, target_vheight);
+            }
+            AppState::Paused => {
+                game.draw(&gfx, &input, vx, vy, scale, target_vheight);
+                draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.8));
+                let title_size = 40.0 * scale;
+                let text_size = 20.0 * scale;
+                draw_text("PAUSED", vx + 70.0 * scale, vy + 100.0 * scale, title_size, WHITE);
+                draw_text("PRESS P OR TAP", vx + 60.0 * scale, vy + 130.0 * scale, text_size, GRAY);
             }
             AppState::GameOver => {
                 let title_size = 40.0 * scale;
