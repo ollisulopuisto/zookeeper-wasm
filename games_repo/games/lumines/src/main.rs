@@ -126,7 +126,7 @@ impl Game {
         // Handle Active Block
         self.drop_timer += dt;
         if self.drop_timer >= self.drop_interval {
-            self.drop_timer = 0.0;
+            self.drop_timer -= self.drop_interval;
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
