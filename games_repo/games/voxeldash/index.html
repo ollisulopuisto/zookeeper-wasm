@@ -78,7 +78,7 @@
                         tile: [30 * (40 / scene.camera_distance), 30 * (40 / scene.camera_distance)],
                         camera: { 
                             type: 'oblique', 
-                            angle: scene.camera_yaw, // Corrected from camera_angle
+                            angle: scene.camera_yaw, 
                             camY: 0,
                             distance: 25,
                             offset: [-scene.player_pos[0], scene.player_pos[1] - 1, -scene.player_pos[2]]
@@ -94,7 +94,7 @@
                             const iz = z + 15;
                             if (ix < 0 || ix >= 31 || iz < 0 || iz >= 31) return false;
                             const height = scene.height_map[ix * 31 + iz];
-                            return -y <= height; // Keep the flip that worked for the world
+                            return -y <= height; 
                         },
                         scale: (x, y, z) => {
                             const dist = Math.sqrt((x - scene.player_pos[0])**2 + (z - scene.player_pos[2])**2);

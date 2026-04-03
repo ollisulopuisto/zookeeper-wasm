@@ -141,10 +141,12 @@ impl Game {
         }
 
         // Goal
-        let dist = ((self.player_pos[0]-self.goal_pos[0] as f32).powi(2) + 
-                    (self.player_pos[1]-self.goal_pos[1] as f32).powi(2) + 
-                    (self.player_pos[2]-self.goal_pos[2] as f32).powi(2)).sqrt();
-        if dist < 2.0 { self.won = true; }
+        let dx = self.player_pos[0] - self.goal_pos[0] as f32;
+        let dy = self.player_pos[1] - self.goal_pos[1] as f32;
+        let dz = self.player_pos[2] - self.goal_pos[2] as f32;
+        if dx * dx + dy * dy + dz * dz < 2.0 * 2.0 {
+            self.won = true;
+        }
 
         self.camera_yaw = cam_yaw;
         self.camera_y = cam_y;
