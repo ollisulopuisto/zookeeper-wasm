@@ -20,6 +20,11 @@ const HUD_CONTROL_PAD_MAX: f32 = 14.0;
 const NEXT_PREVIEW_CELL_HUD_RATIO: f32 = 0.35;
 const NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO: f32 = 0.35;
 const NEXT_PREVIEW_MIN_HALF_WIDTH: f32 = 24.0;
+const COMBO_VERTICAL_OFFSET_FACTOR: f32 = 0.95;
+const COMBO_FONT_SCALE: f32 = 1.1;
+const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
+const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
+const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -607,13 +612,19 @@ impl Game {
         let hud_top_text_y = pad + font_lg;
         draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
         if self.combo > 1 {
-            draw_text(&format!("COMBO x{}", self.combo), margin, hud_top_text_y + font_lg * 0.95, font_lg * 1.1, YELLOW);
+            draw_text(
+                &format!("COMBO x{}", self.combo),
+                margin,
+                hud_top_text_y + font_lg * COMBO_VERTICAL_OFFSET_FACTOR,
+                font_lg * COMBO_FONT_SCALE,
+                YELLOW,
+            );
         }
 
         // Freeze Meter
         let meter_w = sw * 0.30;
         let meter_h = hud_h * 0.11;
-        let meter_y = mute_y + btn_size + pad * 0.65;
+        let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
         draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
         draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
         draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
@@ -646,8 +657,8 @@ impl Game {
         let preview_cell_from_screen = clamped_preview_width / 2.0;
         let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
         let next_w = small_cell * 2.0;
-        let next_x = (pause_x - pad * 1.25 - next_w).max(margin);
-        let next_y = mute_y + btn_size + pad * 0.5;
+        let next_x = (pause_x - pad * NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR - next_w).max(margin);
+        let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
         draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
             for c in 0..2 {
