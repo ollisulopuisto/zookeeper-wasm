@@ -127,11 +127,23 @@ struct Game {
     last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
     tap_timer: f32,
+    tex_mute_on: Texture2D,
+    tex_mute_off: Texture2D,
+    tex_pause: Texture2D,
+    tex_play: Texture2D,
 }
 
 impl Game {
     async fn new() -> Self {
         let audio = AudioManager::new().await;
+        let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f507.png"), None);
+        let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f50a.png"), None);
+        let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/23f8.png"), None);
+        let tex_play = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/25b6.png"), None);
+        tex_mute_on.set_filter(FilterMode::Linear);
+        tex_mute_off.set_filter(FilterMode::Linear);
+        tex_pause.set_filter(FilterMode::Linear);
+        tex_play.set_filter(FilterMode::Linear);
         
         let seconds_per_sweep = (60.0 / BPM) * BEATS_PER_SWEEP;
         let timeline_speed = COLS as f32 / seconds_per_sweep;
@@ -158,6 +170,10 @@ impl Game {
             last_mouse_pos: Vec2::ZERO,
             swipe_start: None,
             tap_timer: 0.0,
+            tex_mute_on,
+            tex_mute_off,
+            tex_pause,
+            tex_play,
         }
     }
 
@@ -175,6 +191,36 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
+        let sw = screen_width();
+        let sh = screen_height();
+        let pad = 10.0;
+        let btn_size = sh * 0.06;
+        let (mx, my) = mouse_position();
+        let mute_x = sw - btn_size - pad;
+        let mute_y = pad;
+        let over_mute = mx >= mute_x - pad && mx <= sw && my >= 0.0 && my <= mute_y + btn_size + pad;
+        let pause_x = mute_x - btn_size - pad;
+        let pause_y = pad;
+        let over_pause = mx >= pause_x - pad && mx <= mute_x && my >= 0.0 && my <= pause_y + btn_size + pad;
+
+        if is_mouse_button_pressed(MouseButton::Left) {
+            if over_mute {
+                let new_muted = !self.audio.is_muted();
+                self.audio.set_muted(new_muted);
+                if !new_muted && !self.is_paused && !self.game_over && !self.waiting_to_start && !self.is_frozen {
+                    self.audio.play_music();
+                }
+            }
+            if over_pause {
+                self.is_paused = !self.is_paused;
+                if self.is_paused {
+                    self.audio.stop_music();
+                } else if !self.game_over && !self.waiting_to_start && !self.is_frozen {
+                    self.audio.play_music();
+                }
+            }
+        }
+
         if is_key_pressed(KeyCode::P) {
             self.is_paused = !self.is_paused;
             if self.is_paused {
@@ -286,7 +332,7 @@ impl Game {
 
         // Touch & Mouse
         let mouse_pos = mouse_position().into();
-        if is_mouse_button_pressed(MouseButton::Left) {
+        if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
             self.swipe_start = Some(mouse_pos);
             self.tap_timer = 0.0;
         }
@@ -551,6 +597,28 @@ impl Game {
         let version_x = (sw - margin - version_dims.width).max(margin);
         draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
 
+        // Pause & Mute buttons
+        let pad = 10.0;
+        let btn_size = sh * 0.06;
+        let mute_x = sw - btn_size - pad;
+        let mute_y = pad;
+        let pause_x = mute_x - btn_size - pad;
+        let pause_y = pad;
+        draw_texture_ex(
+            if self.audio.is_muted() { &self.tex_mute_on } else { &self.tex_mute_off },
+            mute_x,
+            mute_y,
+            WHITE,
+            DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
+        );
+        draw_texture_ex(
+            if self.is_paused { &self.tex_play } else { &self.tex_pause },
+            pause_x,
+            pause_y,
+            WHITE,
+            DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
+        );
+
         // Next Block – cap small_cell so 2×2 preview always fits in the right margin space
         let small_cell = (hud_h * 0.35).min((sw * 0.5 - 2.0 * margin) / 2.0);
         let next_w = small_cell * 2.0;
@@ -602,13 +670,6 @@ async fn main() {
         game.update(dt);
         game.draw();
 
-        if game.is_paused && is_mouse_button_pressed(MouseButton::Left) {
-            game.is_paused = false;
-            if !game.game_over && !game.waiting_to_start && !game.is_frozen {
-                game.audio.play_music();
-            }
-        }
-
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             #[cfg(target_arch = "wasm32")]
             {
@@ -618,8 +679,10 @@ async fn main() {
             }
             
             let audio = game.audio;
+            let muted = audio.is_muted();
             game = Game::new().await;
             game.audio = audio;
+            game.audio.set_muted(muted);
             game.waiting_to_start = false;
             game.audio.play_music();
         }
