@@ -20,6 +20,12 @@ const HUD_CONTROL_PAD_MAX: f32 = 14.0;
 const NEXT_PREVIEW_CELL_HUD_RATIO: f32 = 0.35;
 const NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO: f32 = 0.35;
 const NEXT_PREVIEW_MIN_HALF_WIDTH: f32 = 24.0;
+const COMBO_VERTICAL_OFFSET_FACTOR: f32 = 0.95;
+const COMBO_FONT_SCALE: f32 = 1.1;
+const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
+const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
+const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
+const HUD_SECTION_GAP_FACTOR: f32 = 1.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -597,31 +603,31 @@ impl Game {
         }
 
         // Draw HUD
-        draw_text(&format!("SCORE: {}", self.score), margin, hud_h * 0.30, font_lg, WHITE);
-        if self.combo > 1 {
-            draw_text(&format!("COMBO x{}", self.combo), margin, hud_h * 0.60, font_lg * 1.1, YELLOW);
-        }
-
-        // Freeze Meter
-        let meter_w = sw * 0.30;
-        let meter_h = hud_h * 0.11;
-        let meter_y = hud_h * 0.68;
-        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
-        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
-        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
-
-        let version_label = format!("v{}", VERSION);
-        let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
-        let version_x = (sw - margin - version_dims.width).max(margin);
-        draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
-
-        // Pause & Mute buttons
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * 0.06;
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let pause_x = mute_x - btn_size - pad;
         let pause_y = pad;
+
+        let hud_top_text_y = pad + font_lg;
+        draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
+        if self.combo > 1 {
+            draw_text(
+                &format!("COMBO x{}", self.combo),
+                margin,
+                hud_top_text_y + font_lg * COMBO_VERTICAL_OFFSET_FACTOR,
+                font_lg * COMBO_FONT_SCALE,
+                YELLOW,
+            );
+        }
+
+        let version_label = format!("v{}", VERSION);
+        let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
+        let version_x = (pause_x - pad - version_dims.width).max(margin);
+        draw_text(&version_label, version_x, mute_y + font_sm, font_sm, GRAY);
+
+        // Pause & Mute buttons
         draw_texture_ex(
             if self.audio.is_muted() { &self.tex_mute_on } else { &self.tex_mute_off },
             mute_x,
@@ -644,8 +650,20 @@ impl Game {
         let preview_cell_from_screen = clamped_preview_width / 2.0;
         let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
         let next_w = small_cell * 2.0;
-        let next_x = (pause_x - pad - next_w).max(margin);
-        let next_y = hud_h * 0.35;
+        let next_x = (pause_x - pad * NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR - next_w).max(margin);
+        let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
+
+        // Freeze Meter: cap width so it never overlaps the NEXT preview on narrow screens.
+        let meter_desired_w = sw * 0.30;
+        let meter_h = hud_h * 0.11;
+        let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
+        let meter_gap = pad * HUD_SECTION_GAP_FACTOR;
+        let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
+        let meter_w = meter_desired_w.min(meter_max_w_before_next);
+        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
+        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
+
         draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
             for c in 0..2 {
