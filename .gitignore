@@ -4,3 +4,8 @@ target/
 .cargo_local/
 .rustup_local/
 games_repo/index.html
+.crates.toml
+.crates2.json
+bin/
+camera.png
+heerich_source.js
