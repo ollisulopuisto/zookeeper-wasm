@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Jetpac</title>
+    <meta name="description" content="A classic-style arcade shooter written in Rust/WASM. Build your rocket, collect fuel, and launch!">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- Open Graph / Facebook / WhatsApp -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Jetpac">
+    <meta property="og:description" content="A classic-style arcade shooter written in Rust/WASM. Build your rocket, collect fuel, and launch!">
+    <meta property="og:image" content="../../assets/1f680.png">
+
+    <!-- Twitter / Bluesky -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Jetpac">
+    <meta name="twitter:description" content="A classic-style arcade shooter written in Rust/WASM. Build your rocket, collect fuel, and launch!">
+    <meta name="twitter:image" content="../../assets/1f680.png">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: monospace;
+        }
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            z-index: 5;
+            cursor: pointer;
+        }
+        #start-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            color: white;
+            text-align: center;
+        }
+        #start-button {
+            margin-top: 2rem;
+            padding: 1.5rem 3rem;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #000;
+            background: #ff0;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 255, 0, 0.4);
+        }
+        .hint { margin-top: 20px; color: #aaa; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" tabindex='1'></canvas>
+    <div id="start-overlay">
+        <h1>JETPAC</h1>
+        <p>Mobile & Desktop Supported</p>
+        <button id="start-button" onclick="startGame()">START GAME</button>
+        <p class="hint">(Ensure mute switch is OFF on iOS for audio)</p>
+    </div>
+    
+    <script src="platform.js"></script>
+    <script src="mq_js_bundle.js"></script>
+    <script>
+        // Capture AudioContext to resume it on iOS Safari
+        let captured_ctx = null;
+        (function() {
+            const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+            if (OriginalAudioContext) {
+                const NewAudioContext = function() {
+                    const ctx = new OriginalAudioContext();
+                    captured_ctx = ctx;
+                    return ctx;
+                };
+                NewAudioContext.prototype = OriginalAudioContext.prototype;
+                if (window.AudioContext) window.AudioContext = NewAudioContext;
+                if (window.webkitAudioContext) window.webkitAudioContext = NewAudioContext;
+            }
+        })();
+
+        let started = false;
+        const gameCanvas = document.getElementById('glcanvas');
+        
+        function resumeAudio() {
+            if (captured_ctx) {
+                if (captured_ctx.state === 'suspended') {
+                    captured_ctx.resume().then(() => {
+                        console.log("AudioContext resumed successfully");
+                    });
+                }
+                // Force unlock with a silent oscillator
+                try {
+                    const osc = captured_ctx.createOscillator();
+                    const silent = captured_ctx.createGain();
+                    silent.gain.value = 0;
+                    osc.connect(silent);
+                    silent.connect(captured_ctx.destination);
+                    osc.start(0);
+                    osc.stop(0.1);
+                } catch (e) {
+                    console.error("Error playing silent sound:", e);
+                }
+            }
+        }
+
+        function startGame() {
+            if (started) return;
+            started = true;
+            console.log("Starting JETPAC...");
+
+            // Try to resume on first click
+            resumeAudio();
+
+            document.getElementById('start-overlay').style.display = 'none';
+            
+            // Focus canvas for keyboard input
+            gameCanvas.focus();
+
+            // Standard Macroquad load
+            load("jetpac.wasm");
+        }
+
+        // Add touchstart for faster response on mobile
+        document.getElementById('start-button').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startGame();
+        });
+        
+        // Add listeners for any subsequent interaction to ensure audio is unlocked
+        window.addEventListener('click', resumeAudio, true);
+        window.addEventListener('touchstart', resumeAudio, true);
+        window.addEventListener('touchend', resumeAudio, true);
+
+        gameCanvas.addEventListener('mousedown', () => {
+            gameCanvas.focus();
+        });
+
+        // Auto-start on non-iOS platforms
+        if (!window.GamePlatform.isIOS()) {
+            startGame();
+        }
+    </script>
+</body>
+</html>
