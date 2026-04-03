@@ -6,6 +6,7 @@ pub struct AudioManager {
     pub match_made: Sound,
     pub clear: Sound,
     pub music: Sound,
+    muted: bool,
 }
 
 impl AudioManager {
@@ -16,33 +17,55 @@ impl AudioManager {
             match_made: load_sound_from_bytes(&generate_match_wav()).await.unwrap(),
             clear: load_sound_from_bytes(&generate_clear_wav()).await.unwrap(),
             music: load_sound_from_bytes(&generate_music_wav()).await.unwrap(),
+            muted: false,
         }
     }
 
     pub fn play_rotate(&self) {
-        play_sound(&self.rotate, PlaySoundParams { looped: false, volume: 0.3 });
+        if !self.muted {
+            play_sound(&self.rotate, PlaySoundParams { looped: false, volume: 0.3 });
+        }
     }
 
     pub fn play_land(&self) {
-        play_sound(&self.land, PlaySoundParams { looped: false, volume: 0.3 });
+        if !self.muted {
+            play_sound(&self.land, PlaySoundParams { looped: false, volume: 0.3 });
+        }
     }
 
     pub fn play_match(&self) {
-        play_sound(&self.match_made, PlaySoundParams { looped: false, volume: 0.4 });
+        if !self.muted {
+            play_sound(&self.match_made, PlaySoundParams { looped: false, volume: 0.4 });
+        }
     }
 
-    pub fn play_clear(&self, pitch: f32) {
-        play_sound(&self.clear, PlaySoundParams { looped: false, volume: 0.4 });
+    pub fn play_clear(&self, _pitch: f32) {
+        if !self.muted {
+            play_sound(&self.clear, PlaySoundParams { looped: false, volume: 0.4 });
+        }
         // Note: Macroquad's play_sound doesn't support pitch shifting easily in this version
         // without more complex audio management, but we'll stick to basics first.
     }
 
     pub fn play_music(&self) {
-        play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.4 });
+        if !self.muted {
+            play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.4 });
+        }
     }
 
     pub fn stop_music(&self) {
         stop_sound(&self.music);
+    }
+
+    pub fn set_muted(&mut self, muted: bool) {
+        self.muted = muted;
+        if self.muted {
+            self.stop_music();
+        }
+    }
+
+    pub fn is_muted(&self) -> bool {
+        self.muted
     }
 }
 
