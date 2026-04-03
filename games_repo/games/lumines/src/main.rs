@@ -14,6 +14,12 @@ const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
+const HUD_CONTROL_PAD_MIN: f32 = 8.0;
+const HUD_CONTROL_PAD_MAX: f32 = 14.0;
+const NEXT_PREVIEW_CELL_HUD_RATIO: f32 = 0.35;
+const NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO: f32 = 0.35;
+const NEXT_PREVIEW_MIN_HALF_WIDTH: f32 = 24.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -205,7 +211,7 @@ impl Game {
     fn update(&mut self, dt: f32) {
         let sw = screen_width();
         let sh = screen_height();
-        let pad = 10.0;
+        let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * 0.06;
         let (mx, my) = mouse_position();
         let mute_x = sw - btn_size - pad;
@@ -610,7 +616,7 @@ impl Game {
         draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
 
         // Pause & Mute buttons
-        let pad = 10.0;
+        let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * 0.06;
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
@@ -631,10 +637,14 @@ impl Game {
             DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
-        // Next Block – cap small_cell so 2×2 preview always fits in the right margin space
-        let small_cell = (hud_h * 0.35).min((sw * 0.5 - 2.0 * margin) / 2.0);
+        // Next Block – place preview to the left of controls to avoid overlap.
+        let preview_cell_from_hud = hud_h * NEXT_PREVIEW_CELL_HUD_RATIO;
+        let max_preview_width_from_screen = sw * NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO - 2.0 * margin;
+        let clamped_preview_width = max_preview_width_from_screen.max(NEXT_PREVIEW_MIN_HALF_WIDTH);
+        let preview_cell_from_screen = clamped_preview_width / 2.0;
+        let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
         let next_w = small_cell * 2.0;
-        let next_x = sw - next_w - margin;
+        let next_x = (pause_x - pad - next_w).max(margin);
         let next_y = hud_h * 0.35;
         draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
         for r in 0..2 {
