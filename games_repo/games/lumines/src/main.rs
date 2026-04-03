@@ -14,6 +14,12 @@ const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
+const HUD_CONTROL_PAD_MIN: f32 = 8.0;
+const HUD_CONTROL_PAD_MAX: f32 = 14.0;
+const NEXT_PREVIEW_CELL_HUD_RATIO: f32 = 0.35;
+const NEXT_PREVIEW_HALF_WIDTH_RATIO: f32 = 0.35;
+const NEXT_PREVIEW_HALF_WIDTH_MIN: f32 = 24.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -205,7 +211,7 @@ impl Game {
     fn update(&mut self, dt: f32) {
         let sw = screen_width();
         let sh = screen_height();
-        let pad = (sw * 0.01).clamp(8.0, 14.0);
+        let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * 0.06;
         let (mx, my) = mouse_position();
         let mute_x = sw - btn_size - pad;
@@ -610,7 +616,7 @@ impl Game {
         draw_text(&version_label, version_x, font_sm * 1.1, font_sm, GRAY);
 
         // Pause & Mute buttons
-        let pad = (sw * 0.01).clamp(8.0, 14.0);
+        let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * 0.06;
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
@@ -632,7 +638,8 @@ impl Game {
         );
 
         // Next Block – place preview to the left of controls to avoid overlap.
-        let small_cell = (hud_h * 0.35).min((sw * 0.35 - 2.0 * margin).max(24.0) / 2.0);
+        let small_cell = (hud_h * NEXT_PREVIEW_CELL_HUD_RATIO)
+            .min((sw * NEXT_PREVIEW_HALF_WIDTH_RATIO - 2.0 * margin).max(NEXT_PREVIEW_HALF_WIDTH_MIN) / 2.0);
         let next_w = small_cell * 2.0;
         let next_x = (pause_x - pad - next_w).max(margin);
         let next_y = hud_h * 0.35;
