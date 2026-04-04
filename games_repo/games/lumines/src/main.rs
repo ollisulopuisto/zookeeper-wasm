@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.5";
+const VERSION: &str = "26.04.04.196";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -42,7 +42,18 @@ const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
 // Completion animation constants
 const CLEAR_FLASH_DURATION: f32 = 0.35;    // seconds for a column-clear flash to fade out
+const CLEAR_FLASH_MAX_ALPHA: f32 = 0.55;   // max alpha for the column flash
 const MATCH_FLASH_DECAY_RATE: f32 = 3.0;   // per-second decay of the match-detection glow (≈0.33 s)
+const MATCH_GLOW_MAX_ALPHA: f32 = 0.5;     // max alpha for the board-edge match glow
+const MATCH_GLOW_LINE_WIDTH: f32 = 6.0;    // thickness of the board-edge glow ring
+const INTERNAL_COORDINATE_SCALE: f32 = 40.0; // logical pixels per cell used in particle physics
+const PARTICLE_SPAWN_COUNT: usize = 12;    // number of particles per cleared cell
+const PARTICLE_VX_RANGE: f32 = 150.0;      // max horizontal velocity (+/-)
+const PARTICLE_VY_MIN: f32 = -200.0;       // initial vertical velocity min (upward)
+const PARTICLE_VY_MAX: f32 = 50.0;         // initial vertical velocity max
+const PARTICLE_LIFE_MIN: f32 = 0.5;        // min lifetime in seconds
+const PARTICLE_LIFE_MAX: f32 = 1.0;        // max lifetime
+const PARTICLE_GRAVITY: f32 = 200.0;       // downward acceleration
 const PARTICLE_MIN_SIZE: f32 = 1.5;        // minimum particle radius in baseline (40 px/cell) space
 const PARTICLE_MAX_SIZE: f32 = 5.0;        // maximum particle radius in baseline space
 const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle lifetime decay
@@ -252,13 +263,13 @@ impl Game {
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
-        for _ in 0..12 {
+        for _ in 0..PARTICLE_SPAWN_COUNT {
             self.particles.push(Particle {
                 x,
                 y,
-                vx: qrand::gen_range(-150.0, 150.0),
-                vy: qrand::gen_range(-200.0, 50.0),
-                life: qrand::gen_range(0.5, 1.0),
+                vx: qrand::gen_range(-PARTICLE_VX_RANGE, PARTICLE_VX_RANGE),
+                vy: qrand::gen_range(PARTICLE_VY_MIN, PARTICLE_VY_MAX),
+                life: qrand::gen_range(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
                 color,
                 size: qrand::gen_range(PARTICLE_MIN_SIZE, PARTICLE_MAX_SIZE),
             });
@@ -344,7 +355,7 @@ impl Game {
                                 BlockColor::ColorA => WHITE,
                                 BlockColor::ColorB => ORANGE,
                             };
-                            self.spawn_particles(actual_col as f32 * 40.0, row as f32 * 40.0, p_color);
+                            self.spawn_particles(actual_col as f32 * INTERNAL_COORDINATE_SCALE, row as f32 * INTERNAL_COORDINATE_SCALE, p_color);
                         }
                         self.grid[row][actual_col] = None;
                         self.marked[row][actual_col] = false;
@@ -455,7 +466,7 @@ impl Game {
         for p in self.particles.iter_mut() {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-            p.vy += 200.0 * dt;  // downward gravity
+            p.vy += PARTICLE_GRAVITY * dt;  // downward gravity
             p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
@@ -650,15 +661,15 @@ impl Game {
         if !self.is_frozen {
             for &(col, life) in &self.clear_flashes {
                 let fx = offset_x + col as f32 * cell_size;
-                let alpha = life * life * 0.55;  // quadratic falloff for a sharp flash
+                let alpha = life * life * CLEAR_FLASH_MAX_ALPHA;  // quadratic falloff for a sharp flash
                 draw_rectangle(fx, offset_y, cell_size, board_h, Color::new(1.0, 0.95, 0.5, alpha));
             }
         }
 
         // Draw match flash – a brief board-edge glow when a new 2×2 match is found
         if self.match_flash > 0.0 {
-            let alpha = self.match_flash * self.match_flash * 0.5;
-            let lw = 6.0_f32;
+            let alpha = self.match_flash * self.match_flash * MATCH_GLOW_MAX_ALPHA;
+            let lw = MATCH_GLOW_LINE_WIDTH;
             draw_rectangle_lines(offset_x - lw * 0.5, offset_y - lw * 0.5,
                 board_w + lw, board_h + lw, lw, Color::new(1.0, 1.0, 0.3, alpha));
         }
@@ -689,7 +700,7 @@ impl Game {
         }
 
         // Draw Particles
-        let p_scale = (cell_size / 40.0).max(0.5);
+        let p_scale = (cell_size / INTERNAL_COORDINATE_SCALE).max(0.5);
         for p in &self.particles {
             let mut c = p.color;
             c.a = p.life * p.life;  // quadratic fade – crisper disappearance

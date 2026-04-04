@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.4.196] - 2026-04-04
+### Refactored
+- **Lumines WASM:** Extracted particle physics and completion animation magic numbers into named constants for improved maintainability.
+
 ## [26.4.3.168] - 2026-04-03
 ### Added
 - **New Game: Lumines WASM:** A rhythm-puzzle game clone based on the Lumines mechanism.
