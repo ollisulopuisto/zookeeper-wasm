@@ -2,6 +2,12 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.4.196] - 2026-04-04
+### Fixed
+- **Lumines WASM:** Fixed potential performance and correctness issues when the game hitches or is unfocused.
+  - Clamped `dt` to 0.1s to prevent excessive processing during long frames.
+  - Replaced single `if` with a `while` loop for the timeline wrap to ensure `timeline_x` always returns to the valid range.
+
 ## [26.4.3.168] - 2026-04-03
 ### Added
 - **New Game: Lumines WASM:** A rhythm-puzzle game clone based on the Lumines mechanism.

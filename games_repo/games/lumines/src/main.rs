@@ -9,12 +9,13 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.5";
+const VERSION: &str = "26.04.04.196";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
-const ENTRY_DELAY: f32 = 1.5;  // seconds block is held above playfield for repositioning
+const ENTRY_DELAY: f32 = 1.0;  // seconds block is held above playfield for repositioning
+
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -41,6 +42,9 @@ const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
+// Falling animation constants
+const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
+const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
 // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
@@ -61,6 +65,60 @@ const PORTRAIT_NEXT_X_CENTER: f32 = 0.15;  // horizontal centre of NEXT preview 
 const PORTRAIT_METER_X_RATIO: f32 = 0.35;  // left edge of FREEZE meter (fraction of sw)
 const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE meter
 const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
+
+const MAX_HIGH_SCORES: usize = 10;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct LeaderboardEntry {
+    name: String,
+    score: u32,
+}
+
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
+    fn js_save_leaderboard(ptr: *const u8, len: u32);
+    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
+}
+
+fn load_high_scores() -> Vec<LeaderboardEntry> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::load_list;
+        load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe {
+            js_load_leaderboard(ptr, max_len)
+        })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Vec::new()
+    }
+}
+
+fn save_high_scores(scores: &[LeaderboardEntry]) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::save_list;
+        save_list(scores, |ptr, len| unsafe {
+            js_save_leaderboard(ptr, len);
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = scores;
+}
+
+fn ask_player_name() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut buf = [0u8; 64];
+        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
+            .trim()
+            .to_string();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    "ANON".to_string()
+}
 
 /// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
 struct HudLayout {
@@ -134,35 +192,45 @@ struct Particle {
     color: Color,
 }
 
-fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
+fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color, scale_x: f32, scale_y: f32) {
+    let w = size * scale_x;
+    let h = size * scale_y;
+    // Centre horizontally, anchor to bottom so squash looks grounded.
+    let bx = x + (size - w) * 0.5;
+    let by = y + (size - h);
+
     // Slightly-darkened base fill so the highlight band reads against it for ALL colors,
     // including pure white (light-gray base vs. white highlight = visible contrast).
     let base = Color::new(color.r * BLOCK_BASE_DARKEN, color.g * BLOCK_BASE_DARKEN, color.b * BLOCK_BASE_DARKEN, 1.0);
-    draw_rectangle(x, y, size, size, base);
+    draw_rectangle(bx, by, w, h, base);
 
     // Top highlight band at the original (brighter) color — always visibly lighter than base
-    draw_rectangle(x, y, size, size * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
+    draw_rectangle(bx, by, w, h * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
 
     // Bottom-right shadow: dark triangle for a strong comic-book depth cue
     draw_triangle(
-        vec2(x + size * BLOCK_SHADOW_CUTOFF_RATIO, y + size),
-        vec2(x + size, y + size * BLOCK_SHADOW_CUTOFF_RATIO),
-        vec2(x + size, y + size),
+        vec2(bx + w * BLOCK_SHADOW_CUTOFF_RATIO, by + h),
+        vec2(bx + w, by + h * BLOCK_SHADOW_CUTOFF_RATIO),
+        vec2(bx + w, by + h),
         Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
     );
 
     // Small specular glint in top-left corner — the comic-book "shine" pill
     let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
-    draw_rectangle(x + size * BLOCK_GLINT_OFFSET_RATIO, y + size * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
+    draw_rectangle(bx + w * BLOCK_GLINT_OFFSET_RATIO, by + h * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
 
     // Bold black outer outline + tinted inner border
-    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
-    draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
+    draw_rectangle_lines(bx, by, w, h, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
+    draw_rectangle_lines(bx + BLOCK_OUTLINE_INSET, by + BLOCK_OUTLINE_INSET, (w - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (h - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
+    // Per-cell falling animation state (grid-unit offsets, velocities, impact timers)
+    v_offsets: [[f32; COLS]; ROWS],
+    v_velocities: [[f32; COLS]; ROWS],
+    impact_timers: [[f32; COLS]; ROWS],
     active: ActiveBlock,
     next_block: [[BlockColor; 2]; 2],
     timeline_x: f32,
@@ -194,6 +262,11 @@ struct Game {
     tex_mute_off: Texture2D,
     tex_pause: Texture2D,
     tex_play: Texture2D,
+
+    // Hiscores
+    high_scores: Vec<LeaderboardEntry>,
+    leaderboard_saved: bool,
+    new_score_rank: Option<usize>,
 }
 
 impl Game {
@@ -214,6 +287,9 @@ impl Game {
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
+            v_offsets: [[0.0; COLS]; ROWS],
+            v_velocities: [[0.0; COLS]; ROWS],
+            impact_timers: [[0.0; COLS]; ROWS],
             active: ActiveBlock::new(BlockColor::random_2x2()),
             next_block: BlockColor::random_2x2(),
             timeline_x: 0.0,
@@ -239,6 +315,9 @@ impl Game {
             tex_mute_off,
             tex_pause,
             tex_play,
+            high_scores: Vec::new(),
+            leaderboard_saved: false,
+            new_score_rank: None,
         }
     }
 
@@ -256,6 +335,7 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
+        let dt = dt.min(0.1);
         let sw = screen_width();
         let sh = screen_height();
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
@@ -349,7 +429,7 @@ impl Game {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
             }
 
-            if self.timeline_x >= COLS as f32 {
+            while self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
                 self.combo = 0; 
                 self.apply_gravity();
@@ -450,6 +530,31 @@ impl Game {
             p.life -= dt;
         }
         self.particles.retain(|p| p.life > 0.0);
+
+        // Update falling-block animation physics (gravity + landing squish timers).
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                if self.grid[y][x].is_none() {
+                    self.v_offsets[y][x] = 0.0;
+                    self.v_velocities[y][x] = 0.0;
+                    self.impact_timers[y][x] = 0.0;
+                    continue;
+                }
+
+                if self.v_offsets[y][x] < 0.0 {
+                    self.v_velocities[y][x] += dt * FALL_GRAVITY;
+                    self.v_offsets[y][x] += dt * self.v_velocities[y][x];
+                    if self.v_offsets[y][x] >= 0.0 {
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = IMPACT_DURATION;
+                    }
+                }
+                if self.impact_timers[y][x] > 0.0 {
+                    self.impact_timers[y][x] -= dt;
+                }
+            }
+        }
     }
 
     fn collides(&self, x: i32, y: i32) -> bool {
@@ -522,12 +627,32 @@ impl Game {
     fn apply_gravity(&mut self) {
         for x in 0..COLS {
             let mut write_y = ROWS - 1;
+            let mut num_blocks = 0usize;
             for y in (0..ROWS).rev() {
                 if let Some(color) = self.grid[y][x] {
+                    let drop = write_y as i32 - y as i32;
                     self.grid[y][x] = None;
                     self.grid[write_y][x] = Some(color);
+                    if drop > 0 {
+                        // Block falls `drop` rows: carry existing offset plus additional drop.
+                        self.v_offsets[write_y][x] = self.v_offsets[y][x] - drop as f32;
+                        self.v_velocities[write_y][x] = self.v_velocities[y][x];
+                        self.impact_timers[write_y][x] = self.impact_timers[y][x];
+                        
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = 0.0;
+                    }
+                    num_blocks += 1;
                     write_y = write_y.saturating_sub(1);
                 }
+            }
+            // Clear offsets for rows that are empty after compaction (rows above the topmost block).
+            let filled_from = ROWS - num_blocks;
+            for y in 0..filled_from {
+                self.v_offsets[y][x] = 0.0;
+                self.v_velocities[y][x] = 0.0;
+                self.impact_timers[y][x] = 0.0;
             }
         }
     }
@@ -603,17 +728,28 @@ impl Game {
                         let avg = (c.r + c.g + c.b) / 3.0;
                         c = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
                     }
-                    
+
+                    // Apply falling offset so blocks animate smoothly to their target row.
                     let bx = offset_x + x as f32 * cell_size;
-                    let by = offset_y + y as f32 * cell_size;
-                    
+                    let by = offset_y + (y as f32 + self.v_offsets[y][x]) * cell_size;
+
+                    // Landing squish: briefly squash vertically and stretch horizontally.
+                    let mut scale_x = 1.0f32;
+                    let mut scale_y = 1.0f32;
+                    if self.impact_timers[y][x] > 0.0 {
+                        let t = (self.impact_timers[y][x] / IMPACT_DURATION).clamp(0.0, 1.0);
+                        let s = (t * std::f32::consts::PI).sin();
+                        scale_y -= s * 0.15;
+                        scale_x += s * 0.10;
+                    }
+
                     if self.marked[y][x] {
                         let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
                         let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
                         let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
-                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color);
+                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color, scale_x, scale_y);
                     } else {
-                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
+                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5), scale_x, scale_y);
                     }
                 }
             }
@@ -661,8 +797,13 @@ impl Game {
                         }
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
-                        let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE);
+                        let glow_alpha = if in_entry {
+                            (get_time() as f32 * 12.0).sin() * 0.15 + 0.35
+                        } else {
+                            (get_time() as f32 * 8.0).sin() * 0.08 + 0.22
+                        };
+                        let border_color = if in_entry { YELLOW } else { SKYBLUE };
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                     }
                 }
@@ -689,7 +830,7 @@ impl Game {
             draw_text("TIME FROZEN", sw / 2.0 - tf_dims.width / 2.0, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
-        // Draw HUD
+        // Draw HUD (AFTER blocks so it overlays any that bleed above offset_y during grace period)
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * BTN_SIZE_RATIO;
         let mute_x = sw - btn_size - pad;
@@ -793,7 +934,7 @@ impl Game {
                 draw_stylized_block(
                     layout.next_x + c as f32 * layout.next_cell,
                     layout.next_blocks_top + r as f32 * layout.next_cell,
-                    layout.next_cell, color, 1.0, BLACK,
+                    layout.next_cell, color, 1.0, BLACK, 1.0, 1.0,
                 );
             }
         }
@@ -813,10 +954,54 @@ impl Game {
         }
 
         if self.game_over {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("GAME OVER", sw / 2.0 - 120.0, sh / 2.0 - 40.0, 50.0, RED);
-            draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 100.0, sh / 2.0 + 20.0, 30.0, WHITE);
-            draw_text("TAP or SPACE to Restart", sw / 2.0 - 140.0, sh / 2.0 + 80.0, 25.0, YELLOW);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.88));
+
+            let title_sz = (sh * 0.07).clamp(30.0, 60.0);
+            let title = "GAME OVER";
+            let tm = measure_text(title, None, title_sz as u16, 1.0);
+            draw_text(title, sw / 2.0 - tm.width / 2.0, sh * 0.10, title_sz, RED);
+
+            let score_str = format!("SCORE: {}", self.score);
+            let score_sz = (sh * 0.045).clamp(18.0, 36.0);
+            let sm = measure_text(&score_str, None, score_sz as u16, 1.0);
+            draw_text(&score_str, sw / 2.0 - sm.width / 2.0, sh * 0.18, score_sz, WHITE);
+
+            if !self.high_scores.is_empty() {
+                let lbl = "HIGH SCORES";
+                let lbl_sz = (sh * 0.038).clamp(14.0, 28.0);
+                let lm = measure_text(lbl, None, lbl_sz as u16, 1.0);
+                draw_text(lbl, sw / 2.0 - lm.width / 2.0, sh * 0.27, lbl_sz, YELLOW);
+
+                let entry_sz = (sh * 0.038).clamp(13.0, 22.0);
+                let row_h = (sh * 0.062).clamp(16.0, 30.0);
+
+                let center_x = sw / 2.0;
+                let rank_x = center_x - (sh * 0.22).clamp(80.0, 160.0);
+                let name_x = center_x - (sh * 0.15).clamp(50.0, 110.0);
+                let score_x = center_x + (sh * 0.22).clamp(80.0, 160.0);
+
+                for (i, entry) in self.high_scores.iter().take(MAX_HIGH_SCORES).enumerate() {
+                    let y = sh * 0.34 + i as f32 * row_h;
+                    let is_new = self.new_score_rank == Some(i);
+                    let color = if is_new { ORANGE } else { Color::new(0.85, 0.85, 0.85, 1.0) };
+
+                    // Rank column (left aligned)
+                    draw_text(&format!("{}.", i + 1), rank_x, y, entry_sz, color);
+
+                    // Name column (left aligned)
+                    draw_text(&entry.name, name_x, y, entry_sz, color);
+
+                    // Score column (right aligned)
+                    let score_str = format!("{}", entry.score);
+                    let sem = measure_text(&score_str, None, entry_sz as u16, 1.0);
+                    draw_text(&score_str, score_x - sem.width, y, entry_sz, color);
+                }
+            }
+
+            let restart_str = "TAP or SPACE to Restart";
+            let rst_sz = (sh * 0.035).clamp(14.0, 24.0);
+            let rm = measure_text(restart_str, None, rst_sz as u16, 1.0);
+            draw_text(restart_str, sw / 2.0 - rm.width / 2.0, sh * 0.96, rst_sz, YELLOW);
         }
 
         if self.is_paused {
@@ -837,6 +1022,30 @@ async fn main() {
 
         let dt = get_frame_time();
         game.update(dt);
+
+        // When game just ended, load scores, optionally prompt for name, and save.
+        // Must run before draw() so the leaderboard table is visible on the first game-over frame.
+        if game.game_over && !game.leaderboard_saved {
+            game.leaderboard_saved = true;
+            game.high_scores = load_high_scores();
+            // Sort after loading since load_list does not guarantee order.
+            game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+            if game.score > 0 {
+                let min_score = game.high_scores.last().map_or(0, |e| e.score);
+                let qualifies = game.high_scores.len() < MAX_HIGH_SCORES
+                    || game.score > min_score;
+                if qualifies {
+                    let name = ask_player_name();
+                    game.high_scores.push(LeaderboardEntry { name: name.clone(), score: game.score });
+                    game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+                    game.high_scores.truncate(MAX_HIGH_SCORES);
+                    game.new_score_rank = game.high_scores.iter()
+                        .rposition(|e| e.name == name && e.score == game.score);
+                    save_high_scores(&game.high_scores);
+                }
+            }
+        }
+
         game.draw();
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
