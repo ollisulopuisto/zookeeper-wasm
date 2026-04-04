@@ -61,6 +61,60 @@ const PORTRAIT_METER_X_RATIO: f32 = 0.35;  // left edge of FREEZE meter (fractio
 const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE meter
 const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
 
+const MAX_HIGH_SCORES: usize = 10;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct LeaderboardEntry {
+    name: String,
+    score: u32,
+}
+
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
+    fn js_save_leaderboard(ptr: *const u8, len: u32);
+    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
+}
+
+fn load_high_scores() -> Vec<LeaderboardEntry> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::load_list;
+        load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe {
+            js_load_leaderboard(ptr, max_len)
+        })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Vec::new()
+    }
+}
+
+fn save_high_scores(scores: &[LeaderboardEntry]) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::save_list;
+        save_list(scores, |ptr, len| unsafe {
+            js_save_leaderboard(ptr, len);
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = scores;
+}
+
+fn ask_player_name() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut buf = [0u8; 64];
+        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
+            .trim()
+            .to_string();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    "ANON".to_string()
+}
+
 /// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
 struct HudLayout {
     next_cell:      f32,
@@ -190,6 +244,11 @@ struct Game {
     tex_mute_off: Texture2D,
     tex_pause: Texture2D,
     tex_play: Texture2D,
+
+    // Hiscores
+    high_scores: Vec<LeaderboardEntry>,
+    leaderboard_saved: bool,
+    new_score_rank: Option<usize>,
 }
 
 impl Game {
@@ -234,6 +293,9 @@ impl Game {
             tex_mute_off,
             tex_pause,
             tex_play,
+            high_scores: Vec::new(),
+            leaderboard_saved: false,
+            new_score_rank: None,
         }
     }
 
@@ -769,10 +831,54 @@ impl Game {
         }
 
         if self.game_over {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("GAME OVER", sw / 2.0 - 120.0, sh / 2.0 - 40.0, 50.0, RED);
-            draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 100.0, sh / 2.0 + 20.0, 30.0, WHITE);
-            draw_text("TAP or SPACE to Restart", sw / 2.0 - 140.0, sh / 2.0 + 80.0, 25.0, YELLOW);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.88));
+
+            let title_sz = (sh * 0.07).clamp(30.0, 60.0);
+            let title = "GAME OVER";
+            let tm = measure_text(title, None, title_sz as u16, 1.0);
+            draw_text(title, sw / 2.0 - tm.width / 2.0, sh * 0.10, title_sz, RED);
+
+            let score_str = format!("SCORE: {}", self.score);
+            let score_sz = (sh * 0.045).clamp(18.0, 36.0);
+            let sm = measure_text(&score_str, None, score_sz as u16, 1.0);
+            draw_text(&score_str, sw / 2.0 - sm.width / 2.0, sh * 0.18, score_sz, WHITE);
+
+            if !self.high_scores.is_empty() {
+                let lbl = "HIGH SCORES";
+                let lbl_sz = (sh * 0.038).clamp(14.0, 28.0);
+                let lm = measure_text(lbl, None, lbl_sz as u16, 1.0);
+                draw_text(lbl, sw / 2.0 - lm.width / 2.0, sh * 0.27, lbl_sz, YELLOW);
+
+                let entry_sz = (sh * 0.038).clamp(13.0, 22.0);
+                let row_h = (sh * 0.062).clamp(16.0, 30.0);
+
+                let center_x = sw / 2.0;
+                let rank_x = center_x - (sh * 0.22).clamp(80.0, 160.0);
+                let name_x = center_x - (sh * 0.15).clamp(50.0, 110.0);
+                let score_x = center_x + (sh * 0.22).clamp(80.0, 160.0);
+
+                for (i, entry) in self.high_scores.iter().take(MAX_HIGH_SCORES).enumerate() {
+                    let y = sh * 0.34 + i as f32 * row_h;
+                    let is_new = self.new_score_rank == Some(i);
+                    let color = if is_new { ORANGE } else { Color::new(0.85, 0.85, 0.85, 1.0) };
+
+                    // Rank column (left aligned)
+                    draw_text(&format!("{}.", i + 1), rank_x, y, entry_sz, color);
+
+                    // Name column (left aligned)
+                    draw_text(&entry.name, name_x, y, entry_sz, color);
+
+                    // Score column (right aligned)
+                    let score_str = format!("{}", entry.score);
+                    let sem = measure_text(&score_str, None, entry_sz as u16, 1.0);
+                    draw_text(&score_str, score_x - sem.width, y, entry_sz, color);
+                }
+            }
+
+            let restart_str = "TAP or SPACE to Restart";
+            let rst_sz = (sh * 0.035).clamp(14.0, 24.0);
+            let rm = measure_text(restart_str, None, rst_sz as u16, 1.0);
+            draw_text(restart_str, sw / 2.0 - rm.width / 2.0, sh * 0.96, rst_sz, YELLOW);
         }
 
         if self.is_paused {
@@ -793,6 +899,30 @@ async fn main() {
 
         let dt = get_frame_time();
         game.update(dt);
+
+        // When game just ended, load scores, optionally prompt for name, and save.
+        // Must run before draw() so the leaderboard table is visible on the first game-over frame.
+        if game.game_over && !game.leaderboard_saved {
+            game.leaderboard_saved = true;
+            game.high_scores = load_high_scores();
+            // Sort after loading since load_list does not guarantee order.
+            game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+            if game.score > 0 {
+                let min_score = game.high_scores.last().map_or(0, |e| e.score);
+                let qualifies = game.high_scores.len() < MAX_HIGH_SCORES
+                    || game.score > min_score;
+                if qualifies {
+                    let name = ask_player_name();
+                    game.high_scores.push(LeaderboardEntry { name: name.clone(), score: game.score });
+                    game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+                    game.high_scores.truncate(MAX_HIGH_SCORES);
+                    game.new_score_rank = game.high_scores.iter()
+                        .rposition(|e| e.name == name && e.score == game.score);
+                    save_high_scores(&game.high_scores);
+                }
+            }
+        }
+
         game.draw();
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {

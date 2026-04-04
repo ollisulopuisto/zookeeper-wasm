@@ -8,3 +8,6 @@ macroquad = { version = "0.4", features = ["audio"] }
 quad-rand = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 shared = { path = "../shared" }
+
+[lints.rust]
+unsafe_code = "allow"
