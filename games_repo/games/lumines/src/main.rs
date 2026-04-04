@@ -93,8 +93,7 @@ fn ask_player_name() -> String {
     {
         let mut buf = [0u8; 64];
         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
-        let s = std::str::from_utf8(&buf[..len.min(buf.len())])
-            .unwrap_or("")
+        let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
             .trim()
             .to_string();
         if s.is_empty() { "ANON".to_string() } else { s }
@@ -885,15 +884,18 @@ async fn main() {
 
         let dt = get_frame_time();
         game.update(dt);
-        game.draw();
 
         // When game just ended, load scores, optionally prompt for name, and save.
+        // Must run before draw() so the leaderboard table is visible on the first game-over frame.
         if game.game_over && !game.leaderboard_saved {
             game.leaderboard_saved = true;
             game.high_scores = load_high_scores();
+            // Sort after loading since load_list does not guarantee order.
+            game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
             if game.score > 0 {
+                let min_score = game.high_scores.last().map_or(0, |e| e.score);
                 let qualifies = game.high_scores.len() < MAX_HIGH_SCORES
-                    || game.score > game.high_scores.last().map_or(0, |e| e.score);
+                    || game.score > min_score;
                 if qualifies {
                     let name = ask_player_name();
                     game.high_scores.push(LeaderboardEntry { name: name.clone(), score: game.score });
@@ -905,6 +907,8 @@ async fn main() {
                 }
             }
         }
+
+        game.draw();
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             #[cfg(target_arch = "wasm32")]
