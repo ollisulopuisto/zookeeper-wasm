@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.211";
+const VERSION: &str = "26.04.04.213";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -1249,13 +1249,22 @@ impl Game {
 
             let rule_sz = 18.0;
             let rule_x = sw / 2.0 - 150.0;
-            draw_text("Match 2x2 blocks of same color", rule_x, sh / 2.0 - 70.0, rule_sz, WHITE);
-            draw_text("The sweep line clears matches", rule_x, sh / 2.0 - 50.0, rule_sz, WHITE);
-            draw_text("Chain (+) blocks clear all same-color links", rule_x, sh / 2.0 - 30.0, rule_sz, WHITE);
+            let mut current_y = sh / 2.0 - 70.0;
+            let rule_spacing = 20.0;
 
-            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, sh / 2.0 + 30.0, 30.0, WHITE);
-            draw_text("SHIFT / Swipe Up: Time Freeze (when full)", sw / 2.0 - 150.0, sh / 2.0 + 70.0, 20.0, SKYBLUE);
-            draw_text("Swipe L/R/Down: Move / Drop", sw / 2.0 - 110.0, sh / 2.0 + 100.0, 20.0, GRAY);
+            draw_text("Match 2x2 blocks of same color", rule_x, current_y, rule_sz, WHITE);
+            current_y += rule_spacing;
+            draw_text("The sweep line clears matches", rule_x, current_y, rule_sz, WHITE);
+            current_y += rule_spacing;
+            draw_text("Chain (+) blocks clear all same-color links", rule_x, current_y, rule_sz, WHITE);
+
+            current_y += 60.0; // Gap before controls
+
+            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, current_y, 30.0, WHITE);
+            current_y += 40.0;
+            draw_text("SHIFT / Swipe Up: Time Freeze (when full)", sw / 2.0 - 150.0, current_y, 20.0, SKYBLUE);
+            current_y += 30.0;
+            draw_text("Swipe L/R/Down: Move / Drop", sw / 2.0 - 110.0, current_y, 20.0, GRAY);
         }
 
         if self.game_over {
