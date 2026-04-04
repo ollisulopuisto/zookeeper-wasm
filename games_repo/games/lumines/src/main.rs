@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.196";
+const VERSION: &str = "26.04.04.211";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -132,9 +132,9 @@ fn ask_player_name() -> String {
     {
         let mut buf = [0u8; 64];
         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
-        let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
+        String::from_utf8_lossy(&buf[..len.min(buf.len())])
             .trim()
-            .to_string();
+            .to_string()
     }
     #[cfg(not(target_arch = "wasm32"))]
     "ANON".to_string()
@@ -277,7 +277,6 @@ struct Game {
     entry_timer: f32,
 
     // Touch/Mouse state
-    last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
     tap_timer: f32,
     swipe_occurred: bool,
@@ -332,7 +331,6 @@ impl Game {
             is_frozen: false,
             freeze_timer: 0.0,
             entry_timer: 0.0,  // set to ENTRY_DELAY when game starts
-            last_mouse_pos: Vec2::ZERO,
             swipe_start: None,
             tap_timer: 0.0,
             swipe_occurred: false,
@@ -1145,7 +1143,6 @@ async fn main() {
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             #[cfg(target_arch = "wasm32")]
             {
-                use macroquad::prelude::miniquad::window;
                 // This is a hacky way to focus the canvas in Macroquad WASM if needed,
                 // but usually clicking it is enough if it has a tabindex.
             }
