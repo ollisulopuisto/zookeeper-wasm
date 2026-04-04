@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.196";
+const VERSION: &str = "26.04.04.214";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -40,26 +40,6 @@ const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
-// Completion animation constants
-const CLEAR_FLASH_DURATION: f32 = 0.35;    // seconds for a column-clear flash to fade out
-const CLEAR_FLASH_MAX_ALPHA: f32 = 0.55;   // max alpha for the column flash
-const MATCH_FLASH_DECAY_RATE: f32 = 3.0;   // per-second decay of the match-detection glow (≈0.33 s)
-const MATCH_GLOW_MAX_ALPHA: f32 = 0.5;     // max alpha for the board-edge match glow
-const MATCH_GLOW_LINE_WIDTH: f32 = 6.0;    // thickness of the board-edge glow ring
-const INTERNAL_COORDINATE_SCALE: f32 = 40.0; // logical pixels per cell used in particle physics
-const PARTICLE_SPAWN_COUNT: usize = 12;    // number of particles per cleared cell
-const PARTICLE_VX_RANGE: f32 = 150.0;      // max horizontal velocity (+/-)
-const PARTICLE_VY_MIN: f32 = -200.0;       // initial vertical velocity min (upward)
-const PARTICLE_VY_MAX: f32 = 50.0;         // initial vertical velocity max
-const PARTICLE_LIFE_MIN: f32 = 0.5;        // min lifetime in seconds
-const PARTICLE_LIFE_MAX: f32 = 1.0;        // max lifetime
-const PARTICLE_GRAVITY: f32 = 200.0;       // downward acceleration
-const PARTICLE_MIN_SIZE: f32 = 1.5;        // minimum particle radius in baseline (40 px/cell) space
-const PARTICLE_MAX_SIZE: f32 = 5.0;        // maximum particle radius in baseline space
-const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle lifetime decay
-const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for a 12 Hz marked-block brightness pulse
-const MARKED_PULSE_AMPLITUDE: f32 = 0.35;  // 0..1 amplitude of the brightness pulse (35%)
-const MARKED_GLOW_THRESHOLD: f32 = 0.88;   // pulse value above which the outer glow ring appears
 // Falling animation constants
 const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
 const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
@@ -150,9 +130,9 @@ fn ask_player_name() -> String {
     {
         let mut buf = [0u8; 64];
         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
-        let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
+        String::from_utf8_lossy(&buf[..len.min(buf.len())])
             .trim()
-            .to_string();
+            .to_string()
     }
     #[cfg(not(target_arch = "wasm32"))]
     "ANON".to_string()
@@ -292,7 +272,6 @@ struct Game {
     freeze_timer: f32,
 
     // Touch/Mouse state
-    last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
     tap_timer: f32,
     swipe_occurred: bool,
@@ -346,7 +325,6 @@ impl Game {
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
-            last_mouse_pos: Vec2::ZERO,
             swipe_start: None,
             tap_timer: 0.0,
             swipe_occurred: false,
@@ -569,13 +547,6 @@ impl Game {
             p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
-
-        // Decay column clear flashes and match flash
-        for flash in self.clear_flashes.iter_mut() {
-            flash.1 -= dt / CLEAR_FLASH_DURATION;
-        }
-        self.clear_flashes.retain(|f| f.1 > 0.0);
-        self.match_flash = (self.match_flash - dt * MATCH_FLASH_DECAY_RATE).max(0.0);
 
         // Update falling-block animation physics (gravity + landing squish timers).
         for y in 0..ROWS {
@@ -1108,7 +1079,6 @@ async fn main() {
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             #[cfg(target_arch = "wasm32")]
             {
-                use macroquad::prelude::miniquad::window;
                 // This is a hacky way to focus the canvas in Macroquad WASM if needed,
                 // but usually clicking it is enough if it has a tabindex.
             }
