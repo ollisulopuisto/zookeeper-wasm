@@ -251,6 +251,7 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
+        let dt = dt.min(0.1);
         let sw = screen_width();
         let sh = screen_height();
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
@@ -309,8 +310,6 @@ impl Game {
             self.freeze_meter = 0.0;
             self.audio.stop_music(); 
         }
-
-        let dt = dt.min(0.1);
 
         // Update Timeline
         if !self.is_frozen {
