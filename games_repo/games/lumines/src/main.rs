@@ -88,40 +88,26 @@ struct Particle {
 }
 
 fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
+    // Base fill
     draw_rectangle(x, y, size, size, color);
 
-    let inset = (size * 0.05).max(1.0);
-    let inner_size = (size - inset * 2.0).max(0.0);
-    let inner_x = x + inset;
-    let inner_y = y + inset;
+    // Top highlight: white semi-transparent band — works for any base color, giving clear 3-D depth
+    draw_rectangle(x, y, size, size * 0.36, Color::new(1.0, 1.0, 1.0, 0.38));
 
-    let light = Color::new(
-        (color.r * 1.22).clamp(0.0, 1.0),
-        (color.g * 1.22).clamp(0.0, 1.0),
-        (color.b * 1.22).clamp(0.0, 1.0),
-        1.0,
-    );
-    let mid_shadow = Color::new(color.r * 0.72, color.g * 0.72, color.b * 0.72, 1.0);
-    let deep_shadow = Color::new(color.r * 0.42, color.g * 0.42, color.b * 0.42, 1.0);
-
-    draw_rectangle(inner_x, inner_y, inner_size, inner_size * 0.22, light);
-    draw_rectangle(inner_x, inner_y, inner_size * 0.14, inner_size, light);
-    draw_rectangle(
-        inner_x + inner_size * 0.56,
-        inner_y + inner_size * 0.52,
-        inner_size * 0.44,
-        inner_size * 0.48,
-        mid_shadow,
-    );
+    // Bottom-right shadow: dark triangle for a strong depth cue
     draw_triangle(
-        vec2(inner_x + inner_size * 0.34, inner_y + inner_size),
-        vec2(inner_x + inner_size, inner_y + inner_size * 0.34),
-        vec2(inner_x + inner_size, inner_y + inner_size),
-        deep_shadow,
+        vec2(x + size * 0.38, y + size),
+        vec2(x + size, y + size * 0.38),
+        vec2(x + size, y + size),
+        Color::new(0.0, 0.0, 0.0, 0.42),
     );
 
-    let outer_outline = Color::new(0.0, 0.0, 0.0, 0.88);
-    draw_rectangle_lines(x, y, size, size, (border_width + 1.0).max(2.0), outer_outline);
+    // Small specular glint in top-left corner — the comic-book "shine" pill
+    let g = (size * 0.22).max(2.0);
+    draw_rectangle(x + size * 0.10, y + size * 0.10, g, g * 0.45, Color::new(1.0, 1.0, 1.0, 0.82));
+
+    // Bold black outer outline + tinted inner border
+    draw_rectangle_lines(x, y, size, size, (border_width + 1.0).max(2.0), Color::new(0.0, 0.0, 0.0, 0.90));
     draw_rectangle_lines(x + 1.0, y + 1.0, (size - 2.0).max(0.0), (size - 2.0).max(0.0), border_width, border_color);
 }
 
