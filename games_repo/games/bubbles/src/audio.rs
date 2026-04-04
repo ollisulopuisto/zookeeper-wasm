@@ -12,6 +12,7 @@ pub struct AudioManager {
 
 impl AudioManager {
     pub async fn new() -> Self {
+        let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         Self {
             jump: load_sound_from_bytes(&generate_jump_wav()).await.unwrap(),
             bubble_blow: load_sound_from_bytes(&generate_bubble_blow_wav()).await.unwrap(),
@@ -19,11 +20,11 @@ impl AudioManager {
             enemy_trapped: load_sound_from_bytes(&generate_enemy_trapped_wav()).await.unwrap(),
             fruit_collect: load_sound_from_bytes(&generate_fruit_collect_wav()).await.unwrap(),
             death: load_sound_from_bytes(&generate_death_wav()).await.unwrap(),
-            music: load_sound_from_bytes(&generate_music_wav()).await.unwrap(),
+            music: load_sound_from_bytes(&generate_music_wav(Some(seed))).await.unwrap(),
         }
     }
-
-    pub fn play_jump(&self) {
+...
+fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
         play_sound(&self.jump, PlaySoundParams { looped: false, volume: 0.3 });
     }
 
