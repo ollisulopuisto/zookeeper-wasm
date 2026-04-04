@@ -40,8 +40,12 @@ pub fn generate_music_wav() -> Vec<u8> {
         let beat_idx = (t / beat_duration) as usize;
         let t_beat = t % beat_duration;
         let bar_idx = beat_idx / 4;
+        // Position within the bar as a sixteenth-note index (0–15)
+        let in_bar_16 = sixteen_idx % 16;
 
-        let key_offset = match (bar_idx / 8) % 4 {
+        // Section index (0–3) drives both key modulation and arrangement variation
+        let section_idx = (bar_idx / 8) % 4;
+        let key_offset = match section_idx {
             0 => 0,
             1 => 3,
             2 => 5,
@@ -49,6 +53,7 @@ pub fn generate_music_wav() -> Vec<u8> {
             _ => 0,
         };
 
+        // --- Bassline ---
         let bassline = [36, 36, 48, 36, 36, 36, 46, 36];
         let b_note = bassline[sixteen_idx % 8] + key_offset;
         let b_freq = midi_to_freq(b_note);
@@ -56,14 +61,36 @@ pub fn generate_music_wav() -> Vec<u8> {
         let bass_env = (1.0 - t_sixteen / sixteen_duration).powf(1.5);
         let bass = bass * bass_env;
 
-        let mut kick = 0.0;
-        if t_beat < 0.18 {
-            let k_freq = 160.0 * (1.0 - t_beat / 0.18).powf(2.5) + 45.0;
-            kick = (t_beat * k_freq * 2.0 * std::f32::consts::PI).sin() * 0.7 * (1.0 - t_beat / 0.18);
+        // --- Kick drum ---
+        // Section 0, 3: regular 4-on-the-floor
+        // Section 1: syncopated – regular beats plus accent kicks on "and" of beats 1 and 3
+        // Section 2: half-time feel – kick only on beats 1 and 3 (even beat_idx)
+        let mut kick = 0.0f32;
+        if section_idx == 2 {
+            if beat_idx % 2 == 0 && t_beat < 0.18 {
+                let kf = 160.0 * (1.0 - t_beat / 0.18).powf(2.5) + 45.0;
+                kick = (t_beat * kf * 2.0 * std::f32::consts::PI).sin() * 0.7 * (1.0 - t_beat / 0.18);
+            }
+        } else {
+            if t_beat < 0.18 {
+                let kf = 160.0 * (1.0 - t_beat / 0.18).powf(2.5) + 45.0;
+                kick = (t_beat * kf * 2.0 * std::f32::consts::PI).sin() * 0.7 * (1.0 - t_beat / 0.18);
+            }
+            // Syncopated extra accent kicks on "and" of beats 1 and 3 (in_bar_16 2 and 10)
+            if section_idx == 1 && matches!(in_bar_16, 2 | 10) && t_sixteen < 0.1 {
+                let kf = 160.0 * (1.0 - t_sixteen / 0.1).powf(2.5) + 45.0;
+                kick += (t_sixteen * kf * 2.0 * std::f32::consts::PI).sin() * 0.4 * (1.0 - t_sixteen / 0.1);
+            }
         }
 
-        let mut hihat = 0.0;
-        let hat_trigger = if bar_idx % 4 == 3 {
+        // --- Hi-hat ---
+        // Section 1 (syncopated): 16th-note hi-hat (every position) for maximum energy
+        // Every 4th bar otherwise: offbeats + extra "and" positions (original variation)
+        // Other bars: offbeat 8th notes
+        let mut hihat = 0.0f32;
+        let hat_trigger = if section_idx == 1 {
+            true
+        } else if bar_idx % 4 == 3 {
             sixteen_idx % 2 == 1 || sixteen_idx % 4 == 2
         } else {
             sixteen_idx % 2 == 1
@@ -74,33 +101,88 @@ pub fn generate_music_wav() -> Vec<u8> {
             hihat = n * 0.12 * (1.0 - t_sixteen / 0.03);
         }
 
-        let mut snare = 0.0;
-        if (beat_idx % 4 == 1 || beat_idx % 4 == 3) && t_beat < 0.1 {
+        // --- Snare ---
+        // Section 2 fill bars: rapid crescendo fill on last 8 sixteenth notes of every 4th bar
+        // Section 1 (syncopated): regular snare on beats 2 & 4 plus ghost note on "and-of-3"
+        // Other sections: regular snare on beats 2 and 4
+        let mut snare = 0.0f32;
+        let is_fill_bar = section_idx == 2 && bar_idx % 4 == 3;
+        if is_fill_bar && in_bar_16 >= 8 && t_sixteen < 0.05 {
+            noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+            let vol = 0.12 + 0.08 * in_bar_16.saturating_sub(8) as f32 / 7.0;
+            snare = n * vol * (1.0 - t_sixteen / 0.05).powf(1.5);
+        } else if section_idx == 1 {
+            if (beat_idx % 4 == 1 || beat_idx % 4 == 3) && t_beat < 0.1 {
+                noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+                snare = n * 0.2 * (1.0 - t_beat / 0.1).powf(1.5);
+            } else if in_bar_16 == 10 && t_sixteen < 0.06 {
+                // Ghost snare on "and-of-3" for syncopated feel
+                noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+                snare = n * 0.08 * (1.0 - t_sixteen / 0.06).powf(1.5);
+            }
+        } else if (beat_idx % 4 == 1 || beat_idx % 4 == 3) && t_beat < 0.1 {
             noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
             let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
             snare = n * 0.2 * (1.0 - t_beat / 0.1).powf(1.5);
         }
 
-        let s_notes = [60, 63, 65, 67, 70, 72, 75, 77];
-        let phrase_idx = (sixteen_idx / 16) % 4;
-        let s_step = match phrase_idx {
-            0 => sixteen_idx % 8,
-            1 => (sixteen_idx * 3) % 8,
-            2 => [0, 2, 4, 2, 0, 3, 5, 3][sixteen_idx % 8],
-            _ => [7, 6, 5, 4, 3, 2, 1, 0][sixteen_idx % 8],
-        };
-        let s_note = s_notes[s_step as usize] + key_offset;
-        let s_freq = midi_to_freq(s_note);
-        let saw = (t * s_freq % 1.0) * 2.0 - 1.0;
-        let mut synth = saw * 0.15;
-        let gate = if (sixteen_idx % 4 == 0) || (phrase_idx > 1 && sixteen_idx % 2 == 0) {
-            (1.0 - t_sixteen / sixteen_duration).powf(0.5)
+        // --- Lead synth and counterpoint melody ---
+        let s_notes: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
+        let (synth, counter) = if section_idx == 2 {
+            // Half-time legato lead: notes held for 2 beats (8 sixteenth notes), sine wave
+            let ht_step = (sixteen_idx / 8) % 8;
+            let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset);
+            let note_dur = sixteen_duration * 8.0;
+            let t_in_note = t % note_dur;
+            let env = if t_in_note < 0.02 {
+                t_in_note / 0.02
+            } else if t_in_note > note_dur - 0.04 {
+                ((note_dur - t_in_note) / 0.04).max(0.0)
+            } else {
+                1.0
+            };
+            ((t * ht_freq * 2.0 * std::f32::consts::PI).sin() * 0.18 * env, 0.0f32)
         } else {
-            0.0
-        };
-        synth *= gate;
+            // Original sawtooth lead with four phrase variations
+            let phrase_idx = (sixteen_idx / 16) % 4;
+            let s_step: usize = match phrase_idx {
+                0 => sixteen_idx % 8,
+                1 => (sixteen_idx * 3) % 8,
+                2 => [0usize, 2, 4, 2, 0, 3, 5, 3][sixteen_idx % 8],
+                _ => [7usize, 6, 5, 4, 3, 2, 1, 0][sixteen_idx % 8],
+            };
+            let s_freq = midi_to_freq(s_notes[s_step] + key_offset);
+            let saw = (t * s_freq % 1.0) * 2.0 - 1.0;
+            let gate = if (sixteen_idx % 4 == 0) || (phrase_idx > 1 && sixteen_idx % 2 == 0) {
+                (1.0 - t_sixteen / sixteen_duration).powf(0.5)
+            } else {
+                0.0
+            };
+            let s = saw * 0.15 * gate;
 
-        let mixed = (bass + kick + hihat + snare + synth) * 0.5;
+            // Counterpoint melody: active in sections 1 and 3
+            // Uses a triangle wave and moves in contrary motion to the main lead.
+            // s_step is always 0–7 (derived from modulo-8 operations), so 7 - s_step is safe.
+            let c = if section_idx == 1 || section_idx == 3 {
+                let cp_step = 7 - s_step; // mirror of s_step for contrary motion
+                let cp_freq = midi_to_freq(s_notes[cp_step] + key_offset);
+                let tri_phase = t * cp_freq % 1.0;
+                let tri = if tri_phase < 0.5 {
+                    tri_phase * 4.0 - 1.0
+                } else {
+                    3.0 - tri_phase * 4.0
+                };
+                tri * 0.10 * gate
+            } else {
+                0.0
+            };
+            (s, c)
+        };
+
+        let mixed = (bass + kick + hihat + snare + synth + counter) * 0.5;
         samples.push((mixed.clamp(-1.0, 1.0) * 16383.0) as i16);
     }
 
