@@ -178,7 +178,7 @@ fn generate_death_wav() -> Vec<u8> {
     wav
 }
 
-fn generate_music_wav() -> Vec<u8> {
+fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
     let sample_rate = 44100;
     let bpm = 112.0; // Slightly slower, more "chill" arcade tempo
     let beat_duration = 60.0 / bpm;
@@ -193,7 +193,19 @@ fn generate_music_wav() -> Vec<u8> {
     };
 
     let scale = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84];
-    let progression = [48, 53, 55, 45];
+    let mut progression = [48, 53, 55, 45];
+    
+    if let Some(s) = seed {
+        let mut rng = s;
+        let mut next_rng = || {
+            rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+            (rng >> 16) & 0x7FFF
+        };
+        for i in (1..4).rev() {
+            let j = (next_rng() % (i as u32 + 1)) as usize;
+            progression.swap(i, j);
+        }
+    }
     
     let mut noise_seed = 0x12345678u32;
 
