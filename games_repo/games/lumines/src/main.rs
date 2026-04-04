@@ -9,13 +9,16 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.211";
+const VERSION: &str = "26.04.04.194";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const SCORE_PER_SQUARE: u32 = 50;  // points awarded per 2×2 square cleared
+const COMBO_MIN_SQUARES: u32 = 4;  // min squares per sweep to maintain combo
+const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
+const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
 const ENTRY_DELAY: f32 = 1.0;  // seconds block is held above playfield for repositioning
-
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -171,18 +174,33 @@ impl BlockColor {
     }
 }
 
+/// Generate a random 2×2 block together with chain flags.
+/// With probability `CHAIN_PROBABILITY`% one random cell is a chain cell.
+fn random_block_with_chain() -> ([[BlockColor; 2]; 2], [[bool; 2]; 2]) {
+    let colors = BlockColor::random_2x2();
+    let mut chains = [[false; 2]; 2];
+    if qrand::gen_range(0u32, 100) < CHAIN_PROBABILITY {
+        let row = qrand::gen_range(0, 2);
+        let col = qrand::gen_range(0, 2);
+        chains[row][col] = true;
+    }
+    (colors, chains)
+}
+
 struct ActiveBlock {
     x: i32,
     y: f32,
     colors: [[BlockColor; 2]; 2],
+    is_chain: [[bool; 2]; 2],
 }
 
 impl ActiveBlock {
-    fn new(colors: [[BlockColor; 2]; 2]) -> Self {
+    fn new(colors: [[BlockColor; 2]; 2], is_chain: [[bool; 2]; 2]) -> Self {
         Self {
             x: COLS as i32 / 2 - 1,
             y: -2.0,
             colors,
+            is_chain,
         }
     }
 
@@ -192,6 +210,12 @@ impl ActiveBlock {
         self.colors[1][0] = self.colors[1][1];
         self.colors[1][1] = self.colors[0][1];
         self.colors[0][1] = tmp;
+
+        let tmp = self.is_chain[0][0];
+        self.is_chain[0][0] = self.is_chain[1][0];
+        self.is_chain[1][0] = self.is_chain[1][1];
+        self.is_chain[1][1] = self.is_chain[0][1];
+        self.is_chain[0][1] = tmp;
     }
 
     fn rotate_ccw(&mut self) {
@@ -200,6 +224,12 @@ impl ActiveBlock {
         self.colors[0][1] = self.colors[1][1];
         self.colors[1][1] = self.colors[1][0];
         self.colors[1][0] = tmp;
+
+        let tmp = self.is_chain[0][0];
+        self.is_chain[0][0] = self.is_chain[0][1];
+        self.is_chain[0][1] = self.is_chain[1][1];
+        self.is_chain[1][1] = self.is_chain[1][0];
+        self.is_chain[1][0] = tmp;
     }
 }
 
@@ -245,6 +275,18 @@ fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f3
     draw_rectangle_lines(bx + BLOCK_OUTLINE_INSET, by + BLOCK_OUTLINE_INSET, (w - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (h - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
+/// Draw a green "+" cross symbol centred on the cell to mark it as a chain cell.
+fn draw_chain_symbol(x: f32, y: f32, size: f32) {
+    let cx = x + size * 0.5;
+    let cy = y + size * 0.5;
+    let arm = size * 0.28;
+    let thickness = (size * 0.12).max(2.0);
+    // Horizontal bar
+    draw_rectangle(cx - arm, cy - thickness * 0.5, arm * 2.0, thickness, CHAIN_SYMBOL_COLOR);
+    // Vertical bar
+    draw_rectangle(cx - thickness * 0.5, cy - arm, thickness, arm * 2.0, CHAIN_SYMBOL_COLOR);
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
@@ -254,10 +296,12 @@ struct Game {
     impact_timers: [[f32; COLS]; ROWS],
     active: ActiveBlock,
     next_block: [[BlockColor; 2]; 2],
+    next_chain: [[bool; 2]; 2],
     timeline_x: f32,
     timeline_speed: f32,
     score: u32,
     combo: u32,
+    squares_cleared_this_sweep: u32,
     game_over: bool,
     waiting_to_start: bool,
     drop_timer: f32,
@@ -306,18 +350,23 @@ impl Game {
         let seconds_per_sweep = (60.0 / BPM) * BEATS_PER_SWEEP;
         let timeline_speed = COLS as f32 / seconds_per_sweep;
 
+        let (init_colors, init_chain) = random_block_with_chain();
+        let (next_colors, next_chain) = random_block_with_chain();
+
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
             v_offsets: [[0.0; COLS]; ROWS],
             v_velocities: [[0.0; COLS]; ROWS],
             impact_timers: [[0.0; COLS]; ROWS],
-            active: ActiveBlock::new(BlockColor::random_2x2()),
-            next_block: BlockColor::random_2x2(),
+            active: ActiveBlock::new(init_colors, init_chain),
+            next_block: next_colors,
+            next_chain,
             timeline_x: 0.0,
             timeline_speed,
             score: 0,
             combo: 0,
+            squares_cleared_this_sweep: 0,
             game_over: false,
             waiting_to_start: true,
             drop_timer: 0.0,
@@ -425,12 +474,29 @@ impl Game {
             self.timeline_x += self.timeline_speed * dt;
             
             let mut cleared_this_step = 0;
+            let mut squares_this_step = 0u32;
             let start_col = old_x.floor() as usize;
             let end_col = self.timeline_x.floor() as usize;
             let mut cleared_per_col = [false; COLS];
 
             for col in start_col..=end_col {
                 let actual_col = col % COLS;
+
+                // Count 2×2 squares whose top-left corner is at actual_col (before clearing).
+                // The right column (actual_col + 1) is still intact at this point, allowing
+                // detection of all squares that begin here.
+                if actual_col + 1 < COLS {
+                    for row in 0..ROWS - 1 {
+                        if self.marked[row][actual_col]
+                            && self.marked[row][actual_col + 1]
+                            && self.marked[row + 1][actual_col]
+                            && self.marked[row + 1][actual_col + 1]
+                        {
+                            squares_this_step += 1;
+                        }
+                    }
+                }
+
                 for row in 0..ROWS {
                     if self.marked[row][actual_col] {
                         if let Some(color) = self.grid[row][actual_col] {
@@ -448,10 +514,14 @@ impl Game {
                 }
             }
 
-            if cleared_this_step > 0 {
-                self.score += cleared_this_step * 10 * (1 + self.combo);
-                self.combo += 1;
+            if squares_this_step > 0 {
+                self.score += squares_this_step * SCORE_PER_SQUARE * (1 + self.combo);
+                self.squares_cleared_this_sweep += squares_this_step;
                 self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
+            }
+            // Freeze meter rewards every block cleared (including the right halves of squares
+            // counted in a prior column step).
+            if cleared_this_step > 0 {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
                 // Push a flash for every column that had blocks cleared
                 for (col, &had_clear) in cleared_per_col.iter().enumerate() {
@@ -463,7 +533,12 @@ impl Game {
 
             while self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
-                self.combo = 0; 
+                if self.squares_cleared_this_sweep >= COMBO_MIN_SQUARES {
+                    self.combo += 1;
+                } else {
+                    self.combo = 0;
+                }
+                self.squares_cleared_this_sweep = 0;
                 self.apply_gravity();
             }
         }
@@ -639,12 +714,16 @@ impl Game {
 
     fn lock_active(&mut self) {
         self.audio.play_land();
+        let mut chain_cells: Vec<(usize, usize)> = Vec::new();
         for r in 0..2 {
             for c in 0..2 {
                 let gx = self.active.x + c as i32;
                 let gy = self.active.y.floor() as i32 + r as i32;
                 if gy >= 0 && gy < ROWS as i32 && gx >= 0 && gx < COLS as i32 {
                     self.grid[gy as usize][gx as usize] = Some(self.active.colors[r][c]);
+                    if self.active.is_chain[r][c] {
+                        chain_cells.push((gx as usize, gy as usize));
+                    }
                 } else if gy < 0 {
                     self.game_over = true;
                 }
@@ -652,18 +731,27 @@ impl Game {
         }
         
         if !self.game_over {
+            // Flood-fill chain cells before gravity so positions are still accurate.
+            let mut any_chained = false;
+            for (cx, cy) in chain_cells {
+                if self.flood_mark_chain(cx, cy) > 0 {
+                    any_chained = true;
+                }
+            }
+            if any_chained {
+                self.audio.play_match();
+            }
+
             self.apply_gravity();
             self.update_matches();
             
-            let mut colors = [[BlockColor::ColorA; 2]; 2];
-            for r in 0..2 {
-                for c in 0..2 {
-                    colors[r][c] = self.next_block[r][c];
-                }
-            }
-            self.next_block = BlockColor::random_2x2();
+            let colors = self.next_block;
+            let is_chain = self.next_chain;
+            let (new_next_colors, new_next_chain) = random_block_with_chain();
+            self.next_block = new_next_colors;
+            self.next_chain = new_next_chain;
             
-            self.active = ActiveBlock::new(colors);
+            self.active = ActiveBlock::new(colors, is_chain);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
             } else {
@@ -675,6 +763,33 @@ impl Game {
         if self.game_over {
             self.audio.stop_music();
         }
+    }
+
+    /// BFS flood-fill: marks all grid cells connected to (x, y) that share the same color.
+    /// Returns the number of newly marked cells.
+    fn flood_mark_chain(&mut self, x: usize, y: usize) -> usize {
+        let target_color = match self.grid[y][x] {
+            Some(c) => c,
+            None => return 0,
+        };
+        let mut count = 0usize;
+        let mut stack: Vec<(usize, usize)> = vec![(x, y)];
+        let mut visited = [[false; COLS]; ROWS];
+        while let Some((cx, cy)) = stack.pop() {
+            if visited[cy][cx] { continue; }
+            visited[cy][cx] = true;
+            if self.grid[cy][cx] == Some(target_color) {
+                if !self.marked[cy][cx] {
+                    self.marked[cy][cx] = true;
+                    count += 1;
+                }
+                if cx > 0 { stack.push((cx - 1, cy)); }
+                if cx + 1 < COLS { stack.push((cx + 1, cy)); }
+                if cy > 0 { stack.push((cx, cy - 1)); }
+                if cy + 1 < ROWS { stack.push((cx, cy + 1)); }
+            }
+        }
+        count
     }
 
     fn apply_gravity(&mut self) {
@@ -888,9 +1003,18 @@ impl Game {
                         } else {
                             (get_time() as f32 * 8.0).sin() * 0.08 + 0.22
                         };
-                        let border_color = if in_entry { YELLOW } else { SKYBLUE };
+                        let border_color = if self.active.is_chain[r][c] { 
+                            LIME 
+                        } else if in_entry { 
+                            YELLOW 
+                        } else { 
+                            SKYBLUE 
+                        };
                         draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
+                        if self.active.is_chain[r][c] {
+                            draw_chain_symbol(bx, by, cell_size);
+                        }
                     }
                 }
             }
@@ -932,7 +1056,7 @@ impl Game {
 
         let hud_top_text_y = pad + font_lg;
         draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
-        if self.combo > 1 {
+        if self.combo > 0 {
             draw_text(
                 &format!("COMBO x{}", self.combo),
                 margin,
@@ -1023,11 +1147,13 @@ impl Game {
                     BlockColor::ColorA => WHITE,
                     BlockColor::ColorB => ORANGE,
                 };
-                draw_stylized_block(
-                    layout.next_x + c as f32 * layout.next_cell,
-                    layout.next_blocks_top + r as f32 * layout.next_cell,
-                    layout.next_cell, color, 1.0, BLACK, 1.0, 1.0,
-                );
+                let bx = layout.next_x + c as f32 * layout.next_cell;
+                let by = layout.next_blocks_top + r as f32 * layout.next_cell;
+                let border = if self.next_chain[r][c] { LIME } else { BLACK };
+                draw_stylized_block(bx, by, layout.next_cell, color, 1.0, border, 1.0, 1.0);
+                if self.next_chain[r][c] {
+                    draw_chain_symbol(bx, by, layout.next_cell);
+                }
             }
         }
 
