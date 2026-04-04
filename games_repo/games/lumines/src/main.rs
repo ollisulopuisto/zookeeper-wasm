@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.194";
+const VERSION: &str = "26.04.04.210";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -133,6 +133,8 @@ fn save_high_scores(scores: &[LeaderboardEntry]) {
 fn ask_player_name() -> String {
     #[cfg(target_arch = "wasm32")]
     {
+        use shared::input::clear_keyboard_buffer;
+        clear_keyboard_buffer();
         let mut buf = [0u8; 64];
         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
         String::from_utf8_lossy(&buf[..len.min(buf.len())])
@@ -1165,10 +1167,17 @@ impl Game {
 
         if self.waiting_to_start {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("LUMINES WASM", sw / 2.0 - 140.0, sh / 2.0 - 60.0, 50.0, ORANGE);
-            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, sh / 2.0, 30.0, WHITE);
-            draw_text("SHIFT: Time Freeze (when full)", sw / 2.0 - 120.0, sh / 2.0 + 40.0, 20.0, SKYBLUE);
-            draw_text("Swipe/Arrows: Move", sw / 2.0 - 100.0, sh / 2.0 + 70.0, 20.0, GRAY);
+            draw_text("LUMINES WASM", sw / 2.0 - 160.0, sh / 2.0 - 130.0, 60.0, ORANGE);
+
+            let rule_sz = 18.0;
+            let rule_x = sw / 2.0 - 150.0;
+            draw_text("Match 2x2 blocks of same color", rule_x, sh / 2.0 - 70.0, rule_sz, WHITE);
+            draw_text("The sweep line clears matches", rule_x, sh / 2.0 - 50.0, rule_sz, WHITE);
+            draw_text("Chain (+) blocks clear all same-color links", rule_x, sh / 2.0 - 30.0, rule_sz, WHITE);
+
+            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, sh / 2.0 + 30.0, 30.0, WHITE);
+            draw_text("SHIFT: Time Freeze (when full)", sw / 2.0 - 120.0, sh / 2.0 + 70.0, 20.0, SKYBLUE);
+            draw_text("Swipe/Arrows: Move", sw / 2.0 - 100.0, sh / 2.0 + 100.0, 20.0, GRAY);
         }
 
         if self.game_over {

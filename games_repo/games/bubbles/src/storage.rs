@@ -25,6 +25,7 @@ pub unsafe fn _js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
 #[allow(unsafe_code)]
 #[cfg(target_arch = "wasm32")]
 pub fn ask_name_js() -> String {
+    shared::input::clear_keyboard_buffer();
     let mut buffer = [0u8; 16];
     let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
     if len == 0 { return "BUB".to_string(); }
