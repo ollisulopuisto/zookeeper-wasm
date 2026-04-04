@@ -16,6 +16,8 @@ const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
 const SCORE_PER_SQUARE: u32 = 50;  // points awarded per 2×2 square cleared
 const COMBO_MIN_SQUARES: u32 = 4;  // min squares per sweep to maintain combo
+const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
+const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -94,18 +96,33 @@ impl BlockColor {
     }
 }
 
+/// Generate a random 2×2 block together with chain flags.
+/// With probability `CHAIN_PROBABILITY`% one random cell is a chain cell.
+fn random_block_with_chain() -> ([[BlockColor; 2]; 2], [[bool; 2]; 2]) {
+    let colors = BlockColor::random_2x2();
+    let mut chains = [[false; 2]; 2];
+    if qrand::gen_range(0u32, 100) < CHAIN_PROBABILITY {
+        let row = qrand::gen_range(0, 2);
+        let col = qrand::gen_range(0, 2);
+        chains[row][col] = true;
+    }
+    (colors, chains)
+}
+
 struct ActiveBlock {
     x: i32,
     y: f32,
     colors: [[BlockColor; 2]; 2],
+    is_chain: [[bool; 2]; 2],
 }
 
 impl ActiveBlock {
-    fn new(colors: [[BlockColor; 2]; 2]) -> Self {
+    fn new(colors: [[BlockColor; 2]; 2], is_chain: [[bool; 2]; 2]) -> Self {
         Self {
             x: COLS as i32 / 2 - 1,
             y: -2.0,
             colors,
+            is_chain,
         }
     }
 
@@ -115,6 +132,12 @@ impl ActiveBlock {
         self.colors[1][0] = self.colors[1][1];
         self.colors[1][1] = self.colors[0][1];
         self.colors[0][1] = tmp;
+
+        let tmp = self.is_chain[0][0];
+        self.is_chain[0][0] = self.is_chain[1][0];
+        self.is_chain[1][0] = self.is_chain[1][1];
+        self.is_chain[1][1] = self.is_chain[0][1];
+        self.is_chain[0][1] = tmp;
     }
 
     fn rotate_ccw(&mut self) {
@@ -123,6 +146,12 @@ impl ActiveBlock {
         self.colors[0][1] = self.colors[1][1];
         self.colors[1][1] = self.colors[1][0];
         self.colors[1][0] = tmp;
+
+        let tmp = self.is_chain[0][0];
+        self.is_chain[0][0] = self.is_chain[0][1];
+        self.is_chain[0][1] = self.is_chain[1][1];
+        self.is_chain[1][1] = self.is_chain[1][0];
+        self.is_chain[1][0] = tmp;
     }
 }
 
@@ -161,11 +190,24 @@ fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f3
     draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
+/// Draw a green "+" cross symbol centred on the cell to mark it as a chain cell.
+fn draw_chain_symbol(x: f32, y: f32, size: f32) {
+    let cx = x + size * 0.5;
+    let cy = y + size * 0.5;
+    let arm = size * 0.28;
+    let thickness = (size * 0.12).max(2.0);
+    // Horizontal bar
+    draw_rectangle(cx - arm, cy - thickness * 0.5, arm * 2.0, thickness, CHAIN_SYMBOL_COLOR);
+    // Vertical bar
+    draw_rectangle(cx - thickness * 0.5, cy - arm, thickness, arm * 2.0, CHAIN_SYMBOL_COLOR);
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
     active: ActiveBlock,
     next_block: [[BlockColor; 2]; 2],
+    next_chain: [[bool; 2]; 2],
     timeline_x: f32,
     timeline_speed: f32,
     score: u32,
@@ -210,11 +252,15 @@ impl Game {
         let seconds_per_sweep = (60.0 / BPM) * BEATS_PER_SWEEP;
         let timeline_speed = COLS as f32 / seconds_per_sweep;
 
+        let (init_colors, init_chain) = random_block_with_chain();
+        let (next_colors, next_chain) = random_block_with_chain();
+
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
-            active: ActiveBlock::new(BlockColor::random_2x2()),
-            next_block: BlockColor::random_2x2(),
+            active: ActiveBlock::new(init_colors, init_chain),
+            next_block: next_colors,
+            next_chain,
             timeline_x: 0.0,
             timeline_speed,
             score: 0,
@@ -496,12 +542,16 @@ impl Game {
 
     fn lock_active(&mut self) {
         self.audio.play_land();
+        let mut chain_cells: Vec<(usize, usize)> = Vec::new();
         for r in 0..2 {
             for c in 0..2 {
                 let gx = self.active.x + c as i32;
                 let gy = self.active.y.floor() as i32 + r as i32;
                 if gy >= 0 && gy < ROWS as i32 && gx >= 0 && gx < COLS as i32 {
                     self.grid[gy as usize][gx as usize] = Some(self.active.colors[r][c]);
+                    if self.active.is_chain[r][c] {
+                        chain_cells.push((gx as usize, gy as usize));
+                    }
                 } else if gy < 0 {
                     self.game_over = true;
                 }
@@ -509,18 +559,27 @@ impl Game {
         }
         
         if !self.game_over {
+            // Flood-fill chain cells before gravity so positions are still accurate.
+            let mut any_chained = false;
+            for (cx, cy) in chain_cells {
+                if self.flood_mark_chain(cx, cy) > 0 {
+                    any_chained = true;
+                }
+            }
+            if any_chained {
+                self.audio.play_match();
+            }
+
             self.apply_gravity();
             self.update_matches();
             
-            let mut colors = [[BlockColor::ColorA; 2]; 2];
-            for r in 0..2 {
-                for c in 0..2 {
-                    colors[r][c] = self.next_block[r][c];
-                }
-            }
-            self.next_block = BlockColor::random_2x2();
+            let colors = self.next_block;
+            let is_chain = self.next_chain;
+            let (new_next_colors, new_next_chain) = random_block_with_chain();
+            self.next_block = new_next_colors;
+            self.next_chain = new_next_chain;
             
-            self.active = ActiveBlock::new(colors);
+            self.active = ActiveBlock::new(colors, is_chain);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
             }
@@ -528,6 +587,33 @@ impl Game {
         if self.game_over {
             self.audio.stop_music();
         }
+    }
+
+    /// BFS flood-fill: marks all grid cells connected to (x, y) that share the same color.
+    /// Returns the number of newly marked cells.
+    fn flood_mark_chain(&mut self, x: usize, y: usize) -> usize {
+        let target_color = match self.grid[y][x] {
+            Some(c) => c,
+            None => return 0,
+        };
+        let mut count = 0usize;
+        let mut stack: Vec<(usize, usize)> = vec![(x, y)];
+        let mut visited = [[false; COLS]; ROWS];
+        while let Some((cx, cy)) = stack.pop() {
+            if visited[cy][cx] { continue; }
+            visited[cy][cx] = true;
+            if self.grid[cy][cx] == Some(target_color) {
+                if !self.marked[cy][cx] {
+                    self.marked[cy][cx] = true;
+                    count += 1;
+                }
+                if cx > 0 { stack.push((cx - 1, cy)); }
+                if cx + 1 < COLS { stack.push((cx + 1, cy)); }
+                if cy > 0 { stack.push((cx, cy - 1)); }
+                if cy + 1 < ROWS { stack.push((cx, cy + 1)); }
+            }
+        }
+        count
     }
 
     fn apply_gravity(&mut self) {
@@ -648,8 +734,12 @@ impl Game {
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
                         let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE);
+                        let border_color = if self.active.is_chain[r][c] { LIME } else { SKYBLUE };
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
+                        if self.active.is_chain[r][c] {
+                            draw_chain_symbol(bx, by, cell_size);
+                        }
                     }
                 }
             }
@@ -776,11 +866,13 @@ impl Game {
                     BlockColor::ColorA => WHITE,
                     BlockColor::ColorB => ORANGE,
                 };
-                draw_stylized_block(
-                    layout.next_x + c as f32 * layout.next_cell,
-                    layout.next_blocks_top + r as f32 * layout.next_cell,
-                    layout.next_cell, color, 1.0, BLACK,
-                );
+                let bx = layout.next_x + c as f32 * layout.next_cell;
+                let by = layout.next_blocks_top + r as f32 * layout.next_cell;
+                let border = if self.next_chain[r][c] { LIME } else { BLACK };
+                draw_stylized_block(bx, by, layout.next_cell, color, 1.0, border);
+                if self.next_chain[r][c] {
+                    draw_chain_symbol(bx, by, layout.next_cell);
+                }
             }
         }
 
