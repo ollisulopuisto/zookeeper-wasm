@@ -90,6 +90,9 @@ const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE
 const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
 
 const MAX_HIGH_SCORES: usize = 10;
+const MAX_NAME_LENGTH: usize = 10;
+#[cfg(target_arch = "wasm32")]
+const MOBILE_POPUP_MAX_WIDTH: f32 = 600.0;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct LeaderboardEntry {
@@ -128,19 +131,6 @@ fn save_high_scores(scores: &[LeaderboardEntry]) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     let _ = scores;
-}
-
-fn ask_player_name() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let mut buf = [0u8; 64];
-        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
-        String::from_utf8_lossy(&buf[..len.min(buf.len())])
-            .trim()
-            .to_string()
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    "ANON".to_string()
 }
 
 /// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
@@ -333,6 +323,9 @@ struct Game {
     high_scores: Vec<LeaderboardEntry>,
     leaderboard_saved: bool,
     new_score_rank: Option<usize>,
+    entering_name: bool,
+    current_name: String,
+    just_finished_name_entry: bool,
 }
 
 impl Game {
@@ -390,7 +383,28 @@ impl Game {
             high_scores: Vec::new(),
             leaderboard_saved: false,
             new_score_rank: None,
+            entering_name: false,
+            current_name: String::new(),
+            just_finished_name_entry: false,
         }
+    }
+
+    fn qualifies_for_leaderboard(&self) -> bool {
+        self.high_scores.iter().any(|e| self.score > e.score) || self.high_scores.len() < MAX_HIGH_SCORES
+    }
+
+    fn add_to_leaderboard(&mut self, name: &str) {
+        self.high_scores.push(LeaderboardEntry {
+            name: name.to_string(),
+            score: self.score,
+        });
+        self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+        self.high_scores.truncate(MAX_HIGH_SCORES);
+        self.new_score_rank = self
+            .high_scores
+            .iter()
+            .rposition(|e| e.name == name && e.score == self.score);
+        save_high_scores(&self.high_scores);
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
@@ -408,6 +422,7 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
+        self.just_finished_name_entry = false;
         let dt = dt.min(0.1);
         let sw = screen_width();
         let sh = screen_height();
@@ -445,6 +460,58 @@ impl Game {
                 self.audio.stop_music();
             } else if !self.game_over && !self.waiting_to_start && !self.is_frozen {
                 self.audio.play_music();
+            }
+        }
+
+        if self.entering_name {
+            while let Some(c) = get_char_pressed() {
+                if (c.is_alphanumeric() || c == ' ') && self.current_name.len() < MAX_NAME_LENGTH {
+                    self.current_name.push(c);
+                }
+            }
+            if is_key_pressed(KeyCode::Backspace) {
+                self.current_name.pop();
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                let is_mobile = sw < MOBILE_POPUP_MAX_WIDTH && sw < sh;
+                if is_mobile {
+                    let prompt_w = sw * 0.4;
+                    let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                    let prompt_y = sh * 0.62;
+                    let prompt_h = sh * 0.06;
+                    if is_mouse_button_pressed(MouseButton::Left)
+                        && mx >= prompt_x
+                        && mx <= prompt_x + prompt_w
+                        && my >= prompt_y
+                        && my <= prompt_y + prompt_h
+                    {
+                        let mut buf = [0u8; 16];
+                        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+                        if let Ok(js_name) = std::str::from_utf8(&buf[..len.min(buf.len())]) {
+                            self.current_name = js_name.trim().to_string();
+                        }
+                    }
+                }
+            }
+
+            let ok_w = sw * 0.3;
+            let ok_x = sw / 2.0 - ok_w / 2.0;
+            let ok_y = sh * 0.74;
+            let ok_h = sh * 0.1;
+            let submit = is_key_pressed(KeyCode::Enter)
+                || is_key_pressed(KeyCode::KpEnter)
+                || (is_mouse_button_pressed(MouseButton::Left)
+                    && mx >= ok_x
+                    && mx <= ok_x + ok_w
+                    && my >= ok_y
+                    && my <= ok_y + ok_h);
+            if submit {
+                let name = self.current_name.clone();
+                self.add_to_leaderboard(&name);
+                self.entering_name = false;
+                self.just_finished_name_entry = true;
             }
         }
 
@@ -1220,6 +1287,55 @@ impl Game {
             let rst_sz = (sh * 0.035).clamp(14.0, 24.0);
             let rm = measure_text(restart_str, None, rst_sz as u16, 1.0);
             draw_text(restart_str, sw / 2.0 - rm.width / 2.0, sh * 0.96, rst_sz, YELLOW);
+
+            if self.entering_name {
+                draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
+
+                let title = "NEW HIGH SCORE!";
+                let title_sz = (sh * 0.06).clamp(24.0, 44.0);
+                let tm = measure_text(title, None, title_sz as u16, 1.0);
+                draw_text(title, sw / 2.0 - tm.width / 2.0, sh * 0.18, title_sz, YELLOW);
+
+                let prompt = "Type your name";
+                let prompt_sz = (sh * 0.04).clamp(16.0, 30.0);
+                let pm = measure_text(prompt, None, prompt_sz as u16, 1.0);
+                draw_text(prompt, sw / 2.0 - pm.width / 2.0, sh * 0.36, prompt_sz, GRAY);
+
+                let display_name = if self.current_name.is_empty() {
+                    "_".to_string()
+                } else {
+                    format!("{}_", self.current_name)
+                };
+                let name_sz = (sh * 0.06).clamp(22.0, 42.0);
+                let nm = measure_text(&display_name, None, name_sz as u16, 1.0);
+                draw_text(&display_name, sw / 2.0 - nm.width / 2.0, sh * 0.5, name_sz, WHITE);
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let is_mobile = sw < MOBILE_POPUP_MAX_WIDTH && sw < sh;
+                    if is_mobile {
+                        let prompt_w = sw * 0.4;
+                        let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                        let prompt_y = sh * 0.62;
+                        let prompt_h = sh * 0.06;
+                        draw_rectangle(prompt_x, prompt_y, prompt_w, prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                        let popup = "TAP FOR POPUP";
+                        let pop_sz = (sh * 0.024).clamp(12.0, 18.0);
+                        let popm = measure_text(popup, None, pop_sz as u16, 1.0);
+                        draw_text(popup, sw / 2.0 - popm.width / 2.0, prompt_y + prompt_h * 0.72, pop_sz, WHITE);
+                    }
+                }
+
+                let ok_w = sw * 0.3;
+                let ok_x = sw / 2.0 - ok_w / 2.0;
+                let ok_y = sh * 0.74;
+                let ok_h = sh * 0.1;
+                draw_rectangle(ok_x, ok_y, ok_w, ok_h, Color::new(0.3, 0.8, 0.3, 1.0));
+                let ok = "OK";
+                let ok_sz = (sh * 0.05).clamp(18.0, 32.0);
+                let okm = measure_text(ok, None, ok_sz as u16, 1.0);
+                draw_text(ok, sw / 2.0 - okm.width / 2.0, ok_y + ok_h * 0.68, ok_sz, WHITE);
+            }
         }
 
         if self.is_paused {
@@ -1248,25 +1364,18 @@ async fn main() {
             game.high_scores = load_high_scores();
             // Sort after loading since load_list does not guarantee order.
             game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
-            if game.score > 0 {
-                let min_score = game.high_scores.last().map_or(0, |e| e.score);
-                let qualifies = game.high_scores.len() < MAX_HIGH_SCORES
-                    || game.score > min_score;
-                if qualifies {
-                    let name = ask_player_name();
-                    game.high_scores.push(LeaderboardEntry { name: name.clone(), score: game.score });
-                    game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
-                    game.high_scores.truncate(MAX_HIGH_SCORES);
-                    game.new_score_rank = game.high_scores.iter()
-                        .rposition(|e| e.name == name && e.score == game.score);
-                    save_high_scores(&game.high_scores);
-                }
+            if game.score > 0 && game.qualifies_for_leaderboard() {
+                game.entering_name = true;
             }
         }
 
         game.draw();
 
-        if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
+        if (game.game_over || game.waiting_to_start)
+            && !game.entering_name
+            && !game.just_finished_name_entry
+            && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left))
+        {
             #[cfg(target_arch = "wasm32")]
             {
                 // This is a hacky way to focus the canvas in Macroquad WASM if needed,
