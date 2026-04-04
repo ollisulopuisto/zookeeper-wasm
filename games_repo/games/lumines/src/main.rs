@@ -14,6 +14,7 @@ const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const ENTRY_DELAY: f32 = 1.5;  // seconds block is held above playfield for repositioning
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -181,6 +182,9 @@ struct Game {
     is_frozen: bool,
     freeze_timer: f32,
 
+    // Entry phase: block is shown above playfield before it starts dropping
+    entry_timer: f32,
+
     // Touch/Mouse state
     last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
@@ -226,6 +230,7 @@ impl Game {
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
+            entry_timer: 0.0,  // set to ENTRY_DELAY when game starts
             last_mouse_pos: Vec2::ZERO,
             swipe_start: None,
             tap_timer: 0.0,
@@ -355,11 +360,18 @@ impl Game {
         self.update_matches();
 
         // Handle Active Block
-        self.drop_timer += dt;
-        if self.drop_timer >= self.drop_interval {
+        // During the entry phase the block sits above the playfield; count down
+        // the timer and skip automatic dropping until the phase expires.
+        if self.entry_timer > 0.0 {
+            self.entry_timer = (self.entry_timer - dt).max(0.0);
             self.drop_timer = 0.0;
-            if !self.move_active(0, 1) {
-                self.lock_active();
+        } else {
+            self.drop_timer += dt;
+            if self.drop_timer >= self.drop_interval {
+                self.drop_timer = 0.0;
+                if !self.move_active(0, 1) {
+                    self.lock_active();
+                }
             }
         }
 
@@ -373,6 +385,7 @@ impl Game {
             self.move_active(1, 0);
         }
         if is_key_pressed(KeyCode::Down) || is_key_pressed(KeyCode::S) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
@@ -386,6 +399,7 @@ impl Game {
             }
         }
         if is_key_pressed(KeyCode::Space) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             while self.move_active(0, 1) {}
             self.lock_active();
         }
@@ -410,7 +424,8 @@ impl Game {
                         self.active.rotate_ccw();
                     }
                 } else if diff.y > 50.0 {
-                    // Swipe down to drop
+                    // Swipe down to drop – also cancels entry phase
+                    self.entry_timer = 0.0;
                     while self.move_active(0, 1) {}
                     self.lock_active();
                 }
@@ -493,6 +508,10 @@ impl Game {
             self.active = ActiveBlock::new(colors);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
+            } else {
+                // Start the entry phase so the player can position the block
+                self.entry_timer = ENTRY_DELAY;
+                self.drop_timer = 0.0;
             }
         }
         if self.game_over {
@@ -602,11 +621,36 @@ impl Game {
 
         // Draw Active Block
         if !self.game_over && !self.waiting_to_start {
+            let in_entry = self.entry_timer > 0.0;
+
+            // During the entry phase draw a staging area above the playfield so the
+            // player can clearly see and position the incoming block.
+            if in_entry {
+                let bx = offset_x + self.active.x as f32 * cell_size;
+                let staging_top = offset_y - cell_size * 2.0;
+                let staging_w   = cell_size * 2.0;
+                let staging_h   = cell_size * 2.0;
+                // Dark backdrop
+                draw_rectangle(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    Color::new(0.05, 0.05, 0.15, 0.88));
+                // Thin border
+                draw_rectangle_lines(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    1.5, Color::new(0.6, 0.85, 1.0, 0.5));
+                // Countdown bar: full = entry is fresh, empty = about to drop
+                let bar_frac = self.entry_timer / ENTRY_DELAY;
+                let bar_h    = (cell_size * 0.12).max(3.0);
+                let bar_y    = staging_top - bar_h - 3.0;
+                draw_rectangle(bx, bar_y, staging_w, bar_h, Color::new(0.2, 0.2, 0.3, 0.8));
+                draw_rectangle(bx, bar_y, staging_w * bar_frac, bar_h, SKYBLUE);
+            }
+
             for r in 0..2 {
                 for c in 0..2 {
                     let gx = self.active.x + c as i32;
                     let gy = self.active.y + r as f32;
-                    if gy >= 0.0 {
+                    // Render cells inside the playfield always; render cells above the
+                    // playfield only during the entry phase.
+                    if gy >= 0.0 || in_entry {
                         let mut color = match self.active.colors[r][c] {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
@@ -809,6 +853,7 @@ async fn main() {
             game.audio = audio;
             game.audio.set_muted(muted);
             game.waiting_to_start = false;
+            game.entry_timer = ENTRY_DELAY;  // give player time to position the first block
             game.audio.play_music();
         }
 
