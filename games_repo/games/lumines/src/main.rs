@@ -26,6 +26,15 @@ const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
 const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
 const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
 const HUD_SECTION_GAP_FACTOR: f32 = 1.0;
+// Shared layout constants
+const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
+const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
+// Landscape layout constants
+const LANDSCAPE_HUD_RATIO: f32 = 0.20;     // fraction of sh reserved for the top HUD bar
+const LANDSCAPE_FONT_LG_RATIO: f32 = 0.25; // large font as fraction of top-bar height
+const LANDSCAPE_FONT_SM_RATIO: f32 = 0.13; // small font as fraction of top-bar height
+const LANDSCAPE_FREEZE_METER_W_RATIO: f32 = 0.30; // FREEZE meter width as fraction of sw
+const LANDSCAPE_FREEZE_METER_H_RATIO: f32 = 0.11; // FREEZE meter height as fraction of hud_h
 // Portrait (mobile) layout constants
 const PORTRAIT_TOP_HUD_RATIO: f32 = 0.10;  // fraction of sh reserved for the top bar
 const PORTRAIT_BOT_HUD_RATIO: f32 = 0.22;  // fraction of sh reserved for the bottom bar
@@ -229,7 +238,7 @@ impl Game {
         let sw = screen_width();
         let sh = screen_height();
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
-        let btn_size = sh * 0.06;
+        let btn_size = sh * BTN_SIZE_RATIO;
         let (mx, my) = mouse_position();
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
@@ -526,13 +535,13 @@ impl Game {
         // info bar so that NEXT preview and FREEZE meter get plenty of space.
         // On landscape screens keep the original single top-HUD layout.
         let is_portrait = sw < sh;
-        let hud_h = if is_portrait { sh * PORTRAIT_TOP_HUD_RATIO } else { sh * 0.20 };
+        let hud_h = if is_portrait { sh * PORTRAIT_TOP_HUD_RATIO } else { sh * LANDSCAPE_HUD_RATIO };
         let bot_h = if is_portrait { sh * PORTRAIT_BOT_HUD_RATIO } else { 0.0 };
         // Font sizes scale with the top-bar height. Use different ratios so text
         // fits the thinner portrait bar while preserving landscape proportions.
-        let font_lg = if is_portrait { hud_h * PORTRAIT_FONT_LG_RATIO } else { hud_h * 0.25 };
-        let font_sm = if is_portrait { hud_h * PORTRAIT_FONT_SM_RATIO } else { hud_h * 0.13 };
-        let margin  = sw  * 0.03;    // horizontal gutter
+        let font_lg = if is_portrait { hud_h * PORTRAIT_FONT_LG_RATIO } else { hud_h * LANDSCAPE_FONT_LG_RATIO };
+        let font_sm = if is_portrait { hud_h * PORTRAIT_FONT_SM_RATIO } else { hud_h * LANDSCAPE_FONT_SM_RATIO };
+        let margin  = sw * HUD_MARGIN_RATIO;    // horizontal gutter
 
         // Board fills the space between the two bars, centred horizontally.
         let cell_size = (sw / COLS as f32).min((sh - hud_h - bot_h) / ROWS as f32);
@@ -620,7 +629,7 @@ impl Game {
 
         // Draw HUD
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
-        let btn_size = sh * 0.06;
+        let btn_size = sh * BTN_SIZE_RATIO;
         let mute_x = sw - btn_size - pad;
         let mute_y = pad;
         let pause_x = mute_x - btn_size - pad;
@@ -713,8 +722,8 @@ impl Game {
             let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
 
             // Freeze Meter: cap width so it never overlaps the NEXT preview on narrow screens.
-            let meter_desired_w = sw * 0.30;
-            let meter_h = hud_h * 0.11;
+            let meter_desired_w = sw * LANDSCAPE_FREEZE_METER_W_RATIO;
+            let meter_h = hud_h * LANDSCAPE_FREEZE_METER_H_RATIO;
             let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
             let meter_gap = pad * HUD_SECTION_GAP_FACTOR;
             let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
