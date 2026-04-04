@@ -10,6 +10,9 @@ All notable changes to the games in this monorepo will be documented in this fil
   - Implemented a score-based progression system that unlocks new styles at 500, 2000, 5000, and 10,000 points.
   - Enhanced HUD with current Level and Style name indicators.
   - Added a "STYLE UNLOCKED!" notification that flashes when a new visual level is reached.
+- **Expressive Completion Animations (Lumines):**
+  - Added per-cell particle explosions when blocks are cleared by the sweep line.
+  - Added column-clear flash and board-edge match glow effects.
 ### Fixed
 - **Lumines WASM:** Fixed potential performance and correctness issues when the game hitches or is unfocused.
   - Clamped `dt` to 0.1s to prevent excessive processing during long frames.

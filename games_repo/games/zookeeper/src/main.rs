@@ -1222,16 +1222,31 @@ async fn main() {
             draw_text_centered("GAME OVER", sh * 0.3, font_size * 2.0, RED);
             draw_text_centered(&format!("FINAL SCORE: {}", board.score), sh * 0.45, font_size, WHITE);
             draw_text_centered("LEADERBOARD", sh * 0.55, font_size * 0.8, YELLOW);
+            let center_x = sw / 2.0;
+            let row_font_size = font_size * 0.6;
+            let rank_x = center_x - font_size * 4.0;
+            let name_x = center_x - font_size * 3.0;
+            let score_x = center_x + font_size * 4.0;
+
             for (i, entry) in board.high_scores.iter().enumerate() {
                 let y = sh * 0.62 + (i as f32 * font_size * 0.8);
-                let text = format!("{}. {} - {}", i+1, entry.name, entry.score);
                 let is_highlight = board.last_submitted.as_ref().map_or(false, |(n, s)| n == &entry.name && s == &entry.score);
                 let color = if is_highlight { YELLOW } else { WHITE };
-                draw_text_centered(&text, y, font_size * 0.6, color);
+                
+                // Rank column (left aligned)
+                draw_text(&format!("{}.", i + 1), rank_x, y, row_font_size, color);
+                
+                // Name column (left aligned)
+                draw_text(&entry.name, name_x, y, row_font_size, color);
+                
+                // Score column (right aligned)
+                let score_text = format!("{}", entry.score);
+                let score_dims = measure_text(&score_text, None, row_font_size as u16, 1.0);
+                draw_text(&score_text, score_x - score_dims.width, y, row_font_size, color);
+
                 if entry.snail {
-                    let dims = measure_text(&text, None, (font_size * 0.6) as u16, 1.0);
                     let snail_s = font_size * 0.4;
-                    draw_texture_ex(&tex_snail, sw / 2.0 + dims.width / 2.0 + 5.0, y - snail_s * 0.8, color, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
+                    draw_texture_ex(&tex_snail, score_x + 10.0, y - snail_s * 0.8, color, DrawTextureParams { dest_size: Some(vec2(snail_s, snail_s)), ..Default::default() });
                 }
             }
             if (get_time() * 2.0) as i32 % 2 == 0 {

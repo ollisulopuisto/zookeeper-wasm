@@ -12,12 +12,13 @@ pub struct AudioManager {
 
 impl AudioManager {
     pub async fn new() -> Self {
+        let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         Self {
             rotate: load_sound_from_bytes(&generate_rotate_wav()).await.unwrap(),
             land: load_sound_from_bytes(&generate_land_wav()).await.unwrap(),
             match_made: load_sound_from_bytes(&generate_match_wav()).await.unwrap(),
             clear: load_sound_from_bytes(&generate_clear_wav()).await.unwrap(),
-            music: load_sound_from_bytes(&generate_music_wav()).await.unwrap(),
+            music: load_sound_from_bytes(&generate_music_wav(Some(seed))).await.unwrap(),
             muted: false,
         }
     }
