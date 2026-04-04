@@ -671,7 +671,9 @@ impl Game {
             // NEXT preview – left quarter of the bar, vertically centred.
             let next_cell = (bot_h * PORTRAIT_NEXT_CELL_HUD_RATIO).min(sw * PORTRAIT_NEXT_CELL_SCREEN_RATIO);
             let next_w    = next_cell * 2.0;
-            let next_x    = sw * PORTRAIT_NEXT_X_CENTER - next_w * 0.5;
+            let next_min_x = margin;
+            let next_max_x = (sw - margin - next_w).max(next_min_x);
+            let next_x    = (sw * PORTRAIT_NEXT_X_CENTER - next_w * 0.5).clamp(next_min_x, next_max_x);
             let next_blocks_top = bar_mid_y - next_cell; // centre 2 rows
             draw_text("NEXT", next_x, next_blocks_top - font_sm * 0.5, font_sm * 1.2, WHITE);
             for r in 0..2 {
