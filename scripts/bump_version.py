@@ -10,12 +10,12 @@ def get_commit_count():
     except Exception:
         return 0
 
-def update_file(path, pattern, replacement):
+def update_file(path, pattern, replacement, count=0):
     if not os.path.exists(path):
         return False
     with open(path, "r") as f:
         content = f.read()
-    new_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+    new_content = re.sub(pattern, replacement, content, count=count, flags=re.MULTILINE)
     if content != new_content:
         with open(path, "w") as f:
             f.write(new_content)
@@ -30,8 +30,7 @@ def main():
     n = commit_count + 1
     
     # YY.M.D.N format as per user preference (or YY.MM.DD.N)
-    # The user examples had both 26.4.4.196 and 26.04.04.196.
-    # We'll use 26.4.4.N for Cargo.toml and 26.04.04.N for main.rs as seen in the wild.
+    version_cargo = f"{now.year % 100}.{now.month}.{now.day}"
     version_short = f"{now.year % 100}.{now.month}.{now.day}.{n}"
     version_long = f"{now.year % 100}.{now.month:02}.{now.day:02}.{n}"
     
@@ -42,25 +41,25 @@ def main():
     
     # Update Jetpac
     jetpac_cargo = os.path.join(games_dir, "jetpac", "Cargo.toml")
-    if update_file(jetpac_cargo, r'^version = ".*"', f'version = "{version_short}"'):
+    if update_file(jetpac_cargo, r'^version = ".*"', f'version = "{version_cargo}"'):
         changed_files.append(jetpac_cargo)
     
     # Update Lumines
     lumines_cargo = os.path.join(games_dir, "lumines", "Cargo.toml")
-    if update_file(lumines_cargo, r'^version = ".*"', f'version = "{version_short}"'):
+    if update_file(lumines_cargo, r'^version = ".*"', f'version = "{version_cargo}"'):
         changed_files.append(lumines_cargo)
     lumines_main = os.path.join(games_dir, "lumines", "src", "main.rs")
     if update_file(lumines_main, r'const VERSION: &str = ".*"', f'const VERSION: &str = "{version_long}"'):
         changed_files.append(lumines_main)
         
-    # Update CHANGELOG.md
+    # Update CHANGELOG.md (only the first header found)
     changelog = os.path.join(root_dir, "games_repo", "CHANGELOG.md")
-    if update_file(changelog, r'## \[.*\] - ', f'## [{version_short}] - '):
+    if update_file(changelog, r'## \[.*\] - ', f'## [{version_short}] - ', count=1):
         changed_files.append(changelog)
 
     for path in changed_files:
         subprocess.run(["git", "add", path], check=True)
-        print(f"Bumped and staged {os.path.relpath(path, root_dir)} to {version_short}")
+        print(f"Bumped and staged {os.path.relpath(path, root_dir)} to {version_short} or equivalent")
 
 if __name__ == "__main__":
     main()

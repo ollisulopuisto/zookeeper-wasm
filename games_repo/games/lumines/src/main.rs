@@ -9,11 +9,13 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.214";
+const VERSION: &str = "26.04.04.211";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const ENTRY_DELAY: f32 = 1.0;  // seconds block is held above playfield for repositioning
+
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -40,9 +42,6 @@ const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
-// Falling animation constants
-const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
-const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
 // Completion animation constants
 const CLEAR_FLASH_DURATION: f32 = 0.35;    // seconds for a column-clear flash to fade out
 const CLEAR_FLASH_MAX_ALPHA: f32 = 0.55;   // max alpha for the column flash
@@ -63,6 +62,9 @@ const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle life
 const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for a 12 Hz marked-block brightness pulse
 const MARKED_PULSE_AMPLITUDE: f32 = 0.35;  // 0..1 amplitude of the brightness pulse (35%)
 const MARKED_GLOW_THRESHOLD: f32 = 0.88;   // pulse value above which the outer glow ring appears
+// Falling animation constants
+const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
+const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
 // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
@@ -271,6 +273,9 @@ struct Game {
     is_frozen: bool,
     freeze_timer: f32,
 
+    // Entry phase: block is shown above playfield before it starts dropping
+    entry_timer: f32,
+
     // Touch/Mouse state
     swipe_start: Option<Vec2>,
     tap_timer: f32,
@@ -325,6 +330,7 @@ impl Game {
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
+            entry_timer: 0.0,  // set to ENTRY_DELAY when game starts
             swipe_start: None,
             tap_timer: 0.0,
             swipe_occurred: false,
@@ -466,11 +472,24 @@ impl Game {
         self.update_matches();
 
         // Handle Active Block
-        self.drop_timer += dt;
-        if self.drop_timer >= self.drop_interval {
-            self.drop_timer = 0.0;
-            if !self.move_active(0, 1) {
-                self.lock_active();
+        // During the entry phase the block sits above the playfield; count down
+        // the timer and skip automatic dropping until the phase expires.
+        if self.entry_timer > 0.0 {
+            self.entry_timer = (self.entry_timer - dt).max(0.0);
+            if self.entry_timer == 0.0 {
+                // Entry phase just expired – trigger an immediate drop so the
+                // block doesn't linger invisibly above the playfield.
+                self.drop_timer = self.drop_interval;
+            } else {
+                self.drop_timer = 0.0;
+            }
+        } else {
+            self.drop_timer += dt;
+            if self.drop_timer >= self.drop_interval {
+                self.drop_timer = 0.0;
+                if !self.move_active(0, 1) {
+                    self.lock_active();
+                }
             }
         }
 
@@ -484,6 +503,7 @@ impl Game {
             self.move_active(1, 0);
         }
         if is_key_pressed(KeyCode::Down) || is_key_pressed(KeyCode::S) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
@@ -497,6 +517,7 @@ impl Game {
             }
         }
         if is_key_pressed(KeyCode::Space) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             while self.move_active(0, 1) {}
             self.lock_active();
         }
@@ -521,7 +542,8 @@ impl Game {
                         self.active.rotate_ccw();
                     }
                 } else if diff.y > 50.0 {
-                    // Swipe down to drop
+                    // Swipe down to drop – also cancels entry phase
+                    self.entry_timer = 0.0;
                     while self.move_active(0, 1) {}
                     self.lock_active();
                 }
@@ -547,6 +569,13 @@ impl Game {
             p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
+
+        // Decay column clear flashes and match flash
+        for flash in self.clear_flashes.iter_mut() {
+            flash.1 -= dt / CLEAR_FLASH_DURATION;
+        }
+        self.clear_flashes.retain(|f| f.1 > 0.0);
+        self.match_flash = (self.match_flash - dt * MATCH_FLASH_DECAY_RATE).max(0.0);
 
         // Update falling-block animation physics (gravity + landing squish timers).
         for y in 0..ROWS {
@@ -637,6 +666,10 @@ impl Game {
             self.active = ActiveBlock::new(colors);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
+            } else {
+                // Start the entry phase so the player can position the block
+                self.entry_timer = ENTRY_DELAY;
+                self.drop_timer = 0.0;
             }
         }
         if self.game_over {
@@ -809,11 +842,37 @@ impl Game {
 
         // Draw Active Block
         if !self.game_over && !self.waiting_to_start {
+            let in_entry = self.entry_timer > 0.0;
+
+            // During the entry phase draw a staging area above the playfield so the
+            // player can clearly see and position the incoming block.
+            if in_entry {
+                let bx = offset_x + self.active.x as f32 * cell_size;
+                let staging_top = offset_y - cell_size * 2.0;
+                let staging_w   = cell_size * 2.0;
+                let staging_h   = cell_size * 2.0;
+                // Dark backdrop
+                draw_rectangle(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    Color::new(0.05, 0.05, 0.15, 0.88));
+                // Thin border
+                draw_rectangle_lines(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    1.5, Color::new(0.6, 0.85, 1.0, 0.5));
+                // Countdown bar: full = entry is fresh, empty = about to drop
+                let bar_frac = self.entry_timer / ENTRY_DELAY;
+                let bar_h    = (cell_size * 0.12).max(3.0);
+                let bar_y    = staging_top - bar_h - 3.0;
+                draw_rectangle(bx, bar_y, staging_w, bar_h, Color::new(0.2, 0.2, 0.3, 0.8));
+                draw_rectangle(bx, bar_y, staging_w * bar_frac, bar_h, SKYBLUE);
+            }
+
             for r in 0..2 {
                 for c in 0..2 {
                     let gx = self.active.x + c as i32;
                     let gy = self.active.y + r as f32;
-                    if gy >= 0.0 {
+                    // Render cells inside the playfield always; render cells above the
+                    // playfield whenever they are above y=0 (e.g. during entry or just
+                    // after entry expires but before the first drop moves the block down).
+                    if gy >= 0.0 || self.active.y < 0.0 {
                         let mut color = match self.active.colors[r][c] {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
@@ -824,8 +883,13 @@ impl Game {
                         }
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
-                        let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE, 1.0, 1.0);
+                        let glow_alpha = if in_entry {
+                            (get_time() as f32 * 12.0).sin() * 0.15 + 0.35
+                        } else {
+                            (get_time() as f32 * 8.0).sin() * 0.08 + 0.22
+                        };
+                        let border_color = if in_entry { YELLOW } else { SKYBLUE };
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                     }
                 }
@@ -858,7 +922,7 @@ impl Game {
             draw_text("TIME FROZEN", sw / 2.0 - tf_dims.width / 2.0, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
-        // Draw HUD
+        // Draw HUD (AFTER blocks so it overlays any that bleed above offset_y during grace period)
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * BTN_SIZE_RATIO;
         let mute_x = sw - btn_size - pad;
@@ -1089,6 +1153,7 @@ async fn main() {
             game.audio = audio;
             game.audio.set_muted(muted);
             game.waiting_to_start = false;
+            game.entry_timer = ENTRY_DELAY;  // give player time to position the first block
             game.audio.play_music();
         }
 
