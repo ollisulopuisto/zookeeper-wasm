@@ -455,6 +455,13 @@ impl Game {
         // Update falling-block animation physics (gravity + landing squish timers).
         for y in 0..ROWS {
             for x in 0..COLS {
+                if self.grid[y][x].is_none() {
+                    self.v_offsets[y][x] = 0.0;
+                    self.v_velocities[y][x] = 0.0;
+                    self.impact_timers[y][x] = 0.0;
+                    continue;
+                }
+
                 if self.v_offsets[y][x] < 0.0 {
                     self.v_velocities[y][x] += dt * FALL_GRAVITY;
                     self.v_offsets[y][x] += dt * self.v_velocities[y][x];
@@ -547,8 +554,11 @@ impl Game {
                         // Block falls `drop` rows: carry existing offset plus additional drop.
                         self.v_offsets[write_y][x] = self.v_offsets[y][x] - drop as f32;
                         self.v_velocities[write_y][x] = self.v_velocities[y][x];
+                        self.impact_timers[write_y][x] = self.impact_timers[y][x];
+                        
                         self.v_offsets[y][x] = 0.0;
                         self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = 0.0;
                     }
                     num_blocks += 1;
                     write_y = write_y.saturating_sub(1);
@@ -559,6 +569,7 @@ impl Game {
             for y in 0..filled_from {
                 self.v_offsets[y][x] = 0.0;
                 self.v_velocities[y][x] = 0.0;
+                self.impact_timers[y][x] = 0.0;
             }
         }
     }
