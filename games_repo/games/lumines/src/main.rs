@@ -13,7 +13,9 @@ const VERSION: &str = "26.04.04.196";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
-const MAX_FREEZE_METER: f32 = 100.0;
+const SPAWN_GRACE_PERIOD: f32 = 1.0;
+const MAX_FREEZE_METER: f32 = 50.0;
+
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -239,6 +241,7 @@ struct Game {
     waiting_to_start: bool,
     drop_timer: f32,
     drop_interval: f32,
+    spawn_timer: f32,
     audio: AudioManager,
     particles: Vec<Particle>,
     is_paused: bool,
@@ -295,6 +298,7 @@ impl Game {
             waiting_to_start: true,
             drop_timer: 0.0,
             drop_interval: 1.0,
+            spawn_timer: SPAWN_GRACE_PERIOD,
             audio,
             particles: Vec::new(),
             is_paused: false,
@@ -434,11 +438,15 @@ impl Game {
         self.update_matches();
 
         // Handle Active Block
-        self.drop_timer += dt;
-        if self.drop_timer >= self.drop_interval {
-            self.drop_timer = 0.0;
-            if !self.move_active(0, 1) {
-                self.lock_active();
+        if self.spawn_timer > 0.0 {
+            self.spawn_timer -= dt;
+        } else {
+            self.drop_timer += dt;
+            if self.drop_timer >= self.drop_interval {
+                self.drop_timer = 0.0;
+                if !self.move_active(0, 1) {
+                    self.lock_active();
+                }
             }
         }
 
@@ -452,6 +460,7 @@ impl Game {
             self.move_active(1, 0);
         }
         if is_key_pressed(KeyCode::Down) || is_key_pressed(KeyCode::S) {
+            self.spawn_timer = 0.0;
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
@@ -465,6 +474,7 @@ impl Game {
             }
         }
         if is_key_pressed(KeyCode::Space) {
+            self.spawn_timer = 0.0;
             while self.move_active(0, 1) {}
             self.lock_active();
         }
@@ -490,6 +500,7 @@ impl Game {
                     }
                 } else if diff.y > 50.0 {
                     // Swipe down to drop
+                    self.spawn_timer = 0.0;
                     while self.move_active(0, 1) {}
                     self.lock_active();
                 }
@@ -595,6 +606,7 @@ impl Game {
             self.next_block = BlockColor::random_2x2();
             
             self.active = ActiveBlock::new(colors);
+            self.spawn_timer = SPAWN_GRACE_PERIOD;
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
             }
@@ -752,8 +764,14 @@ impl Game {
                         }
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
-                        let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE, 1.0, 1.0);
+                        let is_grace = self.spawn_timer > 0.0;
+                        let glow_alpha = if is_grace {
+                            (get_time() as f32 * 12.0).sin() * 0.15 + 0.35
+                        } else {
+                            (get_time() as f32 * 8.0).sin() * 0.08 + 0.22
+                        };
+                        let border_color = if is_grace { YELLOW } else { SKYBLUE };
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                     }
                 }
@@ -780,7 +798,7 @@ impl Game {
             draw_text("TIME FROZEN", sw / 2.0 - tf_dims.width / 2.0, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
-        // Draw HUD
+        // Draw HUD (AFTER blocks so it overlays any that bleed above offset_y during grace period)
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * BTN_SIZE_RATIO;
         let mute_x = sw - btn_size - pad;
