@@ -26,6 +26,18 @@ const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
 const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
 const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
 const HUD_SECTION_GAP_FACTOR: f32 = 1.0;
+const BLOCK_BASE_DARKEN: f32 = 0.82;
+const BLOCK_HIGHLIGHT_HEIGHT_RATIO: f32 = 0.36;
+const BLOCK_HIGHLIGHT_ALPHA: f32 = 0.92;
+const BLOCK_SHADOW_CUTOFF_RATIO: f32 = 0.38;
+const BLOCK_SHADOW_ALPHA: f32 = 0.46;
+const BLOCK_GLINT_SIZE_RATIO: f32 = 0.22;
+const BLOCK_GLINT_MIN_PX: f32 = 2.0;
+const BLOCK_GLINT_OFFSET_RATIO: f32 = 0.10;
+const BLOCK_GLINT_ASPECT: f32 = 0.45;
+const BLOCK_GLINT_ALPHA: f32 = 0.82;
+const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
+const BLOCK_OUTLINE_INSET: f32 = 1.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -90,27 +102,27 @@ struct Particle {
 fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
     // Slightly-darkened base fill so the highlight band reads against it for ALL colors,
     // including pure white (light-gray base vs. white highlight = visible contrast).
-    let base = Color::new(color.r * 0.82, color.g * 0.82, color.b * 0.82, 1.0);
+    let base = Color::new(color.r * BLOCK_BASE_DARKEN, color.g * BLOCK_BASE_DARKEN, color.b * BLOCK_BASE_DARKEN, 1.0);
     draw_rectangle(x, y, size, size, base);
 
     // Top highlight band at the original (brighter) color — always visibly lighter than base
-    draw_rectangle(x, y, size, size * 0.36, Color::new(color.r, color.g, color.b, 0.92));
+    draw_rectangle(x, y, size, size * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
 
     // Bottom-right shadow: dark triangle for a strong comic-book depth cue
     draw_triangle(
-        vec2(x + size * 0.38, y + size),
-        vec2(x + size, y + size * 0.38),
+        vec2(x + size * BLOCK_SHADOW_CUTOFF_RATIO, y + size),
+        vec2(x + size, y + size * BLOCK_SHADOW_CUTOFF_RATIO),
         vec2(x + size, y + size),
-        Color::new(0.0, 0.0, 0.0, 0.46),
+        Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
     );
 
     // Small specular glint in top-left corner — the comic-book "shine" pill
-    let g = (size * 0.22).max(2.0);
-    draw_rectangle(x + size * 0.10, y + size * 0.10, g, g * 0.45, Color::new(1.0, 1.0, 1.0, 0.82));
+    let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
+    draw_rectangle(x + size * BLOCK_GLINT_OFFSET_RATIO, y + size * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
 
     // Bold black outer outline + tinted inner border
-    draw_rectangle_lines(x, y, size, size, (border_width + 1.0).max(2.0), Color::new(0.0, 0.0, 0.0, 0.90));
-    draw_rectangle_lines(x + 1.0, y + 1.0, (size - 2.0).max(0.0), (size - 2.0).max(0.0), border_width, border_color);
+    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_INSET * 2.0), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
+    draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
 struct Game {
