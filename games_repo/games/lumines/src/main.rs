@@ -26,6 +26,17 @@ const FREEZE_METER_VERTICAL_SPACING_FACTOR: f32 = 0.65;
 const NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR: f32 = 1.25;
 const NEXT_PREVIEW_VERTICAL_SPACING_FACTOR: f32 = 0.5;
 const HUD_SECTION_GAP_FACTOR: f32 = 1.0;
+// Portrait (mobile) layout constants
+const PORTRAIT_TOP_HUD_RATIO: f32 = 0.10;  // fraction of sh reserved for the top bar
+const PORTRAIT_BOT_HUD_RATIO: f32 = 0.22;  // fraction of sh reserved for the bottom bar
+const PORTRAIT_FONT_LG_RATIO: f32 = 0.45;  // large font as fraction of top-bar height
+const PORTRAIT_FONT_SM_RATIO: f32 = 0.25;  // small font as fraction of top-bar height
+const PORTRAIT_NEXT_CELL_HUD_RATIO: f32 = 0.32;  // NEXT cell size relative to bot_h
+const PORTRAIT_NEXT_CELL_SCREEN_RATIO: f32 = 0.18; // NEXT cell size relative to sw
+const PORTRAIT_NEXT_X_CENTER: f32 = 0.15;  // horizontal centre of NEXT preview (fraction of sw)
+const PORTRAIT_METER_X_RATIO: f32 = 0.35;  // left edge of FREEZE meter (fraction of sw)
+const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE meter
+const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -510,16 +521,21 @@ impl Game {
     fn draw(&self) {
         let sw = screen_width();
         let sh = screen_height();
-        
-        // Proportional layout inspired by Zookeeper: reserve a fraction of screen height
-        // for the HUD above the board so the split scales correctly on every device.
-        let hud_h = sh * 0.20;
-        let font_lg = hud_h * 0.25;  // large HUD text
-        let font_sm = hud_h * 0.13;  // small HUD text
+
+        // On portrait screens (mobile) use a thin top bar and a dedicated bottom
+        // info bar so that NEXT preview and FREEZE meter get plenty of space.
+        // On landscape screens keep the original single top-HUD layout.
+        let is_portrait = sw < sh;
+        let hud_h = if is_portrait { sh * PORTRAIT_TOP_HUD_RATIO } else { sh * 0.20 };
+        let bot_h = if is_portrait { sh * PORTRAIT_BOT_HUD_RATIO } else { 0.0 };
+        // Font sizes scale with the top-bar height. Use different ratios so text
+        // fits the thinner portrait bar while preserving landscape proportions.
+        let font_lg = if is_portrait { hud_h * PORTRAIT_FONT_LG_RATIO } else { hud_h * 0.25 };
+        let font_sm = if is_portrait { hud_h * PORTRAIT_FONT_SM_RATIO } else { hud_h * 0.13 };
         let margin  = sw  * 0.03;    // horizontal gutter
 
-        // Board fills the remaining screen, centred horizontally.
-        let cell_size = (sw / COLS as f32).min((sh - hud_h) / ROWS as f32);
+        // Board fills the space between the two bars, centred horizontally.
+        let cell_size = (sw / COLS as f32).min((sh - hud_h - bot_h) / ROWS as f32);
         let board_w = cell_size * COLS as f32;
         let board_h = cell_size * ROWS as f32;
         let offset_x = (sw - board_w) / 2.0;
@@ -622,10 +638,13 @@ impl Game {
             );
         }
 
-        let version_label = format!("v{}", VERSION);
-        let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
-        let version_x = (pause_x - pad - version_dims.width).max(margin);
-        draw_text(&version_label, version_x, mute_y + font_sm, font_sm, GRAY);
+        // Version label – skip in portrait mode where the top bar is narrow.
+        if !is_portrait {
+            let version_label = format!("v{}", VERSION);
+            let version_dims = measure_text(&version_label, None, font_sm as u16, 1.0);
+            let version_x = (pause_x - pad - version_dims.width).max(margin);
+            draw_text(&version_label, version_x, mute_y + font_sm, font_sm, GRAY);
+        }
 
         // Pause & Mute buttons
         draw_texture_ex(
@@ -643,35 +662,75 @@ impl Game {
             DrawTextureParams { dest_size: Some(vec2(btn_size, btn_size)), ..Default::default() },
         );
 
-        // Next Block – place preview to the left of controls to avoid overlap.
-        let preview_cell_from_hud = hud_h * NEXT_PREVIEW_CELL_HUD_RATIO;
-        let max_preview_width_from_screen = sw * NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO - 2.0 * margin;
-        let clamped_preview_width = max_preview_width_from_screen.max(NEXT_PREVIEW_MIN_HALF_WIDTH);
-        let preview_cell_from_screen = clamped_preview_width / 2.0;
-        let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
-        let next_w = small_cell * 2.0;
-        let next_x = (pause_x - pad * NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR - next_w).max(margin);
-        let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
+        if is_portrait {
+            // --- Portrait (mobile) bottom info bar ---
+            // The bar sits directly below the board and uses the reserved bot_h.
+            let bar_top  = offset_y + board_h;
+            let bar_mid_y = bar_top + bot_h * 0.5;
 
-        // Freeze Meter: cap width so it never overlaps the NEXT preview on narrow screens.
-        let meter_desired_w = sw * 0.30;
-        let meter_h = hud_h * 0.11;
-        let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
-        let meter_gap = pad * HUD_SECTION_GAP_FACTOR;
-        let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
-        let meter_w = meter_desired_w.min(meter_max_w_before_next);
-        draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
-        draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h, if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
-        draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
+            // NEXT preview – left quarter of the bar, vertically centred.
+            let next_cell = (bot_h * PORTRAIT_NEXT_CELL_HUD_RATIO).min(sw * PORTRAIT_NEXT_CELL_SCREEN_RATIO);
+            let next_w    = next_cell * 2.0;
+            let next_x    = sw * PORTRAIT_NEXT_X_CENTER - next_w * 0.5;
+            let next_blocks_top = bar_mid_y - next_cell; // centre 2 rows
+            draw_text("NEXT", next_x, next_blocks_top - font_sm * 0.5, font_sm * 1.2, WHITE);
+            for r in 0..2 {
+                for c in 0..2 {
+                    let color = match self.next_block[r][c] {
+                        BlockColor::ColorA => WHITE,
+                        BlockColor::ColorB => ORANGE,
+                    };
+                    draw_stylized_block(
+                        next_x + c as f32 * next_cell,
+                        next_blocks_top + r as f32 * next_cell,
+                        next_cell, color, 1.0, BLACK,
+                    );
+                }
+            }
 
-        draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
-        for r in 0..2 {
-            for c in 0..2 {
-                let color = match self.next_block[r][c] {
-                    BlockColor::ColorA => WHITE,
-                    BlockColor::ColorB => ORANGE,
-                };
-                draw_stylized_block(next_x + c as f32 * small_cell, next_y + r as f32 * small_cell, small_cell, color, 1.0, BLACK);
+            // FREEZE meter – right side of the bar.
+            let meter_x = sw * PORTRAIT_METER_X_RATIO + margin;
+            let meter_w = sw * PORTRAIT_METER_W_RATIO - margin * 2.0;
+            let meter_h = bot_h * PORTRAIT_METER_H_RATIO;
+            let meter_y = bar_mid_y - meter_h * 0.5;
+            draw_rectangle(meter_x, meter_y, meter_w, meter_h, DARKGRAY);
+            draw_rectangle(meter_x, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h,
+                if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+            draw_text("FREEZE", meter_x, meter_y + meter_h + font_sm, font_sm, GRAY);
+
+        } else {
+            // --- Landscape: original single-HUD layout ---
+            // Next Block – place preview to the left of controls to avoid overlap.
+            let preview_cell_from_hud = hud_h * NEXT_PREVIEW_CELL_HUD_RATIO;
+            let max_preview_width_from_screen = sw * NEXT_PREVIEW_MAX_SCREEN_WIDTH_RATIO - 2.0 * margin;
+            let clamped_preview_width = max_preview_width_from_screen.max(NEXT_PREVIEW_MIN_HALF_WIDTH);
+            let preview_cell_from_screen = clamped_preview_width / 2.0;
+            let small_cell = preview_cell_from_hud.min(preview_cell_from_screen);
+            let next_w = small_cell * 2.0;
+            let next_x = (pause_x - pad * NEXT_PREVIEW_HORIZONTAL_SPACING_FACTOR - next_w).max(margin);
+            let next_y = mute_y + btn_size + pad * NEXT_PREVIEW_VERTICAL_SPACING_FACTOR;
+
+            // Freeze Meter: cap width so it never overlaps the NEXT preview on narrow screens.
+            let meter_desired_w = sw * 0.30;
+            let meter_h = hud_h * 0.11;
+            let meter_y = mute_y + btn_size + pad * FREEZE_METER_VERTICAL_SPACING_FACTOR;
+            let meter_gap = pad * HUD_SECTION_GAP_FACTOR;
+            let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
+            let meter_w = meter_desired_w.min(meter_max_w_before_next);
+            draw_rectangle(margin, meter_y, meter_w, meter_h, DARKGRAY);
+            draw_rectangle(margin, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h,
+                if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
+            draw_text("FREEZE", margin, meter_y + meter_h + font_sm, font_sm, GRAY);
+
+            draw_text("NEXT", next_x, next_y - font_sm * 0.4, font_sm * 1.2, WHITE);
+            for r in 0..2 {
+                for c in 0..2 {
+                    let color = match self.next_block[r][c] {
+                        BlockColor::ColorA => WHITE,
+                        BlockColor::ColorB => ORANGE,
+                    };
+                    draw_stylized_block(next_x + c as f32 * small_cell, next_y + r as f32 * small_cell, small_cell, color, 1.0, BLACK);
+                }
             }
         }
 
