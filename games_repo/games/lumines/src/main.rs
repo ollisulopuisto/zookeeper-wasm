@@ -849,13 +849,27 @@ impl Game {
 
                 let entry_sz = (sh * 0.038).clamp(13.0, 22.0);
                 let row_h = (sh * 0.062).clamp(16.0, 30.0);
+
+                let center_x = sw / 2.0;
+                let rank_x = center_x - (sh * 0.22).clamp(80.0, 160.0);
+                let name_x = center_x - (sh * 0.15).clamp(50.0, 110.0);
+                let score_x = center_x + (sh * 0.22).clamp(80.0, 160.0);
+
                 for (i, entry) in self.high_scores.iter().take(MAX_HIGH_SCORES).enumerate() {
                     let y = sh * 0.34 + i as f32 * row_h;
                     let is_new = self.new_score_rank == Some(i);
                     let color = if is_new { ORANGE } else { Color::new(0.85, 0.85, 0.85, 1.0) };
-                    let text = format!("{:2}. {:10} {:>8}", i + 1, entry.name, entry.score);
-                    let etm = measure_text(&text, None, entry_sz as u16, 1.0);
-                    draw_text(&text, sw / 2.0 - etm.width / 2.0, y, entry_sz, color);
+
+                    // Rank column (left aligned)
+                    draw_text(&format!("{}.", i + 1), rank_x, y, entry_sz, color);
+
+                    // Name column (left aligned)
+                    draw_text(&entry.name, name_x, y, entry_sz, color);
+
+                    // Score column (right aligned)
+                    let score_str = format!("{}", entry.score);
+                    let sem = measure_text(&score_str, None, entry_sz as u16, 1.0);
+                    draw_text(&score_str, score_x - sem.width, y, entry_sz, color);
                 }
             }
 
