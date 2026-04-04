@@ -40,6 +40,9 @@ const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
+// Falling animation constants
+const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
+const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
 // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
@@ -133,35 +136,45 @@ struct Particle {
     color: Color,
 }
 
-fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
+fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color, scale_x: f32, scale_y: f32) {
+    let w = size * scale_x;
+    let h = size * scale_y;
+    // Centre horizontally, anchor to bottom so squash looks grounded.
+    let bx = x + (size - w) * 0.5;
+    let by = y + (size - h);
+
     // Slightly-darkened base fill so the highlight band reads against it for ALL colors,
     // including pure white (light-gray base vs. white highlight = visible contrast).
     let base = Color::new(color.r * BLOCK_BASE_DARKEN, color.g * BLOCK_BASE_DARKEN, color.b * BLOCK_BASE_DARKEN, 1.0);
-    draw_rectangle(x, y, size, size, base);
+    draw_rectangle(bx, by, w, h, base);
 
     // Top highlight band at the original (brighter) color — always visibly lighter than base
-    draw_rectangle(x, y, size, size * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
+    draw_rectangle(bx, by, w, h * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
 
     // Bottom-right shadow: dark triangle for a strong comic-book depth cue
     draw_triangle(
-        vec2(x + size * BLOCK_SHADOW_CUTOFF_RATIO, y + size),
-        vec2(x + size, y + size * BLOCK_SHADOW_CUTOFF_RATIO),
-        vec2(x + size, y + size),
+        vec2(bx + w * BLOCK_SHADOW_CUTOFF_RATIO, by + h),
+        vec2(bx + w, by + h * BLOCK_SHADOW_CUTOFF_RATIO),
+        vec2(bx + w, by + h),
         Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
     );
 
     // Small specular glint in top-left corner — the comic-book "shine" pill
     let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
-    draw_rectangle(x + size * BLOCK_GLINT_OFFSET_RATIO, y + size * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
+    draw_rectangle(bx + w * BLOCK_GLINT_OFFSET_RATIO, by + h * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
 
     // Bold black outer outline + tinted inner border
-    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
-    draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
+    draw_rectangle_lines(bx, by, w, h, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
+    draw_rectangle_lines(bx + BLOCK_OUTLINE_INSET, by + BLOCK_OUTLINE_INSET, (w - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (h - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
+    // Per-cell falling animation state (grid-unit offsets, velocities, impact timers)
+    v_offsets: [[f32; COLS]; ROWS],
+    v_velocities: [[f32; COLS]; ROWS],
+    impact_timers: [[f32; COLS]; ROWS],
     active: ActiveBlock,
     next_block: [[BlockColor; 2]; 2],
     timeline_x: f32,
@@ -210,6 +223,9 @@ impl Game {
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
+            v_offsets: [[0.0; COLS]; ROWS],
+            v_velocities: [[0.0; COLS]; ROWS],
+            impact_timers: [[0.0; COLS]; ROWS],
             active: ActiveBlock::new(BlockColor::random_2x2()),
             next_block: BlockColor::random_2x2(),
             timeline_x: 0.0,
@@ -435,6 +451,24 @@ impl Game {
             p.life -= dt;
         }
         self.particles.retain(|p| p.life > 0.0);
+
+        // Update falling-block animation physics (gravity + landing squish timers).
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                if self.v_offsets[y][x] < 0.0 {
+                    self.v_velocities[y][x] += dt * FALL_GRAVITY;
+                    self.v_offsets[y][x] += dt * self.v_velocities[y][x];
+                    if self.v_offsets[y][x] >= 0.0 {
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = IMPACT_DURATION;
+                    }
+                }
+                if self.impact_timers[y][x] > 0.0 {
+                    self.impact_timers[y][x] -= dt;
+                }
+            }
+        }
     }
 
     fn collides(&self, x: i32, y: i32) -> bool {
@@ -503,12 +537,28 @@ impl Game {
     fn apply_gravity(&mut self) {
         for x in 0..COLS {
             let mut write_y = ROWS - 1;
+            let mut num_blocks = 0usize;
             for y in (0..ROWS).rev() {
                 if let Some(color) = self.grid[y][x] {
+                    let drop = write_y as i32 - y as i32;
                     self.grid[y][x] = None;
                     self.grid[write_y][x] = Some(color);
+                    if drop > 0 {
+                        // Block falls `drop` rows: carry existing offset plus additional drop.
+                        self.v_offsets[write_y][x] = self.v_offsets[y][x] - drop as f32;
+                        self.v_velocities[write_y][x] = self.v_velocities[y][x];
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                    }
+                    num_blocks += 1;
                     write_y = write_y.saturating_sub(1);
                 }
+            }
+            // Clear offsets for rows that are empty after compaction (rows above the topmost block).
+            let filled_from = ROWS - num_blocks;
+            for y in 0..filled_from {
+                self.v_offsets[y][x] = 0.0;
+                self.v_velocities[y][x] = 0.0;
             }
         }
     }
@@ -584,17 +634,28 @@ impl Game {
                         let avg = (c.r + c.g + c.b) / 3.0;
                         c = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
                     }
-                    
+
+                    // Apply falling offset so blocks animate smoothly to their target row.
                     let bx = offset_x + x as f32 * cell_size;
-                    let by = offset_y + y as f32 * cell_size;
-                    
+                    let by = offset_y + (y as f32 + self.v_offsets[y][x]) * cell_size;
+
+                    // Landing squish: briefly squash vertically and stretch horizontally.
+                    let mut scale_x = 1.0f32;
+                    let mut scale_y = 1.0f32;
+                    if self.impact_timers[y][x] > 0.0 {
+                        let t = (self.impact_timers[y][x] / IMPACT_DURATION).clamp(0.0, 1.0);
+                        let s = (t * std::f32::consts::PI).sin();
+                        scale_y -= s * 0.15;
+                        scale_x += s * 0.10;
+                    }
+
                     if self.marked[y][x] {
                         let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
                         let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
                         let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
-                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color);
+                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color, scale_x, scale_y);
                     } else {
-                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
+                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5), scale_x, scale_y);
                     }
                 }
             }
@@ -618,7 +679,7 @@ impl Game {
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
                         let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE);
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, SKYBLUE, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                     }
                 }
@@ -749,7 +810,7 @@ impl Game {
                 draw_stylized_block(
                     layout.next_x + c as f32 * layout.next_cell,
                     layout.next_blocks_top + r as f32 * layout.next_cell,
-                    layout.next_cell, color, 1.0, BLACK,
+                    layout.next_cell, color, 1.0, BLACK, 1.0, 1.0,
                 );
             }
         }
