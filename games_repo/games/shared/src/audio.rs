@@ -30,6 +30,26 @@ pub fn generate_music_wav() -> Vec<u8> {
 
     let midi_to_freq = |m: i32| -> f32 { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) };
 
+    // Arrangement tables: each entry covers one 4-bar block (8 blocks total = 32 bars).
+    // Every layer cycles independently so blocks contain varied, non-repeating combinations.
+    //
+    // drum_var:  0 = regular 4-on-floor, 1 = syncopated accents, 2 = half-time + fills
+    // lead_var:  0 = sawtooth phrases,   1 = legato sine
+    // cp_active: counterpoint triangle-wave voice on/off
+    //
+    // Resulting combinations across the loop:
+    //   bars  0- 3: reg   + saw    + off  (intro – clear and open)
+    //   bars  4- 7: synco + saw    + on   (kick it up)
+    //   bars  8-11: half  + saw    + off  (key+3, spacious half-time feel)
+    //   bars 12-15: reg   + legato + on   (NEW: smooth lead over regular groove + counterpoint)
+    //   bars 16-19: synco + legato + on   (NEW: synco energy with smooth lead + counterpoint)
+    //   bars 20-23: half  + saw    + off  (key+5, half-time returns, original phrases)
+    //   bars 24-27: synco + saw    + off  (NEW: synco groove without counterpoint, key-2)
+    //   bars 28-31: reg   + legato + on   (outro: smooth + counterpoint)
+    const DRUM_VAR:  [u8; 8]   = [0, 1, 2, 0, 1, 2, 1, 0];
+    const LEAD_VAR:  [u8; 8]   = [0, 0, 0, 1, 1, 0, 0, 1];
+    const CP_ACTIVE: [bool; 8] = [false, true, false, true, true, false, false, true];
+
     let mut samples = Vec::with_capacity(num_samples);
     let mut noise_seed = 0x12345678u32;
 
@@ -43,30 +63,36 @@ pub fn generate_music_wav() -> Vec<u8> {
         // Position within the bar as a sixteenth-note index (0–15)
         let in_bar_16 = sixteen_idx % 16;
 
-        // Section index (0–3) drives both key modulation and arrangement variation
+        // Key changes every 8 bars (4 sections) – kept coupled to section boundaries.
         let section_idx = (bar_idx / 8) % 4;
-        let key_offset = match section_idx {
-            0 => 0,
-            1 => 3,
-            2 => 5,
+        let key_offset: i32 = match section_idx {
+            0 =>  0,
+            1 =>  3,
+            2 =>  5,
             3 => -2,
-            _ => 0,
+            _ =>  0,
         };
 
+        // Per-layer variants from the arrangement tables above.
+        let block_idx = (bar_idx / 4) % 8;
+        let drum_var = DRUM_VAR[block_idx];
+        let lead_var = LEAD_VAR[block_idx];
+        let cp_on    = CP_ACTIVE[block_idx];
+
         // --- Bassline ---
-        let bassline = [36, 36, 48, 36, 36, 36, 46, 36];
+        let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
         let b_note = bassline[sixteen_idx % 8] + key_offset;
         let b_freq = midi_to_freq(b_note);
-        let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.25 } else { -0.25 };
+        let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.25f32 } else { -0.25 };
         let bass_env = (1.0 - t_sixteen / sixteen_duration).powf(1.5);
         let bass = bass * bass_env;
 
         // --- Kick drum ---
-        // Section 0, 3: regular 4-on-the-floor
-        // Section 1: syncopated – regular beats plus accent kicks on "and" of beats 1 and 3
-        // Section 2: half-time feel – kick only on beats 1 and 3 (even beat_idx)
+        // drum_var 0, 1: 4-on-the-floor base kick
+        //   drum_var 1 also adds syncopated accent kicks on "and" of beats 1 and 3
+        // drum_var 2: half-time – kick only on beats 1 and 3 (even beat_idx)
         let mut kick = 0.0f32;
-        if section_idx == 2 {
+        if drum_var == 2 {
             if beat_idx % 2 == 0 && t_beat < 0.18 {
                 let kf = 160.0 * (1.0 - t_beat / 0.18).powf(2.5) + 45.0;
                 kick = (t_beat * kf * 2.0 * std::f32::consts::PI).sin() * 0.7 * (1.0 - t_beat / 0.18);
@@ -76,19 +102,18 @@ pub fn generate_music_wav() -> Vec<u8> {
                 let kf = 160.0 * (1.0 - t_beat / 0.18).powf(2.5) + 45.0;
                 kick = (t_beat * kf * 2.0 * std::f32::consts::PI).sin() * 0.7 * (1.0 - t_beat / 0.18);
             }
-            // Syncopated extra accent kicks on "and" of beats 1 and 3 (in_bar_16 2 and 10)
-            if section_idx == 1 && matches!(in_bar_16, 2 | 10) && t_sixteen < 0.1 {
+            // Syncopated: extra accent kicks on "and" of beats 1 and 3 (in_bar_16 2 and 10)
+            if drum_var == 1 && matches!(in_bar_16, 2 | 10) && t_sixteen < 0.1 {
                 let kf = 160.0 * (1.0 - t_sixteen / 0.1).powf(2.5) + 45.0;
                 kick += (t_sixteen * kf * 2.0 * std::f32::consts::PI).sin() * 0.4 * (1.0 - t_sixteen / 0.1);
             }
         }
 
         // --- Hi-hat ---
-        // Section 1 (syncopated): 16th-note hi-hat (every position) for maximum energy
-        // Every 4th bar otherwise: offbeats + extra "and" positions (original variation)
-        // Other bars: offbeat 8th notes
+        // drum_var 1: 16th-note hi-hat (every sixteenth) for maximum syncopated energy
+        // drum_var 0, 2: offbeat 8th notes; every 4th bar gets extra "and" positions
         let mut hihat = 0.0f32;
-        let hat_trigger = if section_idx == 1 {
+        let hat_trigger = if drum_var == 1 {
             true
         } else if bar_idx % 4 == 3 {
             sixteen_idx % 2 == 1 || sixteen_idx % 4 == 2
@@ -102,17 +127,18 @@ pub fn generate_music_wav() -> Vec<u8> {
         }
 
         // --- Snare ---
-        // Section 2 fill bars: rapid crescendo fill on last 8 sixteenth notes of every 4th bar
-        // Section 1 (syncopated): regular snare on beats 2 & 4 plus ghost note on "and-of-3"
-        // Other sections: regular snare on beats 2 and 4
+        // drum_var 2: crescendo fill on last 8 sixteenth notes of every 4th bar
+        // drum_var 1: regular on beats 2 & 4 plus ghost note on "and-of-3"
+        // drum_var 0: regular on beats 2 and 4
         let mut snare = 0.0f32;
-        let is_fill_bar = section_idx == 2 && bar_idx % 4 == 3;
+        let is_fill_bar = drum_var == 2 && bar_idx % 4 == 3;
         if is_fill_bar && in_bar_16 >= 8 && t_sixteen < 0.05 {
             noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
             let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
-            let vol = 0.12 + 0.08 * in_bar_16.saturating_sub(8) as f32 / 7.0;
+            // s_step is always 0–7 so 8 + (0..7) stays within safe usize range
+            let vol = 0.12 + 0.08 * (in_bar_16 - 8) as f32 / 7.0;
             snare = n * vol * (1.0 - t_sixteen / 0.05).powf(1.5);
-        } else if section_idx == 1 {
+        } else if drum_var == 1 {
             if (beat_idx % 4 == 1 || beat_idx % 4 == 3) && t_beat < 0.1 {
                 noise_seed = noise_seed.wrapping_mul(1103515245).wrapping_add(12345);
                 let n = ((noise_seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
@@ -131,8 +157,8 @@ pub fn generate_music_wav() -> Vec<u8> {
 
         // --- Lead synth and counterpoint melody ---
         let s_notes: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
-        let (synth, counter) = if section_idx == 2 {
-            // Half-time legato lead: notes held for 2 beats (8 sixteenth notes), sine wave
+        let (synth, counter) = if lead_var == 1 {
+            // Legato sine lead: notes held for 2 beats (8 sixteenth notes), smooth attack/release
             let ht_step = (sixteen_idx / 8) % 8;
             let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset);
             let note_dur = sixteen_duration * 8.0;
@@ -146,7 +172,7 @@ pub fn generate_music_wav() -> Vec<u8> {
             };
             ((t * ht_freq * 2.0 * std::f32::consts::PI).sin() * 0.18 * env, 0.0f32)
         } else {
-            // Original sawtooth lead with four phrase variations
+            // Sawtooth lead with four rotating phrase variations
             let phrase_idx = (sixteen_idx / 16) % 4;
             let s_step: usize = match phrase_idx {
                 0 => sixteen_idx % 8,
@@ -163,11 +189,10 @@ pub fn generate_music_wav() -> Vec<u8> {
             };
             let s = saw * 0.15 * gate;
 
-            // Counterpoint melody: active in sections 1 and 3
-            // Uses a triangle wave and moves in contrary motion to the main lead.
-            // s_step is always 0–7 (derived from modulo-8 operations), so 7 - s_step is safe.
-            let c = if section_idx == 1 || section_idx == 3 {
-                let cp_step = 7 - s_step; // mirror of s_step for contrary motion
+            // Counterpoint: triangle wave in contrary motion, active when cp_on.
+            // s_step is always 0–7 (derived from modulo-8 / fixed-array index), so 7 - s_step is safe.
+            let c = if cp_on {
+                let cp_step = 7 - s_step; // mirror for contrary motion
                 let cp_freq = midi_to_freq(s_notes[cp_step] + key_offset);
                 let tri_phase = t * cp_freq % 1.0;
                 let tri = if tri_phase < 0.5 {
