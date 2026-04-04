@@ -47,6 +47,18 @@ const PORTRAIT_METER_X_RATIO: f32 = 0.35;  // left edge of FREEZE meter (fractio
 const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE meter
 const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
 
+/// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
+struct HudLayout {
+    next_cell:      f32,
+    next_x:         f32,
+    next_blocks_top: f32,
+    next_label_y:   f32,
+    meter_x:        f32,
+    meter_w:        f32,
+    meter_h:        f32,
+    meter_y:        f32,
+}
+
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
     ColorA,
@@ -673,8 +685,7 @@ impl Game {
 
         // Compute layout-specific coordinates for NEXT preview and FREEZE meter,
         // then draw both using a single shared block below.
-        let (next_cell, next_x, next_blocks_top, next_label_y, meter_x, meter_w, meter_h, meter_y) =
-        if is_portrait {
+        let layout = if is_portrait {
             // --- Portrait (mobile) bottom info bar ---
             // Anchor the bar to the reserved bottom area so it stays fixed at the screen bottom.
             let bar_top  = sh - bot_h;
@@ -695,7 +706,7 @@ impl Game {
             let meter_h = bot_h * PORTRAIT_METER_H_RATIO;
             let meter_y = bar_mid_y - meter_h * 0.5;
 
-            (next_cell, next_x, next_blocks_top, next_label_y, meter_x, meter_w, meter_h, meter_y)
+            HudLayout { next_cell, next_x, next_blocks_top, next_label_y, meter_x, meter_w, meter_h, meter_y }
         } else {
             // --- Landscape: original single-HUD layout ---
             // NEXT preview – place to the left of controls to avoid overlap.
@@ -718,11 +729,11 @@ impl Game {
             let meter_max_w_before_next = (next_x - margin - meter_gap).max(0.0);
             let meter_w = meter_desired_w.min(meter_max_w_before_next);
 
-            (next_cell, next_x, next_blocks_top, next_label_y, meter_x, meter_w, meter_h, meter_y)
+            HudLayout { next_cell, next_x, next_blocks_top, next_label_y, meter_x, meter_w, meter_h, meter_y }
         };
 
         // Draw NEXT preview (shared for both orientations).
-        draw_text("NEXT", next_x, next_label_y, font_sm * 1.2, WHITE);
+        draw_text("NEXT", layout.next_x, layout.next_label_y, font_sm * 1.2, WHITE);
         for r in 0..2 {
             for c in 0..2 {
                 let color = match self.next_block[r][c] {
@@ -730,18 +741,18 @@ impl Game {
                     BlockColor::ColorB => ORANGE,
                 };
                 draw_stylized_block(
-                    next_x + c as f32 * next_cell,
-                    next_blocks_top + r as f32 * next_cell,
-                    next_cell, color, 1.0, BLACK,
+                    layout.next_x + c as f32 * layout.next_cell,
+                    layout.next_blocks_top + r as f32 * layout.next_cell,
+                    layout.next_cell, color, 1.0, BLACK,
                 );
             }
         }
 
         // Draw FREEZE meter (shared for both orientations).
-        draw_rectangle(meter_x, meter_y, meter_w, meter_h, DARKGRAY);
-        draw_rectangle(meter_x, meter_y, meter_w * (self.freeze_meter / MAX_FREEZE_METER), meter_h,
+        draw_rectangle(layout.meter_x, layout.meter_y, layout.meter_w, layout.meter_h, DARKGRAY);
+        draw_rectangle(layout.meter_x, layout.meter_y, layout.meter_w * (self.freeze_meter / MAX_FREEZE_METER), layout.meter_h,
             if self.freeze_meter >= MAX_FREEZE_METER { SKYBLUE } else { BLUE });
-        draw_text("FREEZE", meter_x, meter_y + meter_h + font_sm, font_sm, GRAY);
+        draw_text("FREEZE", layout.meter_x, layout.meter_y + layout.meter_h + font_sm, font_sm, GRAY);
 
         if self.waiting_to_start {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
