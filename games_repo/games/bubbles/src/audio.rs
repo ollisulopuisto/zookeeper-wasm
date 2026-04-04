@@ -23,8 +23,8 @@ impl AudioManager {
             music: load_sound_from_bytes(&generate_music_wav(Some(seed))).await.unwrap(),
         }
     }
-...
-fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
+
+    pub fn play_jump(&self) {
         play_sound(&self.jump, PlaySoundParams { looped: false, volume: 0.3 });
     }
 

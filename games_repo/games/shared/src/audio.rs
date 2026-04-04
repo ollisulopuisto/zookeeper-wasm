@@ -57,6 +57,14 @@ pub fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
     let mut samples = Vec::with_capacity(num_samples);
     let mut noise_seed = 0x12345678u32;
 
+    let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
+    let s_notes: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
+    let note_dur = sixteen_duration * 8.0;
+
+    // Phrase variations for the sawtooth lead
+    let s_step_table_2 = [0usize, 2, 4, 2, 0, 3, 5, 3];
+    let s_step_table_3 = [7usize, 6, 5, 4, 3, 2, 1, 0];
+
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
         let sixteen_idx = (t / sixteen_duration) as usize;
@@ -84,7 +92,6 @@ pub fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
         let cp_on = cp_active[block_idx];
 
         // --- Bassline ---
-        let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
         let b_note = bassline[sixteen_idx % 8] + key_offset;
         let b_freq = midi_to_freq(b_note);
         let bass = if (t * b_freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.25f32 } else { -0.25 };
@@ -149,11 +156,9 @@ pub fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
         }
 
         // --- Lead synth and counterpoint melody ---
-        let s_notes: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
         let (synth, counter) = if l_var == 1 {
             let ht_step = (sixteen_idx / 8) % 8;
             let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset);
-            let note_dur = sixteen_duration * 8.0;
             let t_in_note = t % note_dur;
             let env = if t_in_note < 0.02 {
                 t_in_note / 0.02
@@ -168,8 +173,8 @@ pub fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
             let s_step: usize = match phrase_idx {
                 0 => sixteen_idx % 8,
                 1 => (sixteen_idx * 3) % 8,
-                2 => [0usize, 2, 4, 2, 0, 3, 5, 3][sixteen_idx % 8],
-                _ => [7usize, 6, 5, 4, 3, 2, 1, 0][sixteen_idx % 8],
+                2 => s_step_table_2[sixteen_idx % 8],
+                _ => s_step_table_3[sixteen_idx % 8],
             };
             let s_freq = midi_to_freq(s_notes[s_step] + key_offset);
             let saw = (t * s_freq % 1.0) * 2.0 - 1.0;

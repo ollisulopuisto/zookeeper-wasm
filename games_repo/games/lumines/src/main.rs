@@ -310,6 +310,8 @@ impl Game {
             self.audio.stop_music(); 
         }
 
+        let dt = dt.min(0.1);
+
         // Update Timeline
         if !self.is_frozen {
             let old_x = self.timeline_x;
@@ -344,7 +346,7 @@ impl Game {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
             }
 
-            if self.timeline_x >= COLS as f32 {
+            while self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
                 self.combo = 0; 
                 self.apply_gravity();
