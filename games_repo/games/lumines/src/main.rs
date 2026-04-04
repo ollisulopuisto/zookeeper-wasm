@@ -355,7 +355,7 @@ impl Game {
                                 BlockColor::ColorA => WHITE,
                                 BlockColor::ColorB => ORANGE,
                             };
-                            self.spawn_particles(actual_col as f32 * 40.0, row as f32 * 40.0, p_color);
+                            self.spawn_particles(actual_col as f32 * INTERNAL_COORDINATE_SCALE, row as f32 * INTERNAL_COORDINATE_SCALE, p_color);
                         }
                         self.grid[row][actual_col] = None;
                         self.marked[row][actual_col] = false;
@@ -466,7 +466,7 @@ impl Game {
         for p in self.particles.iter_mut() {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-            p.vy += 200.0 * dt;  // downward gravity
+            p.vy += PARTICLE_GRAVITY * dt;  // downward gravity
             p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
@@ -661,15 +661,15 @@ impl Game {
         if !self.is_frozen {
             for &(col, life) in &self.clear_flashes {
                 let fx = offset_x + col as f32 * cell_size;
-                let alpha = life * life * 0.55;  // quadratic falloff for a sharp flash
+                let alpha = life * life * CLEAR_FLASH_MAX_ALPHA;  // quadratic falloff for a sharp flash
                 draw_rectangle(fx, offset_y, cell_size, board_h, Color::new(1.0, 0.95, 0.5, alpha));
             }
         }
 
         // Draw match flash – a brief board-edge glow when a new 2×2 match is found
         if self.match_flash > 0.0 {
-            let alpha = self.match_flash * self.match_flash * 0.5;
-            let lw = 6.0_f32;
+            let alpha = self.match_flash * self.match_flash * MATCH_GLOW_MAX_ALPHA;
+            let lw = MATCH_GLOW_LINE_WIDTH;
             draw_rectangle_lines(offset_x - lw * 0.5, offset_y - lw * 0.5,
                 board_w + lw, board_h + lw, lw, Color::new(1.0, 1.0, 0.3, alpha));
         }
@@ -700,7 +700,7 @@ impl Game {
         }
 
         // Draw Particles
-        let p_scale = (cell_size / 40.0).max(0.5);
+        let p_scale = (cell_size / INTERNAL_COORDINATE_SCALE).max(0.5);
         for p in &self.particles {
             let mut c = p.color;
             c.a = p.life * p.life;  // quadratic fade – crisper disappearance
