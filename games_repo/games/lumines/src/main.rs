@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.213";
+const VERSION: &str = "26.04.04.212";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -100,37 +100,13 @@ struct LeaderboardEntry {
     score: u32,
 }
 
-#[cfg(target_arch = "wasm32")]
-extern "C" {
-    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
-    fn js_save_leaderboard(ptr: *const u8, len: u32);
-    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
-}
 
 fn load_high_scores() -> Vec<LeaderboardEntry> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        use shared::leaderboard::load_list;
-        load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe {
-            js_load_leaderboard(ptr, max_len)
-        })
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        Vec::new()
-    }
+    shared::leaderboard::load_scores()
 }
 
 fn save_high_scores(scores: &[LeaderboardEntry]) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        use shared::leaderboard::save_list;
-        save_list(scores, |ptr, len| unsafe {
-            js_save_leaderboard(ptr, len);
-        });
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = scores;
+    shared::leaderboard::save_scores(scores);
 }
 
 /// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
@@ -487,16 +463,7 @@ impl Game {
                         && my >= prompt_y
                         && my <= prompt_y + prompt_h
                     {
-                        shared::input::clear_keyboard_buffer();
-                        let mut buf = [0u8; 16];
-                        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
-                        if let Ok(js_name) = std::str::from_utf8(&buf[..len.min(buf.len())]) {
-                            self.current_name = js_name
-                                .trim()
-                                .chars()
-                                .take(MAX_NAME_LENGTH)
-                                .collect();
-                        }
+                        self.current_name = shared::leaderboard::ask_player_name("").chars().take(MAX_NAME_LENGTH).collect();
                     }
                 }
             }

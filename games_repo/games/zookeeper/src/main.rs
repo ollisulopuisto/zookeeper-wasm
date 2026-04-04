@@ -9,7 +9,6 @@ use macroquad::prelude::collections::storage;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
 use shared::easing::ease_back_out;
-use shared::leaderboard::{load_list, save_list};
 use shared::touch_input::{get_grid_coords, keyboard_swap_target};
 
 /// The standard grid width for the game board.
@@ -100,20 +99,6 @@ struct LeaderboardEntry {
     #[serde(default)]
     snail: bool,
 }
-
-#[cfg(target_arch = "wasm32")]
-extern "C" {
-    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
-    fn js_save_leaderboard(ptr: *const u8, len: u32);
-    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-unsafe fn js_load_leaderboard(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
-#[cfg(not(target_arch = "wasm32"))]
-unsafe fn js_save_leaderboard(_ptr: *const u8, _len: u32) { }
-#[cfg(not(target_arch = "wasm32"))]
-unsafe fn _js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
 
 /// Persistent user settings.
 struct Settings {
@@ -253,8 +238,7 @@ impl Board {
     }
 
     fn load_high_scores() -> Vec<LeaderboardEntry> {
-        let mut scores =
-            load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe { js_load_leaderboard(ptr, max_len) });
+        let mut scores: Vec<LeaderboardEntry> = shared::leaderboard::load_scores();
         if scores.is_empty() {
             scores = vec![LeaderboardEntry { name: "---".to_string(), score: 0, combo: 0, snail: false }; MAX_HIGH_SCORES];
         }
@@ -276,7 +260,7 @@ impl Board {
         self.high_scores.truncate(MAX_HIGH_SCORES);
 
         // Save to JS
-        save_list(&self.high_scores, |ptr, len| unsafe { js_save_leaderboard(ptr, len) });
+        shared::leaderboard::save_scores(&self.high_scores);
     }
 
     fn fill_initial(&mut self, rules: GenerationRules) {
@@ -928,14 +912,7 @@ async fn main() {
                         draw_rectangle(_prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
                         draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
                         if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
-                            shared::input::clear_keyboard_buffer();
-                            let mut buffer = [0u8; 16];
-                            let len = unsafe { js_ask_name(buffer.as_mut_ptr(), buffer.len() as u32) };
-                            if len > 0 {
-                                if let Ok(js_name) = std::str::from_utf8(&buffer[..len as usize]) {
-                                    current_name = js_name.trim().to_string();
-                                }
-                            }
+                            current_name = shared::leaderboard::ask_player_name(&current_name);
                         }
                     }
                 }

@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.4.213] - 2026-04-04
+## [26.4.4.212] - 2026-04-04
 ### Added
 - **Visual Progression & Aesthetic Styles (Lumines):**
   - Introduced five distinct visual themes: Classic, Neon, Retro, Crystal, and Inferno.
