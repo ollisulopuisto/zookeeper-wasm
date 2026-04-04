@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.194";
+const VERSION: &str = "26.04.04.213";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -487,6 +487,7 @@ impl Game {
                         && my >= prompt_y
                         && my <= prompt_y + prompt_h
                     {
+                        shared::input::clear_keyboard_buffer();
                         let mut buf = [0u8; 16];
                         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
                         if let Ok(js_name) = std::str::from_utf8(&buf[..len.min(buf.len())]) {
@@ -692,6 +693,14 @@ impl Game {
                     self.entry_timer = 0.0;
                     while self.move_active(0, 1) {}
                     self.lock_active();
+                } else if diff.y < -50.0 {
+                    // Swipe up to activate Time Freeze
+                    if !self.is_frozen && self.freeze_meter >= MAX_FREEZE_METER {
+                        self.is_frozen = true;
+                        self.freeze_timer = FREEZE_DURATION;
+                        self.freeze_meter = 0.0;
+                        self.audio.stop_music();
+                    }
                 }
                 self.swipe_start = None;
             } else if diff.length() > 30.0 {
@@ -1236,10 +1245,26 @@ impl Game {
 
         if self.waiting_to_start {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("LUMINES WASM", sw / 2.0 - 140.0, sh / 2.0 - 60.0, 50.0, ORANGE);
-            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, sh / 2.0, 30.0, WHITE);
-            draw_text("SHIFT: Time Freeze (when full)", sw / 2.0 - 120.0, sh / 2.0 + 40.0, 20.0, SKYBLUE);
-            draw_text("Swipe/Arrows: Move", sw / 2.0 - 100.0, sh / 2.0 + 70.0, 20.0, GRAY);
+            draw_text("LUMINES WASM", sw / 2.0 - 160.0, sh / 2.0 - 130.0, 60.0, ORANGE);
+
+            let rule_sz = 18.0;
+            let rule_x = sw / 2.0 - 150.0;
+            let mut current_y = sh / 2.0 - 70.0;
+            let rule_spacing = 20.0;
+
+            draw_text("Match 2x2 blocks of same color", rule_x, current_y, rule_sz, WHITE);
+            current_y += rule_spacing;
+            draw_text("The sweep line clears matches", rule_x, current_y, rule_sz, WHITE);
+            current_y += rule_spacing;
+            draw_text("Chain (+) blocks clear all same-color links", rule_x, current_y, rule_sz, WHITE);
+
+            current_y += 60.0; // Gap before controls
+
+            draw_text("TAP or SPACE to Start", sw / 2.0 - 130.0, current_y, 30.0, WHITE);
+            current_y += 40.0;
+            draw_text("SHIFT / Swipe Up: Time Freeze (when full)", sw / 2.0 - 150.0, current_y, 20.0, SKYBLUE);
+            current_y += 30.0;
+            draw_text("Swipe L/R/Down: Move / Drop", sw / 2.0 - 110.0, current_y, 20.0, GRAY);
         }
 
         if self.game_over {
