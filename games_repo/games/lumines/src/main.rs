@@ -627,7 +627,7 @@ impl Game {
                         let h_color = if self.is_frozen {
                             Color::new(0.5, 0.5, 1.0, 1.0)
                         } else {
-                            // Border oscillates between yellow and white
+                            // Border oscillates between yellow and a pale warm yellow tint
                             let shift = (t * 5.0).sin() * 0.5 + 0.5;
                             Color::new(1.0, 0.8 + shift * 0.2, shift * 0.3, 1.0)
                         };
