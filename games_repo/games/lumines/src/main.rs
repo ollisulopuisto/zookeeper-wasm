@@ -664,8 +664,8 @@ impl Game {
 
         if is_portrait {
             // --- Portrait (mobile) bottom info bar ---
-            // The bar sits directly below the board and uses the reserved bot_h.
-            let bar_top  = offset_y + board_h;
+            // Anchor the bar to the reserved bottom area so it stays fixed at the screen bottom.
+            let bar_top  = sh - bot_h;
             let bar_mid_y = bar_top + bot_h * 0.5;
 
             // NEXT preview – left quarter of the bar, vertically centred.
