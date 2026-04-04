@@ -43,6 +43,26 @@ const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
 // Falling animation constants
 const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
 const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
+// Completion animation constants
+const CLEAR_FLASH_DURATION: f32 = 0.35;    // seconds for a column-clear flash to fade out
+const CLEAR_FLASH_MAX_ALPHA: f32 = 0.55;   // max alpha for the column flash
+const MATCH_FLASH_DECAY_RATE: f32 = 3.0;   // per-second decay of the match-detection glow (≈0.33 s)
+const MATCH_GLOW_MAX_ALPHA: f32 = 0.5;     // max alpha for the board-edge match glow
+const MATCH_GLOW_LINE_WIDTH: f32 = 6.0;    // thickness of the board-edge glow ring
+const INTERNAL_COORDINATE_SCALE: f32 = 40.0; // logical pixels per cell used in particle physics
+const PARTICLE_SPAWN_COUNT: usize = 12;    // number of particles per cleared cell
+const PARTICLE_VX_RANGE: f32 = 150.0;      // max horizontal velocity (+/-)
+const PARTICLE_VY_MIN: f32 = -200.0;       // initial vertical velocity min (upward)
+const PARTICLE_VY_MAX: f32 = 50.0;         // initial vertical velocity max
+const PARTICLE_LIFE_MIN: f32 = 0.5;        // min lifetime in seconds
+const PARTICLE_LIFE_MAX: f32 = 1.0;        // max lifetime
+const PARTICLE_GRAVITY: f32 = 200.0;       // downward acceleration
+const PARTICLE_MIN_SIZE: f32 = 1.5;        // minimum particle radius in baseline (40 px/cell) space
+const PARTICLE_MAX_SIZE: f32 = 5.0;        // maximum particle radius in baseline space
+const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle lifetime decay
+const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for a 12 Hz marked-block brightness pulse
+const MARKED_PULSE_AMPLITUDE: f32 = 0.35;  // 0..1 amplitude of the brightness pulse (35%)
+const MARKED_GLOW_THRESHOLD: f32 = 0.88;   // pulse value above which the outer glow ring appears
 // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
@@ -188,6 +208,7 @@ struct Particle {
     vy: f32,
     life: f32,
     color: Color,
+    size: f32,
 }
 
 fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color, scale_x: f32, scale_y: f32) {
@@ -241,6 +262,8 @@ struct Game {
     drop_interval: f32,
     audio: AudioManager,
     particles: Vec<Particle>,
+    clear_flashes: Vec<(usize, f32)>,  // (column, life 0..1) – brief flash when timeline clears a column
+    match_flash: f32,                   // brief board-edge glow when a new 2×2 match is detected
     is_paused: bool,
     
     // Time Freeze
@@ -297,6 +320,8 @@ impl Game {
             drop_interval: 1.0,
             audio,
             particles: Vec::new(),
+            clear_flashes: Vec::new(),
+            match_flash: 0.0,
             is_paused: false,
             freeze_meter: 0.0,
             is_frozen: false,
@@ -316,14 +341,15 @@ impl Game {
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
-        for _ in 0..5 {
+        for _ in 0..PARTICLE_SPAWN_COUNT {
             self.particles.push(Particle {
                 x,
                 y,
-                vx: qrand::gen_range(-100.0, 100.0),
-                vy: qrand::gen_range(-100.0, 100.0),
-                life: 1.0,
+                vx: qrand::gen_range(-PARTICLE_VX_RANGE, PARTICLE_VX_RANGE),
+                vy: qrand::gen_range(PARTICLE_VY_MIN, PARTICLE_VY_MAX),
+                life: qrand::gen_range(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
                 color,
+                size: qrand::gen_range(PARTICLE_MIN_SIZE, PARTICLE_MAX_SIZE),
             });
         }
     }
@@ -397,7 +423,8 @@ impl Game {
             let mut cleared_this_step = 0;
             let start_col = old_x.floor() as usize;
             let end_col = self.timeline_x.floor() as usize;
-            
+            let mut cleared_per_col = [false; COLS];
+
             for col in start_col..=end_col {
                 let actual_col = col % COLS;
                 for row in 0..ROWS {
@@ -407,11 +434,12 @@ impl Game {
                                 BlockColor::ColorA => WHITE,
                                 BlockColor::ColorB => ORANGE,
                             };
-                            self.spawn_particles(actual_col as f32 * 40.0, row as f32 * 40.0, p_color);
+                            self.spawn_particles(actual_col as f32 * INTERNAL_COORDINATE_SCALE, row as f32 * INTERNAL_COORDINATE_SCALE, p_color);
                         }
                         self.grid[row][actual_col] = None;
                         self.marked[row][actual_col] = false;
                         cleared_this_step += 1;
+                        cleared_per_col[actual_col] = true;
                     }
                 }
             }
@@ -421,6 +449,12 @@ impl Game {
                 self.combo += 1;
                 self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
+                // Push a flash for every column that had blocks cleared
+                for (col, &had_clear) in cleared_per_col.iter().enumerate() {
+                    if had_clear {
+                        self.clear_flashes.push((col, 1.0));
+                    }
+                }
             }
 
             while self.timeline_x >= COLS as f32 {
@@ -511,7 +545,8 @@ impl Game {
         for p in self.particles.iter_mut() {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-            p.life -= dt;
+            p.vy += PARTICLE_GRAVITY * dt;  // downward gravity
+            p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
 
@@ -539,6 +574,13 @@ impl Game {
                 }
             }
         }
+
+        // Decay column clear flashes and match flash
+        for flash in self.clear_flashes.iter_mut() {
+            flash.1 -= dt / CLEAR_FLASH_DURATION;
+        }
+        self.clear_flashes.retain(|f| f.1 > 0.0);
+        self.match_flash = (self.match_flash - dt * MATCH_FLASH_DECAY_RATE).max(0.0);
     }
 
     fn collides(&self, x: i32, y: i32) -> bool {
@@ -658,6 +700,7 @@ impl Game {
         
         if new_match {
             self.audio.play_match();
+            self.match_flash = 1.0;
         }
 
         for y in 0..ROWS {
@@ -724,15 +767,46 @@ impl Game {
                     }
 
                     if self.marked[y][x] {
-                        let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
-                        let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
+                        let t = get_time() as f32;
+                        // Faster, more dramatic pulse (frequency and amplitude raised vs original)
+                        let pulse = (t * MARKED_PULSE_FREQ).sin() * MARKED_PULSE_AMPLITUDE + (1.0 - MARKED_PULSE_AMPLITUDE);
+                        let h_color = if self.is_frozen {
+                            Color::new(0.5, 0.5, 1.0, 1.0)
+                        } else {
+                            // Border oscillates between yellow and a pale warm yellow tint
+                            let shift = (t * 5.0).sin() * 0.5 + 0.5;
+                            Color::new(1.0, 0.8 + shift * 0.2, shift * 0.3, 1.0)
+                        };
                         let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
                         draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color, scale_x, scale_y);
+                        // Extra glow outline that flares at pulse peaks
+                        if !self.is_frozen && pulse > MARKED_GLOW_THRESHOLD {
+                            let glow_a = ((pulse - MARKED_GLOW_THRESHOLD) / (1.0 - MARKED_GLOW_THRESHOLD)) * 0.55;
+                            draw_rectangle_lines(bx - 2.0, by - 2.0, cell_size + 4.0, cell_size + 4.0, 2.0,
+                                Color::new(1.0, 1.0, 0.8, glow_a));
+                        }
                     } else {
                         draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5), scale_x, scale_y);
                     }
                 }
             }
+        }
+
+        // Draw column clear flash effects (yellow-white burst when timeline clears a column)
+        if !self.is_frozen {
+            for &(col, life) in &self.clear_flashes {
+                let fx = offset_x + col as f32 * cell_size;
+                let alpha = life * life * CLEAR_FLASH_MAX_ALPHA;  // quadratic falloff for a sharp flash
+                draw_rectangle(fx, offset_y, cell_size, board_h, Color::new(1.0, 0.95, 0.5, alpha));
+            }
+        }
+
+        // Draw match flash – a brief board-edge glow when a new 2×2 match is found
+        if self.match_flash > 0.0 {
+            let alpha = self.match_flash * self.match_flash * MATCH_GLOW_MAX_ALPHA;
+            let lw = MATCH_GLOW_LINE_WIDTH;
+            draw_rectangle_lines(offset_x - lw * 0.5, offset_y - lw * 0.5,
+                board_w + lw, board_h + lw, lw, Color::new(1.0, 1.0, 0.3, alpha));
         }
 
         // Draw Active Block
@@ -761,10 +835,16 @@ impl Game {
         }
 
         // Draw Particles
+        let p_scale = (cell_size / INTERNAL_COORDINATE_SCALE).max(0.5);
         for p in &self.particles {
             let mut c = p.color;
-            c.a = p.life;
-            draw_circle(offset_x + p.x * (cell_size/40.0), offset_y + p.y * (cell_size/40.0), 3.0, c);
+            c.a = p.life * p.life;  // quadratic fade – crisper disappearance
+            draw_circle(
+                offset_x + p.x * p_scale,
+                offset_y + p.y * p_scale,
+                (p.size * p_scale).max(1.5),
+                c,
+            );
         }
 
         // Draw Timeline
