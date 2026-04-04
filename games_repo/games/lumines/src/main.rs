@@ -88,18 +88,20 @@ struct Particle {
 }
 
 fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
-    // Base fill
-    draw_rectangle(x, y, size, size, color);
+    // Slightly-darkened base fill so the highlight band reads against it for ALL colors,
+    // including pure white (light-gray base vs. white highlight = visible contrast).
+    let base = Color::new(color.r * 0.82, color.g * 0.82, color.b * 0.82, 1.0);
+    draw_rectangle(x, y, size, size, base);
 
-    // Top highlight: white semi-transparent band — works for any base color, giving clear 3-D depth
-    draw_rectangle(x, y, size, size * 0.36, Color::new(1.0, 1.0, 1.0, 0.38));
+    // Top highlight band at the original (brighter) color — always visibly lighter than base
+    draw_rectangle(x, y, size, size * 0.36, Color::new(color.r, color.g, color.b, 0.92));
 
-    // Bottom-right shadow: dark triangle for a strong depth cue
+    // Bottom-right shadow: dark triangle for a strong comic-book depth cue
     draw_triangle(
         vec2(x + size * 0.38, y + size),
         vec2(x + size, y + size * 0.38),
         vec2(x + size, y + size),
-        Color::new(0.0, 0.0, 0.0, 0.42),
+        Color::new(0.0, 0.0, 0.0, 0.46),
     );
 
     // Small specular glint in top-left corner — the comic-book "shine" pill
