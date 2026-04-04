@@ -151,6 +151,7 @@ struct Game {
     last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
     tap_timer: f32,
+    swipe_occurred: bool,
     tex_mute_on: Texture2D,
     tex_mute_off: Texture2D,
     tex_pause: Texture2D,
@@ -194,6 +195,7 @@ impl Game {
             last_mouse_pos: Vec2::ZERO,
             swipe_start: None,
             tap_timer: 0.0,
+            swipe_occurred: false,
             tex_mute_on,
             tex_mute_off,
             tex_pause,
@@ -359,13 +361,14 @@ impl Game {
         if is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_pause {
             self.swipe_start = Some(mouse_pos);
             self.tap_timer = 0.0;
+            self.swipe_occurred = false;
         }
         
         if let Some(start) = self.swipe_start {
             self.tap_timer += dt;
             let diff = mouse_pos - start;
             if is_mouse_button_released(MouseButton::Left) {
-                if diff.length() < 10.0 && self.tap_timer < 0.2 {
+                if diff.length() < 10.0 && self.tap_timer < 0.2 && !self.swipe_occurred {
                     // Tap to rotate
                     self.active.rotate_cw();
                     self.audio.play_rotate();
@@ -384,6 +387,7 @@ impl Game {
                 let dx = (diff.x / cell_w) as i32;
                 if dx != 0 {
                     if self.move_active(dx, 0) {
+                        self.swipe_occurred = true;
                         self.swipe_start = Some(mouse_pos);
                     }
                 }
