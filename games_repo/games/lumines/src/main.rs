@@ -46,7 +46,7 @@ const MATCH_FLASH_DECAY_RATE: f32 = 3.0;   // per-second decay of the match-dete
 const PARTICLE_MIN_SIZE: f32 = 1.5;        // minimum particle radius in baseline (40 px/cell) space
 const PARTICLE_MAX_SIZE: f32 = 5.0;        // maximum particle radius in baseline space
 const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle lifetime decay
-const MARKED_PULSE_FREQ: f32 = 12.0;       // Hz – oscillation frequency of marked-block brightness
+const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for a 12 Hz marked-block brightness pulse
 const MARKED_PULSE_AMPLITUDE: f32 = 0.35;  // 0..1 amplitude of the brightness pulse (35%)
 const MARKED_GLOW_THRESHOLD: f32 = 0.88;   // pulse value above which the outer glow ring appears
 // Shared layout constants
