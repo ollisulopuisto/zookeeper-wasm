@@ -96,7 +96,6 @@ fn ask_player_name() -> String {
         let s = String::from_utf8_lossy(&buf[..len.min(buf.len())])
             .trim()
             .to_string();
-        if s.is_empty() { "ANON".to_string() } else { s }
     }
     #[cfg(not(target_arch = "wasm32"))]
     "ANON".to_string()
