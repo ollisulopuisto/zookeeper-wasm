@@ -490,7 +490,11 @@ impl Game {
                         let mut buf = [0u8; 16];
                         let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
                         if let Ok(js_name) = std::str::from_utf8(&buf[..len.min(buf.len())]) {
-                            self.current_name = js_name.trim().to_string();
+                            self.current_name = js_name
+                                .trim()
+                                .chars()
+                                .take(MAX_NAME_LENGTH)
+                                .collect();
                         }
                     }
                 }
