@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.5";
+const VERSION: &str = "26.04.04.194";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -18,6 +18,7 @@ const SCORE_PER_SQUARE: u32 = 50;  // points awarded per 2×2 square cleared
 const COMBO_MIN_SQUARES: u32 = 4;  // min squares per sweep to maintain combo
 const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
 const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
+const ENTRY_DELAY: f32 = 1.0;  // seconds block is held above playfield for repositioning
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -44,6 +45,29 @@ const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
 const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
+// Completion animation constants
+const CLEAR_FLASH_DURATION: f32 = 0.35;    // seconds for a column-clear flash to fade out
+const CLEAR_FLASH_MAX_ALPHA: f32 = 0.55;   // max alpha for the column flash
+const MATCH_FLASH_DECAY_RATE: f32 = 3.0;   // per-second decay of the match-detection glow (≈0.33 s)
+const MATCH_GLOW_MAX_ALPHA: f32 = 0.5;     // max alpha for the board-edge match glow
+const MATCH_GLOW_LINE_WIDTH: f32 = 6.0;    // thickness of the board-edge glow ring
+const INTERNAL_COORDINATE_SCALE: f32 = 40.0; // logical pixels per cell used in particle physics
+const PARTICLE_SPAWN_COUNT: usize = 12;    // number of particles per cleared cell
+const PARTICLE_VX_RANGE: f32 = 150.0;      // max horizontal velocity (+/-)
+const PARTICLE_VY_MIN: f32 = -200.0;       // initial vertical velocity min (upward)
+const PARTICLE_VY_MAX: f32 = 50.0;         // initial vertical velocity max
+const PARTICLE_LIFE_MIN: f32 = 0.5;        // min lifetime in seconds
+const PARTICLE_LIFE_MAX: f32 = 1.0;        // max lifetime
+const PARTICLE_GRAVITY: f32 = 200.0;       // downward acceleration
+const PARTICLE_MIN_SIZE: f32 = 1.5;        // minimum particle radius in baseline (40 px/cell) space
+const PARTICLE_MAX_SIZE: f32 = 5.0;        // maximum particle radius in baseline space
+const PARTICLE_DECAY_RATE: f32 = 1.5;      // multiplier on dt for particle lifetime decay
+const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for a 12 Hz marked-block brightness pulse
+const MARKED_PULSE_AMPLITUDE: f32 = 0.35;  // 0..1 amplitude of the brightness pulse (35%)
+const MARKED_GLOW_THRESHOLD: f32 = 0.88;   // pulse value above which the outer glow ring appears
+// Falling animation constants
+const FALL_GRAVITY: f32 = 28.0;   // grid-units per second² for falling blocks
+const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
 // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03;        // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06;          // pause/mute button size as fraction of sh
@@ -64,6 +88,60 @@ const PORTRAIT_NEXT_X_CENTER: f32 = 0.15;  // horizontal centre of NEXT preview 
 const PORTRAIT_METER_X_RATIO: f32 = 0.35;  // left edge of FREEZE meter (fraction of sw)
 const PORTRAIT_METER_W_RATIO: f32 = 0.65;  // right portion of sw used by FREEZE meter
 const PORTRAIT_METER_H_RATIO: f32 = 0.14;  // FREEZE bar height relative to bot_h
+
+const MAX_HIGH_SCORES: usize = 10;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct LeaderboardEntry {
+    name: String,
+    score: u32,
+}
+
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn js_load_leaderboard(ptr: *mut u8, max_len: u32) -> u32;
+    fn js_save_leaderboard(ptr: *const u8, len: u32);
+    fn js_ask_name(ptr: *mut u8, max_len: u32) -> u32;
+}
+
+fn load_high_scores() -> Vec<LeaderboardEntry> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::load_list;
+        load_list::<LeaderboardEntry, _>(4096, |ptr, max_len| unsafe {
+            js_load_leaderboard(ptr, max_len)
+        })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Vec::new()
+    }
+}
+
+fn save_high_scores(scores: &[LeaderboardEntry]) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use shared::leaderboard::save_list;
+        save_list(scores, |ptr, len| unsafe {
+            js_save_leaderboard(ptr, len);
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = scores;
+}
+
+fn ask_player_name() -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut buf = [0u8; 64];
+        let len = unsafe { js_ask_name(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        String::from_utf8_lossy(&buf[..len.min(buf.len())])
+            .trim()
+            .to_string()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    "ANON".to_string()
+}
 
 /// Layout coordinates for the NEXT preview and FREEZE meter, computed per orientation.
 struct HudLayout {
@@ -162,32 +240,39 @@ struct Particle {
     vy: f32,
     life: f32,
     color: Color,
+    size: f32,
 }
 
-fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color) {
+fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f32, border_color: Color, scale_x: f32, scale_y: f32) {
+    let w = size * scale_x;
+    let h = size * scale_y;
+    // Centre horizontally, anchor to bottom so squash looks grounded.
+    let bx = x + (size - w) * 0.5;
+    let by = y + (size - h);
+
     // Slightly-darkened base fill so the highlight band reads against it for ALL colors,
     // including pure white (light-gray base vs. white highlight = visible contrast).
     let base = Color::new(color.r * BLOCK_BASE_DARKEN, color.g * BLOCK_BASE_DARKEN, color.b * BLOCK_BASE_DARKEN, 1.0);
-    draw_rectangle(x, y, size, size, base);
+    draw_rectangle(bx, by, w, h, base);
 
     // Top highlight band at the original (brighter) color — always visibly lighter than base
-    draw_rectangle(x, y, size, size * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
+    draw_rectangle(bx, by, w, h * BLOCK_HIGHLIGHT_HEIGHT_RATIO, Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA));
 
     // Bottom-right shadow: dark triangle for a strong comic-book depth cue
     draw_triangle(
-        vec2(x + size * BLOCK_SHADOW_CUTOFF_RATIO, y + size),
-        vec2(x + size, y + size * BLOCK_SHADOW_CUTOFF_RATIO),
-        vec2(x + size, y + size),
+        vec2(bx + w * BLOCK_SHADOW_CUTOFF_RATIO, by + h),
+        vec2(bx + w, by + h * BLOCK_SHADOW_CUTOFF_RATIO),
+        vec2(bx + w, by + h),
         Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
     );
 
     // Small specular glint in top-left corner — the comic-book "shine" pill
     let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
-    draw_rectangle(x + size * BLOCK_GLINT_OFFSET_RATIO, y + size * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
+    draw_rectangle(bx + w * BLOCK_GLINT_OFFSET_RATIO, by + h * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
 
     // Bold black outer outline + tinted inner border
-    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
-    draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
+    draw_rectangle_lines(bx, by, w, h, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
+    draw_rectangle_lines(bx + BLOCK_OUTLINE_INSET, by + BLOCK_OUTLINE_INSET, (w - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (h - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
 /// Draw a green "+" cross symbol centred on the cell to mark it as a chain cell.
@@ -205,6 +290,10 @@ fn draw_chain_symbol(x: f32, y: f32, size: f32) {
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
+    // Per-cell falling animation state (grid-unit offsets, velocities, impact timers)
+    v_offsets: [[f32; COLS]; ROWS],
+    v_velocities: [[f32; COLS]; ROWS],
+    impact_timers: [[f32; COLS]; ROWS],
     active: ActiveBlock,
     next_block: [[BlockColor; 2]; 2],
     next_chain: [[bool; 2]; 2],
@@ -219,6 +308,8 @@ struct Game {
     drop_interval: f32,
     audio: AudioManager,
     particles: Vec<Particle>,
+    clear_flashes: Vec<(usize, f32)>,  // (column, life 0..1) – brief flash when timeline clears a column
+    match_flash: f32,                   // brief board-edge glow when a new 2×2 match is detected
     is_paused: bool,
     
     // Time Freeze
@@ -226,8 +317,10 @@ struct Game {
     is_frozen: bool,
     freeze_timer: f32,
 
+    // Entry phase: block is shown above playfield before it starts dropping
+    entry_timer: f32,
+
     // Touch/Mouse state
-    last_mouse_pos: Vec2,
     swipe_start: Option<Vec2>,
     tap_timer: f32,
     swipe_occurred: bool,
@@ -235,6 +328,11 @@ struct Game {
     tex_mute_off: Texture2D,
     tex_pause: Texture2D,
     tex_play: Texture2D,
+
+    // Hiscores
+    high_scores: Vec<LeaderboardEntry>,
+    leaderboard_saved: bool,
+    new_score_rank: Option<usize>,
 }
 
 impl Game {
@@ -258,6 +356,9 @@ impl Game {
         Self {
             grid: [[None; COLS]; ROWS],
             marked: [[false; COLS]; ROWS],
+            v_offsets: [[0.0; COLS]; ROWS],
+            v_velocities: [[0.0; COLS]; ROWS],
+            impact_timers: [[0.0; COLS]; ROWS],
             active: ActiveBlock::new(init_colors, init_chain),
             next_block: next_colors,
             next_chain,
@@ -272,11 +373,13 @@ impl Game {
             drop_interval: 1.0,
             audio,
             particles: Vec::new(),
+            clear_flashes: Vec::new(),
+            match_flash: 0.0,
             is_paused: false,
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
-            last_mouse_pos: Vec2::ZERO,
+            entry_timer: 0.0,  // set to ENTRY_DELAY when game starts
             swipe_start: None,
             tap_timer: 0.0,
             swipe_occurred: false,
@@ -284,23 +387,28 @@ impl Game {
             tex_mute_off,
             tex_pause,
             tex_play,
+            high_scores: Vec::new(),
+            leaderboard_saved: false,
+            new_score_rank: None,
         }
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
-        for _ in 0..5 {
+        for _ in 0..PARTICLE_SPAWN_COUNT {
             self.particles.push(Particle {
                 x,
                 y,
-                vx: qrand::gen_range(-100.0, 100.0),
-                vy: qrand::gen_range(-100.0, 100.0),
-                life: 1.0,
+                vx: qrand::gen_range(-PARTICLE_VX_RANGE, PARTICLE_VX_RANGE),
+                vy: qrand::gen_range(PARTICLE_VY_MIN, PARTICLE_VY_MAX),
+                life: qrand::gen_range(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
                 color,
+                size: qrand::gen_range(PARTICLE_MIN_SIZE, PARTICLE_MAX_SIZE),
             });
         }
     }
 
     fn update(&mut self, dt: f32) {
+        let dt = dt.min(0.1);
         let sw = screen_width();
         let sh = screen_height();
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
@@ -369,7 +477,8 @@ impl Game {
             let mut squares_this_step = 0u32;
             let start_col = old_x.floor() as usize;
             let end_col = self.timeline_x.floor() as usize;
-            
+            let mut cleared_per_col = [false; COLS];
+
             for col in start_col..=end_col {
                 let actual_col = col % COLS;
 
@@ -395,11 +504,12 @@ impl Game {
                                 BlockColor::ColorA => WHITE,
                                 BlockColor::ColorB => ORANGE,
                             };
-                            self.spawn_particles(actual_col as f32 * 40.0, row as f32 * 40.0, p_color);
+                            self.spawn_particles(actual_col as f32 * INTERNAL_COORDINATE_SCALE, row as f32 * INTERNAL_COORDINATE_SCALE, p_color);
                         }
                         self.grid[row][actual_col] = None;
                         self.marked[row][actual_col] = false;
                         cleared_this_step += 1;
+                        cleared_per_col[actual_col] = true;
                     }
                 }
             }
@@ -413,9 +523,15 @@ impl Game {
             // counted in a prior column step).
             if cleared_this_step > 0 {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
+                // Push a flash for every column that had blocks cleared
+                for (col, &had_clear) in cleared_per_col.iter().enumerate() {
+                    if had_clear {
+                        self.clear_flashes.push((col, 1.0));
+                    }
+                }
             }
 
-            if self.timeline_x >= COLS as f32 {
+            while self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
                 if self.squares_cleared_this_sweep >= COMBO_MIN_SQUARES {
                     self.combo += 1;
@@ -431,11 +547,24 @@ impl Game {
         self.update_matches();
 
         // Handle Active Block
-        self.drop_timer += dt;
-        if self.drop_timer >= self.drop_interval {
-            self.drop_timer = 0.0;
-            if !self.move_active(0, 1) {
-                self.lock_active();
+        // During the entry phase the block sits above the playfield; count down
+        // the timer and skip automatic dropping until the phase expires.
+        if self.entry_timer > 0.0 {
+            self.entry_timer = (self.entry_timer - dt).max(0.0);
+            if self.entry_timer == 0.0 {
+                // Entry phase just expired – trigger an immediate drop so the
+                // block doesn't linger invisibly above the playfield.
+                self.drop_timer = self.drop_interval;
+            } else {
+                self.drop_timer = 0.0;
+            }
+        } else {
+            self.drop_timer += dt;
+            if self.drop_timer >= self.drop_interval {
+                self.drop_timer = 0.0;
+                if !self.move_active(0, 1) {
+                    self.lock_active();
+                }
             }
         }
 
@@ -449,6 +578,7 @@ impl Game {
             self.move_active(1, 0);
         }
         if is_key_pressed(KeyCode::Down) || is_key_pressed(KeyCode::S) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             if !self.move_active(0, 1) {
                 self.lock_active();
             }
@@ -462,6 +592,7 @@ impl Game {
             }
         }
         if is_key_pressed(KeyCode::Space) {
+            self.entry_timer = 0.0;  // cancel entry phase immediately
             while self.move_active(0, 1) {}
             self.lock_active();
         }
@@ -486,7 +617,8 @@ impl Game {
                         self.active.rotate_ccw();
                     }
                 } else if diff.y > 50.0 {
-                    // Swipe down to drop
+                    // Swipe down to drop – also cancels entry phase
+                    self.entry_timer = 0.0;
                     while self.move_active(0, 1) {}
                     self.lock_active();
                 }
@@ -508,9 +640,49 @@ impl Game {
         for p in self.particles.iter_mut() {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-            p.life -= dt;
+            p.vy += PARTICLE_GRAVITY * dt;  // downward gravity
+            p.life -= dt * PARTICLE_DECAY_RATE;
         }
         self.particles.retain(|p| p.life > 0.0);
+
+        // Decay column clear flashes and match flash
+        for flash in self.clear_flashes.iter_mut() {
+            flash.1 -= dt / CLEAR_FLASH_DURATION;
+        }
+        self.clear_flashes.retain(|f| f.1 > 0.0);
+        self.match_flash = (self.match_flash - dt * MATCH_FLASH_DECAY_RATE).max(0.0);
+
+        // Update falling-block animation physics (gravity + landing squish timers).
+        for y in 0..ROWS {
+            for x in 0..COLS {
+                if self.grid[y][x].is_none() {
+                    self.v_offsets[y][x] = 0.0;
+                    self.v_velocities[y][x] = 0.0;
+                    self.impact_timers[y][x] = 0.0;
+                    continue;
+                }
+
+                if self.v_offsets[y][x] < 0.0 {
+                    self.v_velocities[y][x] += dt * FALL_GRAVITY;
+                    self.v_offsets[y][x] += dt * self.v_velocities[y][x];
+                    if self.v_offsets[y][x] >= 0.0 {
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = IMPACT_DURATION;
+                    }
+                }
+                if self.impact_timers[y][x] > 0.0 {
+                    self.impact_timers[y][x] -= dt;
+                }
+            }
+        }
+
+        // Decay column clear flashes and match flash
+        for flash in self.clear_flashes.iter_mut() {
+            flash.1 -= dt / CLEAR_FLASH_DURATION;
+        }
+        self.clear_flashes.retain(|f| f.1 > 0.0);
+        self.match_flash = (self.match_flash - dt * MATCH_FLASH_DECAY_RATE).max(0.0);
     }
 
     fn collides(&self, x: i32, y: i32) -> bool {
@@ -582,6 +754,10 @@ impl Game {
             self.active = ActiveBlock::new(colors, is_chain);
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
+            } else {
+                // Start the entry phase so the player can position the block
+                self.entry_timer = ENTRY_DELAY;
+                self.drop_timer = 0.0;
             }
         }
         if self.game_over {
@@ -619,12 +795,32 @@ impl Game {
     fn apply_gravity(&mut self) {
         for x in 0..COLS {
             let mut write_y = ROWS - 1;
+            let mut num_blocks = 0usize;
             for y in (0..ROWS).rev() {
                 if let Some(color) = self.grid[y][x] {
+                    let drop = write_y as i32 - y as i32;
                     self.grid[y][x] = None;
                     self.grid[write_y][x] = Some(color);
+                    if drop > 0 {
+                        // Block falls `drop` rows: carry existing offset plus additional drop.
+                        self.v_offsets[write_y][x] = self.v_offsets[y][x] - drop as f32;
+                        self.v_velocities[write_y][x] = self.v_velocities[y][x];
+                        self.impact_timers[write_y][x] = self.impact_timers[y][x];
+                        
+                        self.v_offsets[y][x] = 0.0;
+                        self.v_velocities[y][x] = 0.0;
+                        self.impact_timers[y][x] = 0.0;
+                    }
+                    num_blocks += 1;
                     write_y = write_y.saturating_sub(1);
                 }
+            }
+            // Clear offsets for rows that are empty after compaction (rows above the topmost block).
+            let filled_from = ROWS - num_blocks;
+            for y in 0..filled_from {
+                self.v_offsets[y][x] = 0.0;
+                self.v_velocities[y][x] = 0.0;
+                self.impact_timers[y][x] = 0.0;
             }
         }
     }
@@ -650,6 +846,7 @@ impl Game {
         
         if new_match {
             self.audio.play_match();
+            self.match_flash = 1.0;
         }
 
         for y in 0..ROWS {
@@ -700,29 +897,97 @@ impl Game {
                         let avg = (c.r + c.g + c.b) / 3.0;
                         c = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
                     }
-                    
+
+                    // Apply falling offset so blocks animate smoothly to their target row.
                     let bx = offset_x + x as f32 * cell_size;
-                    let by = offset_y + y as f32 * cell_size;
-                    
+                    let by = offset_y + (y as f32 + self.v_offsets[y][x]) * cell_size;
+
+                    // Landing squish: briefly squash vertically and stretch horizontally.
+                    let mut scale_x = 1.0f32;
+                    let mut scale_y = 1.0f32;
+                    if self.impact_timers[y][x] > 0.0 {
+                        let t = (self.impact_timers[y][x] / IMPACT_DURATION).clamp(0.0, 1.0);
+                        let s = (t * std::f32::consts::PI).sin();
+                        scale_y -= s * 0.15;
+                        scale_x += s * 0.10;
+                    }
+
                     if self.marked[y][x] {
-                        let pulse = (get_time() as f32 * 10.0).sin() * 0.2 + 0.8;
-                        let h_color = if self.is_frozen { Color::new(0.5, 0.5, 1.0, 1.0) } else { YELLOW };
+                        let t = get_time() as f32;
+                        // Faster, more dramatic pulse (frequency and amplitude raised vs original)
+                        let pulse = (t * MARKED_PULSE_FREQ).sin() * MARKED_PULSE_AMPLITUDE + (1.0 - MARKED_PULSE_AMPLITUDE);
+                        let h_color = if self.is_frozen {
+                            Color::new(0.5, 0.5, 1.0, 1.0)
+                        } else {
+                            // Border oscillates between yellow and a pale warm yellow tint
+                            let shift = (t * 5.0).sin() * 0.5 + 0.5;
+                            Color::new(1.0, 0.8 + shift * 0.2, shift * 0.3, 1.0)
+                        };
                         let highlight = Color::new(c.r * pulse, c.g * pulse, c.b * pulse, 1.0);
-                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color);
+                        draw_stylized_block(bx, by, cell_size, highlight, 3.0, h_color, scale_x, scale_y);
+                        // Extra glow outline that flares at pulse peaks
+                        if !self.is_frozen && pulse > MARKED_GLOW_THRESHOLD {
+                            let glow_a = ((pulse - MARKED_GLOW_THRESHOLD) / (1.0 - MARKED_GLOW_THRESHOLD)) * 0.55;
+                            draw_rectangle_lines(bx - 2.0, by - 2.0, cell_size + 4.0, cell_size + 4.0, 2.0,
+                                Color::new(1.0, 1.0, 0.8, glow_a));
+                        }
                     } else {
-                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5));
+                        draw_stylized_block(bx, by, cell_size, c, 1.0, Color::new(0.0, 0.0, 0.0, 0.5), scale_x, scale_y);
                     }
                 }
             }
         }
 
+        // Draw column clear flash effects (yellow-white burst when timeline clears a column)
+        if !self.is_frozen {
+            for &(col, life) in &self.clear_flashes {
+                let fx = offset_x + col as f32 * cell_size;
+                let alpha = life * life * CLEAR_FLASH_MAX_ALPHA;  // quadratic falloff for a sharp flash
+                draw_rectangle(fx, offset_y, cell_size, board_h, Color::new(1.0, 0.95, 0.5, alpha));
+            }
+        }
+
+        // Draw match flash – a brief board-edge glow when a new 2×2 match is found
+        if self.match_flash > 0.0 {
+            let alpha = self.match_flash * self.match_flash * MATCH_GLOW_MAX_ALPHA;
+            let lw = MATCH_GLOW_LINE_WIDTH;
+            draw_rectangle_lines(offset_x - lw * 0.5, offset_y - lw * 0.5,
+                board_w + lw, board_h + lw, lw, Color::new(1.0, 1.0, 0.3, alpha));
+        }
+
         // Draw Active Block
         if !self.game_over && !self.waiting_to_start {
+            let in_entry = self.entry_timer > 0.0;
+
+            // During the entry phase draw a staging area above the playfield so the
+            // player can clearly see and position the incoming block.
+            if in_entry {
+                let bx = offset_x + self.active.x as f32 * cell_size;
+                let staging_top = offset_y - cell_size * 2.0;
+                let staging_w   = cell_size * 2.0;
+                let staging_h   = cell_size * 2.0;
+                // Dark backdrop
+                draw_rectangle(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    Color::new(0.05, 0.05, 0.15, 0.88));
+                // Thin border
+                draw_rectangle_lines(bx - 2.0, staging_top - 2.0, staging_w + 4.0, staging_h + 4.0,
+                    1.5, Color::new(0.6, 0.85, 1.0, 0.5));
+                // Countdown bar: full = entry is fresh, empty = about to drop
+                let bar_frac = self.entry_timer / ENTRY_DELAY;
+                let bar_h    = (cell_size * 0.12).max(3.0);
+                let bar_y    = staging_top - bar_h - 3.0;
+                draw_rectangle(bx, bar_y, staging_w, bar_h, Color::new(0.2, 0.2, 0.3, 0.8));
+                draw_rectangle(bx, bar_y, staging_w * bar_frac, bar_h, SKYBLUE);
+            }
+
             for r in 0..2 {
                 for c in 0..2 {
                     let gx = self.active.x + c as i32;
                     let gy = self.active.y + r as f32;
-                    if gy >= 0.0 {
+                    // Render cells inside the playfield always; render cells above the
+                    // playfield whenever they are above y=0 (e.g. during entry or just
+                    // after entry expires but before the first drop moves the block down).
+                    if gy >= 0.0 || self.active.y < 0.0 {
                         let mut color = match self.active.colors[r][c] {
                             BlockColor::ColorA => WHITE,
                             BlockColor::ColorB => ORANGE,
@@ -733,9 +998,19 @@ impl Game {
                         }
                         let bx = offset_x + gx as f32 * cell_size;
                         let by = offset_y + gy * cell_size;
-                        let glow_alpha = (get_time() as f32 * 8.0).sin() * 0.08 + 0.22;
-                        let border_color = if self.active.is_chain[r][c] { LIME } else { SKYBLUE };
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color);
+                        let glow_alpha = if in_entry {
+                            (get_time() as f32 * 12.0).sin() * 0.15 + 0.35
+                        } else {
+                            (get_time() as f32 * 8.0).sin() * 0.08 + 0.22
+                        };
+                        let border_color = if self.active.is_chain[r][c] { 
+                            LIME 
+                        } else if in_entry { 
+                            YELLOW 
+                        } else { 
+                            SKYBLUE 
+                        };
+                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0);
                         draw_rectangle_lines(bx - 1.0, by - 1.0, cell_size + 2.0, cell_size + 2.0, 1.0, Color::new(0.6, 0.85, 1.0, glow_alpha));
                         if self.active.is_chain[r][c] {
                             draw_chain_symbol(bx, by, cell_size);
@@ -746,10 +1021,16 @@ impl Game {
         }
 
         // Draw Particles
+        let p_scale = (cell_size / INTERNAL_COORDINATE_SCALE).max(0.5);
         for p in &self.particles {
             let mut c = p.color;
-            c.a = p.life;
-            draw_circle(offset_x + p.x * (cell_size/40.0), offset_y + p.y * (cell_size/40.0), 3.0, c);
+            c.a = p.life * p.life;  // quadratic fade – crisper disappearance
+            draw_circle(
+                offset_x + p.x * p_scale,
+                offset_y + p.y * p_scale,
+                (p.size * p_scale).max(1.5),
+                c,
+            );
         }
 
         // Draw Timeline
@@ -765,7 +1046,7 @@ impl Game {
             draw_text("TIME FROZEN", sw / 2.0 - tf_dims.width / 2.0, offset_y - font_lg * 0.7, font_lg, SKYBLUE);
         }
 
-        // Draw HUD
+        // Draw HUD (AFTER blocks so it overlays any that bleed above offset_y during grace period)
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
         let btn_size = sh * BTN_SIZE_RATIO;
         let mute_x = sw - btn_size - pad;
@@ -869,7 +1150,7 @@ impl Game {
                 let bx = layout.next_x + c as f32 * layout.next_cell;
                 let by = layout.next_blocks_top + r as f32 * layout.next_cell;
                 let border = if self.next_chain[r][c] { LIME } else { BLACK };
-                draw_stylized_block(bx, by, layout.next_cell, color, 1.0, border);
+                draw_stylized_block(bx, by, layout.next_cell, color, 1.0, border, 1.0, 1.0);
                 if self.next_chain[r][c] {
                     draw_chain_symbol(bx, by, layout.next_cell);
                 }
@@ -891,10 +1172,54 @@ impl Game {
         }
 
         if self.game_over {
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("GAME OVER", sw / 2.0 - 120.0, sh / 2.0 - 40.0, 50.0, RED);
-            draw_text(&format!("FINAL SCORE: {}", self.score), sw / 2.0 - 100.0, sh / 2.0 + 20.0, 30.0, WHITE);
-            draw_text("TAP or SPACE to Restart", sw / 2.0 - 140.0, sh / 2.0 + 80.0, 25.0, YELLOW);
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.88));
+
+            let title_sz = (sh * 0.07).clamp(30.0, 60.0);
+            let title = "GAME OVER";
+            let tm = measure_text(title, None, title_sz as u16, 1.0);
+            draw_text(title, sw / 2.0 - tm.width / 2.0, sh * 0.10, title_sz, RED);
+
+            let score_str = format!("SCORE: {}", self.score);
+            let score_sz = (sh * 0.045).clamp(18.0, 36.0);
+            let sm = measure_text(&score_str, None, score_sz as u16, 1.0);
+            draw_text(&score_str, sw / 2.0 - sm.width / 2.0, sh * 0.18, score_sz, WHITE);
+
+            if !self.high_scores.is_empty() {
+                let lbl = "HIGH SCORES";
+                let lbl_sz = (sh * 0.038).clamp(14.0, 28.0);
+                let lm = measure_text(lbl, None, lbl_sz as u16, 1.0);
+                draw_text(lbl, sw / 2.0 - lm.width / 2.0, sh * 0.27, lbl_sz, YELLOW);
+
+                let entry_sz = (sh * 0.038).clamp(13.0, 22.0);
+                let row_h = (sh * 0.062).clamp(16.0, 30.0);
+
+                let center_x = sw / 2.0;
+                let rank_x = center_x - (sh * 0.22).clamp(80.0, 160.0);
+                let name_x = center_x - (sh * 0.15).clamp(50.0, 110.0);
+                let score_x = center_x + (sh * 0.22).clamp(80.0, 160.0);
+
+                for (i, entry) in self.high_scores.iter().take(MAX_HIGH_SCORES).enumerate() {
+                    let y = sh * 0.34 + i as f32 * row_h;
+                    let is_new = self.new_score_rank == Some(i);
+                    let color = if is_new { ORANGE } else { Color::new(0.85, 0.85, 0.85, 1.0) };
+
+                    // Rank column (left aligned)
+                    draw_text(&format!("{}.", i + 1), rank_x, y, entry_sz, color);
+
+                    // Name column (left aligned)
+                    draw_text(&entry.name, name_x, y, entry_sz, color);
+
+                    // Score column (right aligned)
+                    let score_str = format!("{}", entry.score);
+                    let sem = measure_text(&score_str, None, entry_sz as u16, 1.0);
+                    draw_text(&score_str, score_x - sem.width, y, entry_sz, color);
+                }
+            }
+
+            let restart_str = "TAP or SPACE to Restart";
+            let rst_sz = (sh * 0.035).clamp(14.0, 24.0);
+            let rm = measure_text(restart_str, None, rst_sz as u16, 1.0);
+            draw_text(restart_str, sw / 2.0 - rm.width / 2.0, sh * 0.96, rst_sz, YELLOW);
         }
 
         if self.is_paused {
@@ -915,12 +1240,35 @@ async fn main() {
 
         let dt = get_frame_time();
         game.update(dt);
+
+        // When game just ended, load scores, optionally prompt for name, and save.
+        // Must run before draw() so the leaderboard table is visible on the first game-over frame.
+        if game.game_over && !game.leaderboard_saved {
+            game.leaderboard_saved = true;
+            game.high_scores = load_high_scores();
+            // Sort after loading since load_list does not guarantee order.
+            game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+            if game.score > 0 {
+                let min_score = game.high_scores.last().map_or(0, |e| e.score);
+                let qualifies = game.high_scores.len() < MAX_HIGH_SCORES
+                    || game.score > min_score;
+                if qualifies {
+                    let name = ask_player_name();
+                    game.high_scores.push(LeaderboardEntry { name: name.clone(), score: game.score });
+                    game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+                    game.high_scores.truncate(MAX_HIGH_SCORES);
+                    game.new_score_rank = game.high_scores.iter()
+                        .rposition(|e| e.name == name && e.score == game.score);
+                    save_high_scores(&game.high_scores);
+                }
+            }
+        }
+
         game.draw();
 
         if (game.game_over || game.waiting_to_start) && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left)) {
             #[cfg(target_arch = "wasm32")]
             {
-                use macroquad::prelude::miniquad::window;
                 // This is a hacky way to focus the canvas in Macroquad WASM if needed,
                 // but usually clicking it is enough if it has a tabindex.
             }
@@ -931,6 +1279,7 @@ async fn main() {
             game.audio = audio;
             game.audio.set_muted(muted);
             game.waiting_to_start = false;
+            game.entry_timer = ENTRY_DELAY;  // give player time to position the first block
             game.audio.play_music();
         }
 

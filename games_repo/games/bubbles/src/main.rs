@@ -201,14 +201,38 @@ async fn main() {
             AppState::Leaderboard { ref last_scores } => {
                 let title_size = 30.0 * scale;
                 let text_size = 15.0 * scale;
-                draw_text("HISCORES", vx + 80.0 * scale, vy + 40.0 * scale, title_size, MAGENTA);
+                let center_x = vx + (VIRTUAL_WIDTH / 2.0) * scale;
+
+                // Centered title
+                let title = "HISCORES";
+                let t_dims = measure_text(title, None, title_size as u16, 1.0);
+                draw_text(title, center_x - t_dims.width / 2.0, vy + 40.0 * scale, title_size, MAGENTA);
+
                 let scores = storage::load_scores();
+                let rank_x = center_x - 80.0 * scale;
+                let name_x = center_x - 50.0 * scale;
+                let score_x = center_x + 80.0 * scale;
+
                 for (i, s) in scores.iter().enumerate() {
                     let is_highlight = last_scores.iter().any(|(ln, ls)| ln == &s.name && ls == &s.score);
                     let color = if is_highlight { YELLOW } else { WHITE };
-                    draw_text(&format!("{}. {} {:06}", i + 1, s.name, s.score), vx + 60.0 * scale, vy + 70.0 * scale + (i as f32 * 15.0 * scale), text_size, color);
+                    let y = vy + 70.0 * scale + (i as f32 * 15.0 * scale);
+
+                    // Rank column (left aligned)
+                    draw_text(&format!("{}.", i + 1), rank_x, y, text_size, color);
+
+                    // Name column (left aligned)
+                    draw_text(&s.name, name_x, y, text_size, color);
+
+                    // Score column (right aligned)
+                    let score_str = format!("{:06}", s.score);
+                    let s_dims = measure_text(&score_str, None, text_size as u16, 1.0);
+                    draw_text(&score_str, score_x - s_dims.width, y, text_size, color);
                 }
-                draw_text("PRESS ANY KEY", vx + 75.0 * scale, vy + 210.0 * scale, text_size, GRAY);
+
+                let footer = "PRESS ANY KEY";
+                let f_dims = measure_text(footer, None, text_size as u16, 1.0);
+                draw_text(footer, center_x - f_dims.width / 2.0, vy + 210.0 * scale, text_size, GRAY);
             }
         }
 
