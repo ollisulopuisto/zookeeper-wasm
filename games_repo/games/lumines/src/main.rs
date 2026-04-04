@@ -14,6 +14,8 @@ const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
+const SCORE_PER_SQUARE: u32 = 50;  // points awarded per 2×2 square cleared
+const COMBO_MIN_SQUARES: u32 = 4;  // min squares per sweep to maintain combo
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -168,6 +170,7 @@ struct Game {
     timeline_speed: f32,
     score: u32,
     combo: u32,
+    squares_cleared_this_sweep: u32,
     game_over: bool,
     waiting_to_start: bool,
     drop_timer: f32,
@@ -216,6 +219,7 @@ impl Game {
             timeline_speed,
             score: 0,
             combo: 0,
+            squares_cleared_this_sweep: 0,
             game_over: false,
             waiting_to_start: true,
             drop_timer: 0.0,
@@ -316,11 +320,28 @@ impl Game {
             self.timeline_x += self.timeline_speed * dt;
             
             let mut cleared_this_step = 0;
+            let mut squares_this_step = 0u32;
             let start_col = old_x.floor() as usize;
             let end_col = self.timeline_x.floor() as usize;
             
             for col in start_col..=end_col {
                 let actual_col = col % COLS;
+
+                // Count 2×2 squares whose top-left corner is at actual_col (before clearing).
+                // The right column (actual_col + 1) is still intact at this point, allowing
+                // detection of all squares that begin here.
+                if actual_col + 1 < COLS {
+                    for row in 0..ROWS - 1 {
+                        if self.marked[row][actual_col]
+                            && self.marked[row][actual_col + 1]
+                            && self.marked[row + 1][actual_col]
+                            && self.marked[row + 1][actual_col + 1]
+                        {
+                            squares_this_step += 1;
+                        }
+                    }
+                }
+
                 for row in 0..ROWS {
                     if self.marked[row][actual_col] {
                         if let Some(color) = self.grid[row][actual_col] {
@@ -337,16 +358,25 @@ impl Game {
                 }
             }
 
-            if cleared_this_step > 0 {
-                self.score += cleared_this_step * 10 * (1 + self.combo);
-                self.combo += 1;
+            if squares_this_step > 0 {
+                self.score += squares_this_step * SCORE_PER_SQUARE * (1 + self.combo);
+                self.squares_cleared_this_sweep += squares_this_step;
                 self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
+            }
+            // Freeze meter rewards every block cleared (including the right halves of squares
+            // counted in a prior column step).
+            if cleared_this_step > 0 {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
             }
 
             if self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
-                self.combo = 0; 
+                if self.squares_cleared_this_sweep >= COMBO_MIN_SQUARES {
+                    self.combo += 1;
+                } else {
+                    self.combo = 0;
+                }
+                self.squares_cleared_this_sweep = 0;
                 self.apply_gravity();
             }
         }
@@ -655,7 +685,7 @@ impl Game {
 
         let hud_top_text_y = pad + font_lg;
         draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
-        if self.combo > 1 {
+        if self.combo > 0 {
             draw_text(
                 &format!("COMBO x{}", self.combo),
                 margin,
