@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.03.5";
+const VERSION: &str = "26.04.04.196";
 const BPM: f32 = 130.0;
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -263,13 +263,13 @@ impl Game {
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
-        for _ in 0..12 {
+        for _ in 0..PARTICLE_SPAWN_COUNT {
             self.particles.push(Particle {
                 x,
                 y,
-                vx: qrand::gen_range(-150.0, 150.0),
-                vy: qrand::gen_range(-200.0, 50.0),
-                life: qrand::gen_range(0.5, 1.0),
+                vx: qrand::gen_range(-PARTICLE_VX_RANGE, PARTICLE_VX_RANGE),
+                vy: qrand::gen_range(PARTICLE_VY_MIN, PARTICLE_VY_MAX),
+                life: qrand::gen_range(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
                 color,
                 size: qrand::gen_range(PARTICLE_MIN_SIZE, PARTICLE_MAX_SIZE),
             });
