@@ -38,6 +38,7 @@ const BLOCK_GLINT_ASPECT: f32 = 0.45;
 const BLOCK_GLINT_ALPHA: f32 = 0.82;
 const BLOCK_OUTLINE_ALPHA: f32 = 0.90;
 const BLOCK_OUTLINE_INSET: f32 = 1.0;
+const BLOCK_OUTLINE_MIN_WIDTH: f32 = 2.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 enum BlockColor {
@@ -121,7 +122,7 @@ fn draw_stylized_block(x: f32, y: f32, size: f32, color: Color, border_width: f3
     draw_rectangle(x + size * BLOCK_GLINT_OFFSET_RATIO, y + size * BLOCK_GLINT_OFFSET_RATIO, g, g * BLOCK_GLINT_ASPECT, Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA));
 
     // Bold black outer outline + tinted inner border
-    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_INSET * 2.0), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
+    draw_rectangle_lines(x, y, size, size, (border_width + BLOCK_OUTLINE_INSET).max(BLOCK_OUTLINE_MIN_WIDTH), Color::new(0.0, 0.0, 0.0, BLOCK_OUTLINE_ALPHA));
     draw_rectangle_lines(x + BLOCK_OUTLINE_INSET, y + BLOCK_OUTLINE_INSET, (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), (size - BLOCK_OUTLINE_INSET * 2.0).max(0.0), border_width, border_color);
 }
 
