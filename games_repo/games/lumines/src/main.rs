@@ -900,7 +900,7 @@ async fn main() {
                     game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
                     game.high_scores.truncate(MAX_HIGH_SCORES);
                     game.new_score_rank = game.high_scores.iter()
-                        .position(|e| e.name == name && e.score == game.score);
+                        .rposition(|e| e.name == name && e.score == game.score);
                     save_high_scores(&game.high_scores);
                 }
             }
