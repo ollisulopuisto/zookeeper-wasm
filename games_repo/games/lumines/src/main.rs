@@ -329,6 +329,7 @@ impl Game {
     }
 
     fn update(&mut self, dt: f32) {
+        let dt = dt.min(0.1);
         let sw = screen_width();
         let sh = screen_height();
         let pad = (sw * HUD_CONTROL_PAD_RATIO).clamp(HUD_CONTROL_PAD_MIN, HUD_CONTROL_PAD_MAX);
@@ -422,7 +423,7 @@ impl Game {
                 self.freeze_meter = (self.freeze_meter + cleared_this_step as f32 * 0.5).min(MAX_FREEZE_METER);
             }
 
-            if self.timeline_x >= COLS as f32 {
+            while self.timeline_x >= COLS as f32 {
                 self.timeline_x -= COLS as f32;
                 self.combo = 0; 
                 self.apply_gravity();
