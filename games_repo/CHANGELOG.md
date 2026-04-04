@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.4.197] - 2026-04-04
+## [26.4.4.214] - 2026-04-04
 ### Added
 - **Visual Progression & Aesthetic Styles (Lumines):**
   - Introduced five distinct visual themes: Classic, Neon, Retro, Crystal, and Inferno.
@@ -20,7 +20,7 @@ All notable changes to the games in this monorepo will be documented in this fil
 ### Refactored
 - **Lumines WASM:** Extracted particle physics and completion animation magic numbers into named constants for improved maintainability.
 
-## [26.4.3.168] - 2026-04-03
+## [26.4.4.214] - 2026-04-03
 ### Added
 - **New Game: Lumines WASM:** A rhythm-puzzle game clone based on the Lumines mechanism.
   - Implemented 16x10 grid with 2x2 falling blocks.
