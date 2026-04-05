@@ -9,8 +9,8 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.04.212";
-const BPM: f32 = 130.0;
+const VERSION: &str = "26.04.05.217";
+
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
@@ -302,11 +302,60 @@ struct Game {
     entering_name: bool,
     current_name: String,
     just_finished_name_entry: bool,
+    level: u32,
+    squares_cleared_total: u32,
+    theme_engine: shared::theme::ThemeEngine,
+    style_unlocked_timer: f32,
 }
 
 impl Game {
     async fn new() -> Self {
-        let audio = AudioManager::new().await;
+        let themes = vec![
+            shared::theme::Theme { 
+                name: "Classic".to_string(),
+                color_a: WHITE,
+                color_b: ORANGE,
+                bg_color: Color::new(0.05, 0.05, 0.1, 1.0),
+                ui_accent: ORANGE,
+                bpm: 130.0,
+            },
+            shared::theme::Theme {
+                name: "Neon".to_string(),
+                color_a: GREEN,
+                color_b: Color::new(1.0, 0.0, 1.0, 1.0), // Magenta
+                bg_color: Color::new(0.0, 0.0, 0.0, 1.0),
+                ui_accent: GREEN,
+                bpm: 140.0,
+            },
+            shared::theme::Theme {
+                name: "Retro".to_string(),
+                color_a: YELLOW,
+                color_b: Color::new(0.4, 0.2, 0.0, 1.0), // Brown
+                bg_color: Color::new(0.1, 0.1, 0.0, 1.0),
+                ui_accent: YELLOW,
+                bpm: 150.0,
+            },
+            shared::theme::Theme {
+                name: "Crystal".to_string(),
+                color_a: SKYBLUE,
+                color_b: WHITE,
+                bg_color: Color::new(0.0, 0.1, 0.2, 1.0),
+                ui_accent: SKYBLUE,
+                bpm: 160.0,
+            },
+            shared::theme::Theme {
+                name: "Inferno".to_string(),
+                color_a: RED,
+                color_b: Color::new(0.4, 0.0, 0.0, 1.0),
+                bg_color: Color::new(0.1, 0.0, 0.0, 1.0),
+                ui_accent: RED,
+                bpm: 170.0,
+            },
+        ];
+
+        let bpms: Vec<f32> = themes.iter().map(|t| t.bpm).collect();
+        let audio = AudioManager::new(&bpms).await;
+
         let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f507.png"), None);
         let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f50a.png"), None);
         let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/23f8.png"), None);
@@ -315,8 +364,9 @@ impl Game {
         tex_mute_off.set_filter(FilterMode::Linear);
         tex_pause.set_filter(FilterMode::Linear);
         tex_play.set_filter(FilterMode::Linear);
-        
-        let seconds_per_sweep = (60.0 / BPM) * BEATS_PER_SWEEP;
+
+        let initial_bpm = themes[0].bpm;
+        let seconds_per_sweep = (60.0 / initial_bpm) * BEATS_PER_SWEEP;
         let timeline_speed = COLS as f32 / seconds_per_sweep;
 
         let (init_colors, init_chain) = random_block_with_chain();
@@ -348,7 +398,7 @@ impl Game {
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
-            entry_timer: 0.0,  // set to ENTRY_DELAY when game starts
+            entry_timer: 0.0,
             swipe_start: None,
             tap_timer: 0.0,
             swipe_occurred: false,
@@ -362,6 +412,10 @@ impl Game {
             entering_name: false,
             current_name: String::new(),
             just_finished_name_entry: false,
+            level: 1,
+            squares_cleared_total: 0,
+            theme_engine: shared::theme::ThemeEngine::new(themes),
+            style_unlocked_timer: 0.0,
         }
     }
 
@@ -491,6 +545,8 @@ impl Game {
             return;
         }
 
+        self.style_unlocked_timer = (self.style_unlocked_timer - dt).max(0.0);
+
         // --- Time Freeze Logic ---
         if self.is_frozen {
             self.freeze_timer -= dt;
@@ -540,8 +596,8 @@ impl Game {
                     if self.marked[row][actual_col] {
                         if let Some(color) = self.grid[row][actual_col] {
                             let p_color = match color {
-                                BlockColor::ColorA => WHITE,
-                                BlockColor::ColorB => ORANGE,
+                                BlockColor::ColorA => self.theme_engine.current().color_a,
+                                BlockColor::ColorB => self.theme_engine.current().color_b,
                             };
                             self.spawn_particles(actual_col as f32 * INTERNAL_COORDINATE_SCALE, row as f32 * INTERNAL_COORDINATE_SCALE, p_color);
                         }
@@ -555,6 +611,17 @@ impl Game {
 
             if squares_this_step > 0 {
                 self.score += squares_this_step * SCORE_PER_SQUARE * (1 + self.combo);
+                self.squares_cleared_total += squares_this_step;
+                self.level = (self.squares_cleared_total / 10) + 1;
+                
+                if self.theme_engine.set_score(self.score) {
+                    self.style_unlocked_timer = 3.0; // Show notification for 3 seconds
+                    let current_theme = self.theme_engine.current();
+                    let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
+                    self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                    self.audio.set_track(self.theme_engine.current_theme_idx);
+                }
+                
                 self.squares_cleared_this_sweep += squares_this_step;
                 self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
             }
@@ -929,7 +996,7 @@ impl Game {
         let offset_y = hud_h;
 
         // Draw Background
-        let bg_color = if self.is_frozen { Color::new(0.05, 0.05, 0.05, 1.0) } else { Color::new(0.05, 0.05, 0.1, 1.0) };
+        let bg_color = if self.is_frozen { Color::new(0.05, 0.05, 0.05, 1.0) } else { self.theme_engine.current().bg_color };
         draw_rectangle(offset_x, offset_y, board_w, board_h, bg_color);
 
         // Draw Grid Blocks
@@ -937,8 +1004,8 @@ impl Game {
             for x in 0..COLS {
                 if let Some(color) = self.grid[y][x] {
                     let mut c = match color {
-                        BlockColor::ColorA => WHITE,
-                        BlockColor::ColorB => ORANGE,
+                        BlockColor::ColorA => self.theme_engine.current().color_a,
+                        BlockColor::ColorB => self.theme_engine.current().color_b,
                     };
                     if self.is_frozen {
                         let avg = (c.r + c.g + c.b) / 3.0;
@@ -1036,8 +1103,8 @@ impl Game {
                     // after entry expires but before the first drop moves the block down).
                     if gy >= 0.0 || self.active.y < 0.0 {
                         let mut color = match self.active.colors[r][c] {
-                            BlockColor::ColorA => WHITE,
-                            BlockColor::ColorB => ORANGE,
+                            BlockColor::ColorA => self.theme_engine.current().color_a,
+                            BlockColor::ColorB => self.theme_engine.current().color_b,
                         };
                         if self.is_frozen {
                             let avg = (color.r + color.g + color.b) / 3.0;
@@ -1103,6 +1170,21 @@ impl Game {
 
         let hud_top_text_y = pad + font_lg;
         draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
+        
+        let level_text = format!("LV: {}", self.level);
+        let theme_text = self.theme_engine.current().name.to_uppercase();
+        let center_text = format!("{}  [{}]", level_text, theme_text);
+        let center_dims = measure_text(&center_text, None, font_lg as u16, 1.0);
+        draw_text(&center_text, sw / 2.0 - center_dims.width / 2.0, hud_top_text_y, font_lg, WHITE);
+
+        if self.style_unlocked_timer > 0.0 {
+            let msg = "NEW STYLE UNLOCKED!";
+            let msg_sz = font_lg * 1.2;
+            let m_dims = measure_text(msg, None, msg_sz as u16, 1.0);
+            let alpha = (self.style_unlocked_timer * 2.0).min(1.0);
+            draw_text(msg, sw / 2.0 - m_dims.width / 2.0, sh / 2.0, msg_sz, Color::new(1.0, 1.0, 0.0, alpha));
+        }
+
         if self.combo > 0 {
             draw_text(
                 &format!("COMBO x{}", self.combo),
@@ -1191,8 +1273,8 @@ impl Game {
         for r in 0..2 {
             for c in 0..2 {
                 let color = match self.next_block[r][c] {
-                    BlockColor::ColorA => WHITE,
-                    BlockColor::ColorB => ORANGE,
+                    BlockColor::ColorA => self.theme_engine.current().color_a,
+                    BlockColor::ColorB => self.theme_engine.current().color_b,
                 };
                 let bx = layout.next_x + c as f32 * layout.next_cell;
                 let by = layout.next_blocks_top + r as f32 * layout.next_cell;
@@ -1212,7 +1294,7 @@ impl Game {
 
         if self.waiting_to_start {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
-            draw_text("LUMINES WASM", sw / 2.0 - 160.0, sh / 2.0 - 130.0, 60.0, ORANGE);
+            draw_text("LUMINES WASM", sw / 2.0 - 160.0, sh / 2.0 - 130.0, 60.0, self.theme_engine.current().ui_accent);
 
             let rule_sz = 18.0;
             let rule_x = sw / 2.0 - 150.0;
