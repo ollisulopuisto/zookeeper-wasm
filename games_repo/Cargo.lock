@@ -277,6 +277,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_editor_wasm"
+version = "26.4.5"
+dependencies = [
+ "macroquad",
+ "quad-rand",
+ "shared",
+]
+
+[[package]]
 name = "ndk-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

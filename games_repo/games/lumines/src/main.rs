@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.05.215";
+const VERSION: &str = "26.04.05.216";
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -483,6 +483,11 @@ impl Game {
                 if self.is_paused {
                     self.audio.stop_music();
                 } else if !self.game_over && !self.waiting_to_start && !self.is_frozen {
+                    self.audio.play_music();
+                }
+            } else if self.is_paused && shared::touch_input::is_tap_valid_resume(mx, my, &[(pause_x - pad, pause_y - pad, btn_size + pad * 2.0, btn_size + pad * 2.0), (mute_x - pad, mute_y - pad, btn_size + pad * 2.0, btn_size + pad * 2.0)]) {
+                self.is_paused = false;
+                if !self.game_over && !self.waiting_to_start && !self.is_frozen {
                     self.audio.play_music();
                 }
             }
