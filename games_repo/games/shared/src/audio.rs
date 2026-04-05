@@ -16,10 +16,9 @@ pub fn create_wav_header(data_size: u32, sample_rate: u32) -> Vec<u8> {
     header
 }
 
-pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) -> Vec<u8> {
+pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) -> (Vec<u8>, f32) {
     let sample_rate = 44100;
     let beat_duration = 60.0 / bpm;
-    let sixteen_duration = beat_duration / 4.0;
 
     let bars = 32;
     let transition_bars = 4;
@@ -27,9 +26,6 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
     let beats_per_bar = 4;
     let total_beats = bars * beats_per_bar;
     let num_samples = (sample_rate as f32 * (total_beats as f32 * beat_duration)) as usize;
-
-    let next_beat_duration = next_bpm.unwrap_or(bpm).recip() * 60.0;
-    let next_sixteen_duration = next_beat_duration / 4.0;
 
     let midi_to_freq = |m: i32| -> f32 { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) };
 
@@ -73,8 +69,9 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
     for bar_idx in 0..bars {
         let is_transition = bar_idx >= main_bars;
         let current_bpm = if is_transition {
-            // Linear interpolation of BPM over transition bars for a smooth tempo shift
-            let t = (bar_idx - main_bars) as f32 / transition_bars as f32;
+            // Linear interpolation of BPM over transition bars for a smooth tempo shift.
+            // t goes from 1/transition_bars up to 1.0 so the final bar lands on next_bpm.
+            let t = (bar_idx - main_bars + 1) as f32 / transition_bars as f32;
             bpm + (next_bpm.unwrap_or(bpm) - bpm) * t
         } else {
             bpm
@@ -226,9 +223,10 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
         current_time += 4.0 * bar_beat_duration;
     }
 
+    let actual_duration = samples.len() as f32 / sample_rate as f32;
     let mut wav = create_wav_header((samples.len() * 2) as u32, sample_rate);
     for s in samples {
         wav.extend_from_slice(&s.to_le_bytes());
     }
-    wav
+    (wav, actual_duration)
 }
