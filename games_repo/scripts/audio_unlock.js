@@ -19,7 +19,10 @@ function resumeAudio() {
         if (captured_ctx.state === 'suspended') {
             captured_ctx.resume().then(() => {
                 console.log("AudioContext resumed successfully");
+                cleanupListeners();
             });
+        } else if (captured_ctx.state === 'running') {
+            cleanupListeners();
         }
         // Force unlock with a silent oscillator
         try {
@@ -34,6 +37,12 @@ function resumeAudio() {
             console.error("Error playing silent sound:", e);
         }
     }
+}
+
+function cleanupListeners() {
+    window.removeEventListener('click', resumeAudio, true);
+    window.removeEventListener('touchstart', resumeAudio, true);
+    window.removeEventListener('touchend', resumeAudio, true);
 }
 
 // Add listeners for any subsequent interaction to ensure audio is unlocked
