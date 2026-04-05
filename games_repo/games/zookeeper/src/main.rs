@@ -107,7 +107,7 @@ struct Settings {
 }
 
 /// Represents the current state of the game loop and any active animations.
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 enum GameState {
     /// The game is waiting for the player to tap to start.
     WaitingToStart,
