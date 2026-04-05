@@ -4,6 +4,7 @@ members = [
     "games_repo/games/zookeeper",
     "games_repo/games/bubbles",
     "games_repo/games/lumines",
+    "games_repo/games/music_editor",
 ]
 resolver = "2"
 

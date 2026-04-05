@@ -51,6 +51,17 @@ def main():
     lumines_main = os.path.join(games_dir, "lumines", "src", "main.rs")
     if update_file(lumines_main, r'const VERSION: &str = ".*"', f'const VERSION: &str = "{version_long}"'):
         changed_files.append(lumines_main)
+
+    # Update Cargo.toml for other games
+    for game in ["zookeeper", "bubbles", "music_editor"]:
+        cargo_path = os.path.join(games_dir, game, "Cargo.toml")
+        if update_file(cargo_path, r'^version = ".*"', f'version = "{version_cargo}"'):
+            changed_files.append(cargo_path)
+
+    # Update Music Editor Makefile
+    music_editor_makefile = os.path.join(games_dir, "music_editor", "Makefile")
+    if update_file(music_editor_makefile, r'^VERSION=.*', f'VERSION={version_short}'):
+        changed_files.append(music_editor_makefile)
         
     # Update CHANGELOG.md (only the first header found)
     changelog = os.path.join(root_dir, "games_repo", "CHANGELOG.md")
