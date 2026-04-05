@@ -23,9 +23,10 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
     let bars = 32;
     let transition_bars = 4;
     let main_bars = bars - transition_bars;
-    let beats_per_bar = 4;
-    let total_beats = bars * beats_per_bar;
-    let num_samples = (sample_rate as f32 * (total_beats as f32 * beat_duration)) as usize;
+    
+    // Estimate total num_samples for pre-allocation (approximate is fine)
+    let total_duration = bars as f32 * 4.0 * beat_duration;
+    let num_samples = (sample_rate as f32 * total_duration) as usize;
 
     let midi_to_freq = |m: i32| -> f32 { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) };
 
@@ -69,22 +70,40 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
     for bar_idx in 0..bars {
         let is_transition = bar_idx >= main_bars;
         let current_bpm = if is_transition {
-            // Linear interpolation of BPM over transition bars for a smooth tempo shift.
-            // t goes from 1/transition_bars up to 1.0 so the final bar lands on next_bpm.
-            let t = (bar_idx - main_bars + 1) as f32 / transition_bars as f32;
+            // Linear interpolation of BPM over transition bars
+            let t = (bar_idx - main_bars) as f32 / transition_bars as f32;
             bpm + (next_bpm.unwrap_or(bpm) - bpm) * t
         } else {
             bpm
         };
         
-        let bar_beat_duration = 60.0 / current_bpm;
-        let bar_sixteen_duration = bar_beat_duration / 4.0;
-        let samples_per_bar = (sample_rate as f32 * 4.0 * bar_beat_duration) as usize;
+        let bar_next_bpm = if bar_idx + 1 >= main_bars {
+            let t = (bar_idx + 1 - main_bars) as f32 / transition_bars as f32;
+            bpm + (next_bpm.unwrap_or(bpm) - bpm) * t
+        } else {
+            bpm
+        };
 
-        for s_idx in 0..samples_per_bar {
+        // If the BPM is changing within the bar, we integrate to find the exact duration.
+        let bar_duration = if (bar_next_bpm - current_bpm).abs() < 0.1 {
+            4.0 * (60.0 / current_bpm)
+        } else {
+            // Integral of (60 / (B1 + (B2-B1)*t)) from t=0 to 1 bar
+            (60.0 / (bar_next_bpm - current_bpm)) * (bar_next_bpm / current_bpm).ln() * 4.0
+        };
+
+        let bar_samples = (sample_rate as f32 * bar_duration) as usize;
+
+        for s_idx in 0..bar_samples {
             let t_in_bar = s_idx as f32 / sample_rate as f32;
             let t = current_time + t_in_bar;
             
+            // Linear interpolation of BPM *within* the bar for high-resolution timing
+            let t_frac = t_in_bar / bar_duration;
+            let instantaneous_bpm = current_bpm + (bar_next_bpm - current_bpm) * t_frac;
+            let bar_beat_duration = 60.0 / instantaneous_bpm;
+            let bar_sixteen_duration = bar_beat_duration / 4.0;
+
             let sixteen_idx = (t_in_bar / bar_sixteen_duration) as usize;
             let t_sixteen = t_in_bar % bar_sixteen_duration;
             let beat_idx = (t_in_bar / bar_beat_duration) as usize;
@@ -220,7 +239,7 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
             let mixed = (bass + kick + hihat + snare + synth + counter) * 0.5;
             samples.push((mixed.clamp(-1.0, 1.0) * 16383.0) as i16);
         }
-        current_time += 4.0 * bar_beat_duration;
+        current_time += bar_duration;
     }
 
     let actual_duration = samples.len() as f32 / sample_rate as f32;
