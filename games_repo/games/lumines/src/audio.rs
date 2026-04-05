@@ -6,19 +6,26 @@ pub struct AudioManager {
     pub land: Sound,
     pub match_made: Sound,
     pub clear: Sound,
-    pub music: Sound,
+    pub music_tracks: Vec<Sound>,
+    pub current_track_idx: usize,
     muted: bool,
 }
 
 impl AudioManager {
-    pub async fn new() -> Self {
+    pub async fn new(bpms: &[f32]) -> Self {
         let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
+        let mut music_tracks = Vec::new();
+        for &bpm in bpms {
+            music_tracks.push(load_sound_from_bytes(&generate_music_wav(Some(seed), bpm)).await.unwrap());
+        }
+
         Self {
             rotate: load_sound_from_bytes(&generate_rotate_wav()).await.unwrap(),
             land: load_sound_from_bytes(&generate_land_wav()).await.unwrap(),
             match_made: load_sound_from_bytes(&generate_match_wav()).await.unwrap(),
             clear: load_sound_from_bytes(&generate_clear_wav()).await.unwrap(),
-            music: load_sound_from_bytes(&generate_music_wav(Some(seed))).await.unwrap(),
+            music_tracks,
+            current_track_idx: 0,
             muted: false,
         }
     }
@@ -45,18 +52,26 @@ impl AudioManager {
         if !self.muted {
             play_sound(&self.clear, PlaySoundParams { looped: false, volume: 0.4 });
         }
-        // Note: Macroquad's play_sound doesn't support pitch shifting easily in this version
-        // without more complex audio management, but we'll stick to basics first.
     }
 
     pub fn play_music(&self) {
-        if !self.muted {
-            play_sound(&self.music, PlaySoundParams { looped: true, volume: 0.4 });
+        if !self.muted && !self.music_tracks.is_empty() {
+            play_sound(&self.music_tracks[self.current_track_idx], PlaySoundParams { looped: true, volume: 0.4 });
         }
     }
 
     pub fn stop_music(&self) {
-        stop_sound(&self.music);
+        if !self.music_tracks.is_empty() {
+            stop_sound(&self.music_tracks[self.current_track_idx]);
+        }
+    }
+
+    pub fn set_track(&mut self, idx: usize) {
+        if idx < self.music_tracks.len() && idx != self.current_track_idx {
+            self.stop_music();
+            self.current_track_idx = idx;
+            self.play_music();
+        }
     }
 
     pub fn set_muted(&mut self, muted: bool) {

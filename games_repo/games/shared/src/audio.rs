@@ -16,9 +16,8 @@ pub fn create_wav_header(data_size: u32, sample_rate: u32) -> Vec<u8> {
     header
 }
 
-pub fn generate_music_wav(seed: Option<u32>) -> Vec<u8> {
+pub fn generate_music_wav(seed: Option<u32>, bpm: f32) -> Vec<u8> {
     let sample_rate = 44100;
-    let bpm = 130.0;
     let beat_duration = 60.0 / bpm;
     let sixteen_duration = beat_duration / 4.0;
 

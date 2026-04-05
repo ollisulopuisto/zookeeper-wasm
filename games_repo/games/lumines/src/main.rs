@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.05.216";
+const VERSION: &str = "26.04.05.217";
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -310,16 +310,6 @@ struct Game {
 
 impl Game {
     async fn new() -> Self {
-        let audio = AudioManager::new().await;
-        let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f507.png"), None);
-        let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f50a.png"), None);
-        let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/23f8.png"), None);
-        let tex_play = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/25b6.png"), None);
-        tex_mute_on.set_filter(FilterMode::Linear);
-        tex_mute_off.set_filter(FilterMode::Linear);
-        tex_pause.set_filter(FilterMode::Linear);
-        tex_play.set_filter(FilterMode::Linear);
-
         let themes = vec![
             shared::theme::Theme { 
                 name: "Classic".to_string(),
@@ -362,6 +352,18 @@ impl Game {
                 bpm: 170.0,
             },
         ];
+
+        let bpms: Vec<f32> = themes.iter().map(|t| t.bpm).collect();
+        let audio = AudioManager::new(&bpms).await;
+
+        let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f507.png"), None);
+        let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/1f50a.png"), None);
+        let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/23f8.png"), None);
+        let tex_play = Texture2D::from_file_with_format(include_bytes!("../../zookeeper/assets/25b6.png"), None);
+        tex_mute_on.set_filter(FilterMode::Linear);
+        tex_mute_off.set_filter(FilterMode::Linear);
+        tex_pause.set_filter(FilterMode::Linear);
+        tex_play.set_filter(FilterMode::Linear);
 
         let initial_bpm = themes[0].bpm;
         let seconds_per_sweep = (60.0 / initial_bpm) * BEATS_PER_SWEEP;
@@ -614,8 +616,10 @@ impl Game {
                 
                 if self.theme_engine.set_score(self.score) {
                     self.style_unlocked_timer = 3.0; // Show notification for 3 seconds
-                    let seconds_per_sweep = (60.0 / self.theme_engine.current().bpm) * BEATS_PER_SWEEP;
+                    let current_theme = self.theme_engine.current();
+                    let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
                     self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                    self.audio.set_track(self.theme_engine.current_theme_idx);
                 }
                 
                 self.squares_cleared_this_sweep += squares_this_step;
