@@ -1,11 +1,11 @@
-GAMES := zookeeper bubbles lumines
-VERSION := v26.04.03.5
-BUILD_GAMES ?=
+GAMES := zookeeper bubbles lumines music_editor
+VERSION := v26.4.5.215
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">
 ICON_bubbles   := <img src="assets/bubbles_icon.png" alt="Bubbles">
 ICON_lumines   := <span style="font-size: 5rem; margin-bottom: 1rem;">🔲</span>
+ICON_music_editor := <span style="font-size: 5rem; margin-bottom: 1rem;">🎵</span>
 ICON_jetpac    := <img src="assets/1f680.png" alt="Jetpac">
 ICON_voxeldash := <span style="font-size: 5rem; margin-bottom: 1rem;">📦</span>
 
@@ -13,6 +13,7 @@ ICON_voxeldash := <span style="font-size: 5rem; margin-bottom: 1rem;">📦</span
 NAME_zookeeper := Zookeeper
 NAME_bubbles   := Bubbles
 NAME_lumines   := Lumines
+NAME_music_editor := Music Editor
 NAME_jetpac    := Jetpac
 NAME_voxeldash := VoxelDash
 

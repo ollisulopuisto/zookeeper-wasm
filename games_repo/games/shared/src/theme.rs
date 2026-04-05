@@ -27,11 +27,10 @@ impl ThemeEngine {
         &self.themes[self.current_theme_idx]
     }
 
-    pub fn set_score(&mut self, score: u32) -> bool {
-        if self.themes.len() < 5 { return false; }
+    pub fn get_suggested_idx(&self, score: u32) -> usize {
+        if self.themes.len() < 5 { return self.current_theme_idx; }
         
-        let old_idx = self.current_theme_idx;
-        self.current_theme_idx = if score >= 10000 {
+        if score >= 10000 {
             4 // Inferno
         } else if score >= 5000 {
             3 // Crystal
@@ -41,8 +40,13 @@ impl ThemeEngine {
             1 // Neon
         } else {
             0 // Classic
-        };
-        
+        }
+    }
+
+    pub fn set_score(&mut self, score: u32) -> bool {
+        let suggested = self.get_suggested_idx(score);
+        let old_idx = self.current_theme_idx;
+        self.current_theme_idx = suggested;
         self.current_theme_idx != old_idx
     }
 

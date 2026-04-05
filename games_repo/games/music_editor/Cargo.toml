@@ -1,0 +1,9 @@
+[package]
+name = "music_editor_wasm"
+version = "26.4.5"
+edition = "2021"
+
+[dependencies]
+macroquad = { version = "0.4", features = ["audio"] }
+quad-rand = "0.2"
+shared = { path = "../shared" }

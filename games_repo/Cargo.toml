@@ -4,6 +4,7 @@ members = [
     "games/zookeeper",
     "games/bubbles",
     "games/lumines",
+    "games/music_editor",
 ]
 resolver = "2"
 

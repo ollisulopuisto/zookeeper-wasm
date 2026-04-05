@@ -16,28 +16,20 @@ pub fn create_wav_header(data_size: u32, sample_rate: u32) -> Vec<u8> {
     header
 }
 
-pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) -> (Vec<u8>, f32) {
-    let sample_rate = 44100;
-    let beat_duration = 60.0 / bpm;
+#[derive(Clone, Debug)]
+pub struct Arrangement {
+    pub drum_var: [u8; 8],
+    pub lead_var: [u8; 8],
+    pub cp_active: [bool; 8],
+}
 
-    let bars = 32;
-    let transition_bars = 4;
-    let main_bars = bars - transition_bars;
-    
-    // Estimate total num_samples for pre-allocation (approximate is fine)
-    let total_duration = bars as f32 * 4.0 * beat_duration;
-    let num_samples = (sample_rate as f32 * total_duration) as usize;
+impl Arrangement {
+    pub fn from_seed(seed: u32) -> Self {
+        let mut drum_var:  [u8; 8]   = [0, 1, 2, 0, 1, 2, 1, 0];
+        let mut lead_var:  [u8; 8]   = [0, 0, 0, 1, 1, 0, 0, 1];
+        let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
 
-    let midi_to_freq = |m: i32| -> f32 { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) };
-
-    // Arrangement tables: each entry covers one 4-bar block (8 blocks total = 32 bars).
-    let mut drum_var:  [u8; 8]   = [0, 1, 2, 0, 1, 2, 1, 0];
-    let mut lead_var:  [u8; 8]   = [0, 0, 0, 1, 1, 0, 0, 1];
-    let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
-
-    // Shuffle the arrangements if a seed is provided
-    if let Some(s) = seed {
-        let mut rng = s;
+        let mut rng = seed;
         let mut next_rng = || {
             rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
             (rng >> 16) & 0x7FFF
@@ -52,7 +44,37 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
             let j = (next_rng() % (i as u32 + 1)) as usize;
             cp_active.swap(i, j);
         }
+
+        Self { drum_var, lead_var, cp_active }
     }
+}
+
+pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) -> (Vec<u8>, f32) {
+    let arrangement = if let Some(s) = seed {
+        Arrangement::from_seed(s)
+    } else {
+        Arrangement {
+            drum_var:  [0, 1, 2, 0, 1, 2, 1, 0],
+            lead_var:  [0, 0, 0, 1, 1, 0, 0, 1],
+            cp_active: [false, true, false, true, true, false, false, true],
+        }
+    };
+    generate_music_wav_with_arrangement(arrangement, bpm, next_bpm)
+}
+
+pub fn generate_music_wav_with_arrangement(arrangement: Arrangement, bpm: f32, next_bpm: Option<f32>) -> (Vec<u8>, f32) {
+    let sample_rate = 44100;
+    let beat_duration = 60.0 / bpm;
+
+    let bars = 32;
+    let transition_bars = 4;
+    let main_bars = bars - transition_bars;
+    
+    // Estimate total num_samples for pre-allocation (approximate is fine)
+    let total_duration = bars as f32 * 4.0 * beat_duration;
+    let num_samples = (sample_rate as f32 * total_duration) as usize;
+
+    let midi_to_freq = |m: i32| -> f32 { 440.0 * 2.0f32.powf((m as f32 - 69.0) / 12.0) };
 
     let mut samples = Vec::with_capacity(num_samples);
     let mut noise_seed = 0x12345678u32;
@@ -121,9 +143,9 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
             };
 
             let block_idx = (bar_idx / 4) % 8;
-            let d_var = drum_var[block_idx];
-            let l_var = lead_var[block_idx];
-            let cp_on = cp_active[block_idx];
+            let d_var = arrangement.drum_var[block_idx];
+            let l_var = arrangement.lead_var[block_idx];
+            let cp_on = arrangement.cp_active[block_idx];
 
             // --- Bassline ---
             let b_note = bassline[sixteen_idx % 8] + key_offset;
