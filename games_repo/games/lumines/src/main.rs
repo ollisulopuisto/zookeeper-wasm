@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.05.219";
+const VERSION: &str = "26.04.05.215";
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -551,6 +551,21 @@ impl Game {
         self.audio.update(dt);
         self.style_unlocked_timer = (self.style_unlocked_timer - dt).max(0.0);
 
+        // --- Theme Transition Logic ---
+        // We check every frame if the audio has switched to the next theme's track.
+        // This ensures the visual style, timeline speed, and "unlocked" message
+        // all trigger in perfect sync with the music loop point.
+        if let Some(target_idx) = self.next_theme_idx {
+            if self.audio.current_track_idx == target_idx {
+                self.theme_engine.current_theme_idx = target_idx;
+                self.style_unlocked_timer = 3.0;
+                let current_theme = self.theme_engine.current();
+                let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
+                self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                self.next_theme_idx = None;
+            }
+        }
+
         // --- Time Freeze Logic ---
         if self.is_frozen {
             self.freeze_timer -= dt;
@@ -618,23 +633,12 @@ impl Game {
                 self.squares_cleared_total += squares_this_step;
                 self.level = (self.squares_cleared_total / 10) + 1;
                 
-                if self.theme_engine.set_score(self.score) {
+                let suggested = self.theme_engine.get_suggested_idx(self.score);
+                if suggested != self.theme_engine.current_theme_idx && self.next_theme_idx.is_none() {
                     // Start transition by telling audio we WANT a new track.
-                    // It will switch current_track_idx only when the loop finishes.
-                    self.audio.set_track(self.theme_engine.current_theme_idx);
-                    self.next_theme_idx = Some(self.theme_engine.current_theme_idx);
-                }
-
-                // If we are waiting for a theme switch, check if it has happened.
-                if let Some(target_idx) = self.next_theme_idx {
-                    if self.audio.current_track_idx == target_idx {
-                        // Switch occurred! Update UI and timeline speed.
-                        self.style_unlocked_timer = 3.0;
-                        let current_theme = self.theme_engine.current();
-                        let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
-                        self.timeline_speed = COLS as f32 / seconds_per_sweep;
-                        self.next_theme_idx = None;
-                    }
+                    // It will switch current_track_idx only when the current loop finishes.
+                    self.audio.set_track(suggested);
+                    self.next_theme_idx = Some(suggested);
                 }
                 
                 self.squares_cleared_this_sweep += squares_this_step;

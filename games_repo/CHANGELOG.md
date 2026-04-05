@@ -2,22 +2,9 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.5.219] - 2026-04-05
-### Added
-- **Visual Progression & Aesthetic Styles (Lumines):**
-  - Introduced five distinct visual themes: Classic, Neon, Retro, Crystal, and Inferno.
-  - Added specialized rendering for each theme, including unique color palettes and block shapes.
-  - Implemented a score-based progression system that unlocks new styles at 500, 2000, 5000, and 10,000 points.
-  - Enhanced HUD with current Level and Style name indicators.
-  - Added a "STYLE UNLOCKED!" notification that flashes when a new visual level is reached.
-- **Expressive Completion Animations (Lumines):**
-  - Added per-cell particle explosions when blocks are cleared by the sweep line.
-  - Added column-clear flash and board-edge match glow effects.
+## [26.4.5.215] - 2026-04-05
 ### Fixed
-- **Lumines WASM:** Fixed potential performance and correctness issues when the game hitches or is unfocused.
-  - Clamped `dt` to 0.1s to prevent excessive processing during long frames.
-  - Replaced single `if` with a `while` loop for the timeline wrap to ensure `timeline_x` always returns to the valid range.
-### Refactored
+- **Lumines WASM Sync:** Decoupled visual style transitions from the score-based theme suggestion. Visuals, timeline speed, and "STYLE UNLOCKED" notifications now trigger in perfect sync with the music loop point.
 - **Lumines WASM:** Extracted particle physics and completion animation magic numbers into named constants for improved maintainability.
 
 ## [26.4.3.168] - 2026-04-03
