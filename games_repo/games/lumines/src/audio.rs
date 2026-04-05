@@ -8,6 +8,10 @@ pub struct AudioManager {
     pub clear: Sound,
     pub music_tracks: Vec<Sound>,
     pub current_track_idx: usize,
+    pub track_durations: Vec<f32>,
+    pub pending_track_idx: Option<usize>,
+    pub track_time: f32,
+    music_playing: bool,
     muted: bool,
 }
 
@@ -15,8 +19,19 @@ impl AudioManager {
     pub async fn new(bpms: &[f32]) -> Self {
         let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         let mut music_tracks = Vec::new();
-        for &bpm in bpms {
-            music_tracks.push(load_sound_from_bytes(&generate_music_wav(Some(seed), bpm)).await.unwrap());
+        let mut track_durations = Vec::new();
+        
+        for i in 0..bpms.len() {
+            let current_bpm = bpms[i];
+            let next_bpm = if i + 1 < bpms.len() {
+                Some(bpms[i + 1])
+            } else {
+                None
+            };
+            
+            let (wav, duration) = generate_music_wav(Some(seed), current_bpm, next_bpm);
+            track_durations.push(duration);
+            music_tracks.push(load_sound_from_bytes(&wav).await.unwrap());
         }
 
         Self {
@@ -26,7 +41,31 @@ impl AudioManager {
             clear: load_sound_from_bytes(&generate_clear_wav()).await.unwrap(),
             music_tracks,
             current_track_idx: 0,
+            track_durations,
+            pending_track_idx: None,
+            track_time: 0.0,
+            music_playing: false,
             muted: false,
+        }
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        if self.muted || !self.music_playing || self.music_tracks.is_empty() {
+            return;
+        }
+
+        let loop_dur = self.track_durations[self.current_track_idx];
+
+        self.track_time += dt;
+
+        if self.track_time >= loop_dur {
+            self.track_time = 0.0;
+            if let Some(next_idx) = self.pending_track_idx {
+                self.stop_music();
+                self.current_track_idx = next_idx;
+                self.pending_track_idx = None;
+                self.play_music();
+            }
         }
     }
 
@@ -54,23 +93,24 @@ impl AudioManager {
         }
     }
 
-    pub fn play_music(&self) {
+    pub fn play_music(&mut self) {
         if !self.muted && !self.music_tracks.is_empty() {
+            self.music_playing = true;
             play_sound(&self.music_tracks[self.current_track_idx], PlaySoundParams { looped: true, volume: 0.4 });
         }
     }
 
-    pub fn stop_music(&self) {
+    pub fn stop_music(&mut self) {
         if !self.music_tracks.is_empty() {
+            self.music_playing = false;
             stop_sound(&self.music_tracks[self.current_track_idx]);
         }
     }
 
     pub fn set_track(&mut self, idx: usize) {
         if idx < self.music_tracks.len() && idx != self.current_track_idx {
-            self.stop_music();
-            self.current_track_idx = idx;
-            self.play_music();
+            // Instead of immediate switch, we schedule it for the end of the loop.
+            self.pending_track_idx = Some(idx);
         }
     }
 

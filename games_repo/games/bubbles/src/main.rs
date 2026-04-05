@@ -16,7 +16,7 @@ enum AppState {
     Playing,
     Paused,
     GameOver,
-    EnteringName { name: String },
+    EnteringName { input: shared::input::TextInput },
     Leaderboard { last_scores: Vec<(String, u32)> },
 }
 
@@ -81,23 +81,12 @@ async fn main() {
             }
             AppState::GameOver => {
                 if input.any_key {
-                    while let Some(_) = get_char_pressed() {} // Clear garbage
-                    state = AppState::EnteringName { name: String::new() };
+                    state = AppState::EnteringName { input: shared::input::TextInput::new(10, String::new()) };
                 }
             }
-            AppState::EnteringName { ref mut name } => {
-                while let Some(c) = get_char_pressed() {
-                    if (c.is_alphanumeric() || c == ' ') && name.len() < 10 {
-                        name.push(c);
-                    }
-                }
-                if is_key_pressed(KeyCode::Backspace) { name.pop(); }
+            AppState::EnteringName { ref mut input } => {
+                let mut submitted = input.update();
                 
-                let mut submitted = false;
-                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-                    submitted = true;
-                }
-
                 // UI calculations
                 let sw = screen_width();
                 let sh = screen_height();
@@ -118,12 +107,12 @@ async fn main() {
                     // JS Prompt button
                     let js_btn_y = vy + 140.0 * scale;
                     if mx >= btn_x && mx <= btn_x + btn_w && my >= js_btn_y && my <= js_btn_y + btn_h {
-                        *name = storage::ask_name_js();
+                        input.content = storage::ask_name_js();
                     }
                 }
 
                 if submitted {
-                    let final_name = if name.is_empty() { "BUB".to_string() } else { name.clone() };
+                    let final_name = if input.content.is_empty() { "BUB".to_string() } else { input.content.clone() };
                     let mut last_scores = Vec::new();
                     for p in &game.players {
                         storage::add_score(final_name.clone(), p.score);
@@ -181,11 +170,11 @@ async fn main() {
                     draw_text("PRESS ANY KEY", vx + 55.0 * scale, vy + 190.0 * scale, 20.0 * scale, YELLOW);
                 }
             }
-            AppState::EnteringName { ref name } => {
+            AppState::EnteringName { ref input } => {
                 let title_size = 30.0 * scale;
                 draw_text("NEW HIGH SCORE!", vx + 40.0 * scale, vy + 60.0 * scale, title_size, YELLOW);
                 draw_text("TYPE YOUR NAME:", vx + 50.0 * scale, vy + 100.0 * scale, 20.0 * scale, WHITE);
-                let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
+                let display_name = if input.content.is_empty() { "_".to_string() } else { format!("{}_", input.content) };
                 draw_text(&display_name, vx + 80.0 * scale, vy + 130.0 * scale, 30.0 * scale, SKYBLUE);
                 
                 let btn_w = 100.0 * scale;

@@ -136,7 +136,7 @@ enum GameState {
     EnteringName {
         score: u32,
         combo: u32,
-        name: String,
+        input: shared::input::TextInput,
         snail: bool,
     },
     /// The board is being shuffled because no moves are left.
@@ -497,10 +497,15 @@ async fn main() {
             board.time_left -= dt;
             if board.time_left <= 0.0 {
                 // Clear keyboard buffer so leftover game inputs (WASD) don't end up in the name field
-                while get_char_pressed().is_some() {}
+                shared::input::clear_keyboard_buffer();
                 
                 if board.qualifies_for_leaderboard() {
-                    board.state = GameState::EnteringName { score: board.score, combo: board.max_combo, name: "".to_string(), snail: board.snail_used };
+                    board.state = GameState::EnteringName { 
+                        score: board.score, 
+                        combo: board.max_combo, 
+                        input: shared::input::TextInput::new(10, "".to_string()), 
+                        snail: board.snail_used 
+                    };
                 } else {
                     board.state = GameState::GameOver;
                 }
@@ -529,7 +534,8 @@ async fn main() {
         match board.state {
             GameState::Paused { .. } => {
                 if is_key_pressed(KeyCode::Space) || (is_mouse_button_pressed(MouseButton::Left) && !over_mute && !over_snail) {
-                    if let GameState::Paused { previous_state } = board.state {
+                    let old_state = std::mem::replace(&mut board.state, GameState::Idle);
+                    if let GameState::Paused { previous_state } = old_state {
                         board.state = *previous_state;
                         if !settings.muted {
                             if let Some(ref snd) = snd_swap { play_sound(snd, PlaySoundParams::default()); }
@@ -539,7 +545,8 @@ async fn main() {
             }
             _ => {
                 if is_key_pressed(KeyCode::Space) || (is_mouse_button_pressed(MouseButton::Left) && over_pause) {
-                    board.state = GameState::Paused { previous_state: Box::new(board.state.clone()) };
+                    let old_state = std::mem::replace(&mut board.state, GameState::Idle);
+                    board.state = GameState::Paused { previous_state: Box::new(old_state) };
                 }
             }
         }
@@ -884,15 +891,8 @@ async fn main() {
                     board.state = GameState::Reshuffling { target_grid: target, next_row: 0, timer: 0.0 };
                 } else { board.state = GameState::LevelUp { timer }; }
             }
-            GameState::EnteringName { score, combo, ref name, snail } => {
-                let mut submitted = false;
-                let mut current_name = name.clone();
-                while let Some(c) = get_char_pressed() {
-                    if (c.is_alphanumeric() || c == ' ') && current_name.len() < 10 {
-                        current_name.push(c);
-                    }
-                }
-                if is_key_pressed(KeyCode::Backspace) { current_name.pop(); }
+            GameState::EnteringName { score, combo, ref mut input, snail } => {
+                let mut submitted = input.update();
 
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
@@ -909,28 +909,22 @@ async fn main() {
                 {
                     let is_mobile = sw < 600.0 && sw < sh;
                     if is_mobile {
-                        draw_rectangle(_prompt_x, _prompt_y, prompt_w, _prompt_h, Color::new(0.2, 0.2, 0.2, 1.0));
-                        draw_text_centered("TAP FOR POPUP", _prompt_y + _prompt_h * 0.7, _font_size * 0.4, WHITE);
                         if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
-                            current_name = shared::leaderboard::ask_player_name(&current_name);
+                            input.content = shared::leaderboard::ask_player_name(&input.content);
                         }
                     }
                 }
 
-                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter) {
-                    board.add_to_leaderboard(current_name.clone(), score, combo, snail);
-                    board.state = GameState::GameOver;
-                    submitted = true;
-                }
                 if !submitted && is_mouse_button_pressed(MouseButton::Left) {
                     if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
-                        board.add_to_leaderboard(current_name.clone(), score, combo, snail);
-                        board.state = GameState::GameOver;
                         submitted = true;
                     }
                 }
-                if !submitted {
-                    board.state = GameState::EnteringName { score, combo, name: current_name, snail };
+
+                if submitted {
+                    let current_name = if input.content.is_empty() { "---".to_string() } else { input.content.clone() };
+                    board.add_to_leaderboard(current_name, score, combo, snail);
+                    board.state = GameState::GameOver;
                 }
             }
             GameState::GameOver => {
@@ -1259,14 +1253,15 @@ async fn main() {
             let dims_sub = measure_text("GET READY...", None, (font_size * 0.6) as u16, 1.0);
             draw_text("GET READY...", sw / 2.0 - dims_sub.width / 2.0, sub_y, font_size * 0.6, Color::new(1.0, 1.0, 1.0, sub_alpha));
         }
-        if let GameState::EnteringName { score, combo, name, snail } = &board.state {
+        if let GameState::EnteringName { score, combo, input, snail } = &board.state {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
             let mut stats = format!("SCORE: {}  COMBO: X{}", score, combo);
             if *snail { stats.push_str(" (SNAIL)"); }
             draw_text_centered(&stats, sh * 0.25, font_size * 0.6, WHITE);
+
             draw_text_centered("Type your name", sh * 0.35, font_size * 0.6, GRAY);
-            let display_name = if name.is_empty() { "_".to_string() } else { format!("{}_", name) };
+            let display_name = if input.content.is_empty() { "_".to_string() } else { format!("{}_", input.content) };
             draw_text_centered(&display_name, sh * 0.5, font_size, WHITE);
 
             #[cfg(target_arch = "wasm32")]
@@ -1289,6 +1284,7 @@ async fn main() {
             draw_rectangle(ok_x, ok_y, ok_w, sh * 0.1, Color::new(0.3, 0.8, 0.3, 1.0));
             draw_text_centered(ok_text, ok_y + sh * 0.07, font_size, WHITE);
         }
+
 
         // --- UI Buttons ---
         // Render buttons last so they are always visible and tappable above overlays (essential for unpausing on mobile)

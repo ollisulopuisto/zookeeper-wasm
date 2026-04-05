@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.05.217";
+const VERSION: &str = "26.04.05.219";
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -301,10 +301,12 @@ struct Game {
     new_score_rank: Option<usize>,
     entering_name: bool,
     current_name: String,
+    name_input: Option<shared::input::TextInput>,
     just_finished_name_entry: bool,
     level: u32,
     squares_cleared_total: u32,
     theme_engine: shared::theme::ThemeEngine,
+    next_theme_idx: Option<usize>,
     style_unlocked_timer: f32,
 }
 
@@ -411,10 +413,12 @@ impl Game {
             new_score_rank: None,
             entering_name: false,
             current_name: String::new(),
+            name_input: None,
             just_finished_name_entry: false,
             level: 1,
             squares_cleared_total: 0,
             theme_engine: shared::theme::ThemeEngine::new(themes),
+            next_theme_idx: None,
             style_unlocked_timer: 0.0,
         }
     }
@@ -493,15 +497,9 @@ impl Game {
             }
         }
 
-        if self.entering_name {
-            while let Some(c) = get_char_pressed() {
-                if (c.is_alphanumeric() || c == ' ') && self.current_name.len() < MAX_NAME_LENGTH {
-                    self.current_name.push(c);
-                }
-            }
-            if is_key_pressed(KeyCode::Backspace) {
-                self.current_name.pop();
-            }
+        if let Some(input) = &mut self.name_input {
+            let mut submit = input.update();
+            self.current_name = input.content.clone();
 
             #[cfg(target_arch = "wasm32")]
             {
@@ -517,7 +515,9 @@ impl Game {
                         && my >= prompt_y
                         && my <= prompt_y + prompt_h
                     {
-                        self.current_name = shared::leaderboard::ask_player_name("").chars().take(MAX_NAME_LENGTH).collect();
+                        let name = shared::leaderboard::ask_player_name("");
+                        input.content = name.chars().take(MAX_NAME_LENGTH).collect();
+                        self.current_name = input.content.clone();
                     }
                 }
             }
@@ -526,17 +526,20 @@ impl Game {
             let ok_x = sw / 2.0 - ok_w / 2.0;
             let ok_y = sh * 0.74;
             let ok_h = sh * 0.1;
-            let submit = is_key_pressed(KeyCode::Enter)
-                || is_key_pressed(KeyCode::KpEnter)
-                || (is_mouse_button_pressed(MouseButton::Left)
-                    && mx >= ok_x
-                    && mx <= ok_x + ok_w
-                    && my >= ok_y
-                    && my <= ok_y + ok_h);
+            if is_mouse_button_pressed(MouseButton::Left)
+                && mx >= ok_x
+                && mx <= ok_x + ok_w
+                && my >= ok_y
+                && my <= ok_y + ok_h
+            {
+                submit = true;
+            }
+
             if submit {
                 let name = self.current_name.clone();
                 self.add_to_leaderboard(&name);
                 self.entering_name = false;
+                self.name_input = None;
                 self.just_finished_name_entry = true;
             }
         }
@@ -545,6 +548,7 @@ impl Game {
             return;
         }
 
+        self.audio.update(dt);
         self.style_unlocked_timer = (self.style_unlocked_timer - dt).max(0.0);
 
         // --- Time Freeze Logic ---
@@ -615,11 +619,22 @@ impl Game {
                 self.level = (self.squares_cleared_total / 10) + 1;
                 
                 if self.theme_engine.set_score(self.score) {
-                    self.style_unlocked_timer = 3.0; // Show notification for 3 seconds
-                    let current_theme = self.theme_engine.current();
-                    let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
-                    self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                    // Start transition by telling audio we WANT a new track.
+                    // It will switch current_track_idx only when the loop finishes.
                     self.audio.set_track(self.theme_engine.current_theme_idx);
+                    self.next_theme_idx = Some(self.theme_engine.current_theme_idx);
+                }
+
+                // If we are waiting for a theme switch, check if it has happened.
+                if let Some(target_idx) = self.next_theme_idx {
+                    if self.audio.current_track_idx == target_idx {
+                        // Switch occurred! Update UI and timeline speed.
+                        self.style_unlocked_timer = 3.0;
+                        let current_theme = self.theme_engine.current();
+                        let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
+                        self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                        self.next_theme_idx = None;
+                    }
                 }
                 
                 self.squares_cleared_this_sweep += squares_this_step;
@@ -1444,6 +1459,7 @@ async fn main() {
             game.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
             if game.score > 0 && game.qualifies_for_leaderboard() {
                 game.entering_name = true;
+                game.name_input = Some(shared::input::TextInput::new(MAX_NAME_LENGTH, String::new()));
             }
         }
 
