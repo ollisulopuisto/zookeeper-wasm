@@ -25,7 +25,7 @@ pub fn get_grid_coords(
         return None;
     }
 
-    if mx < offset_x || mx > offset_x + board_size || my < offset_y || my > offset_y + board_size {
+    if mx < offset_x || mx >= offset_x + board_size || my < offset_y || my >= offset_y + board_size {
         return None;
     }
 
@@ -73,9 +73,15 @@ mod tests {
     }
 
     #[test]
-    fn get_grid_coords_clamps_board_edge() {
-        let coords = get_grid_coords(80.0, 80.0, 0.0, 0.0, 80.0, 10.0, 8, 8);
+    fn get_grid_coords_clamps_near_board_edge() {
+        let coords = get_grid_coords(79.99, 79.99, 0.0, 0.0, 80.0, 10.0, 8, 8);
         assert_eq!(coords, Some((7, 7)));
+    }
+
+    #[test]
+    fn get_grid_coords_rejects_exact_board_edge() {
+        let coords = get_grid_coords(80.0, 80.0, 0.0, 0.0, 80.0, 10.0, 8, 8);
+        assert_eq!(coords, None);
     }
 
     #[test]
