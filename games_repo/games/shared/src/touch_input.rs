@@ -88,6 +88,16 @@ mod tests {
     fn get_grid_coords_rejects_zero_sized_grid() {
         assert_eq!(get_grid_coords(1.0, 1.0, 0.0, 0.0, 10.0, 1.0, 0, 8), None);
         assert_eq!(get_grid_coords(1.0, 1.0, 0.0, 0.0, 10.0, 1.0, 8, 0), None);
+        assert_eq!(get_grid_coords(1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 8, 8), None);
+        assert_eq!(get_grid_coords(1.0, 1.0, 0.0, 0.0, 10.0, 0.0, 8, 8), None);
+    }
+
+    #[test]
+    fn get_grid_coords_clamps_when_board_is_larger_than_grid() {
+        // board_size can be larger than cols*cell_size in responsive layouts.
+        // In that case, touch coordinates still inside board bounds must clamp safely.
+        let coords = get_grid_coords(95.0, 95.0, 0.0, 0.0, 100.0, 10.0, 8, 8);
+        assert_eq!(coords, Some((7, 7)));
     }
 
     #[test]
