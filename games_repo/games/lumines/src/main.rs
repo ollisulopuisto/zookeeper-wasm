@@ -9,7 +9,7 @@ use audio::AudioManager;
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.05.213";
+const VERSION: &str = "26.04.05.214";
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -305,6 +305,7 @@ struct Game {
     level: u32,
     squares_cleared_total: u32,
     theme_engine: shared::theme::ThemeEngine,
+    style_unlocked_timer: f32,
 }
 
 impl Game {
@@ -320,33 +321,45 @@ impl Game {
         tex_play.set_filter(FilterMode::Linear);
 
         let themes = vec![
-            shared::theme::Theme { // Classic
+            shared::theme::Theme { 
+                name: "Classic".to_string(),
                 color_a: WHITE,
                 color_b: ORANGE,
                 bg_color: Color::new(0.05, 0.05, 0.1, 1.0),
                 ui_accent: ORANGE,
                 bpm: 130.0,
             },
-            shared::theme::Theme { // Deep Ocean
-                color_a: SKYBLUE,
-                color_b: BLUE,
-                bg_color: Color::new(0.0, 0.05, 0.15, 1.0),
-                ui_accent: SKYBLUE,
-                bpm: 140.0,
-            },
-            shared::theme::Theme { // Sunset
-                color_a: Color::new(1.0, 0.5, 0.8, 1.0), // Pink
-                color_b: Color::new(0.6, 0.1, 0.6, 1.0), // Purple
-                bg_color: Color::new(0.1, 0.0, 0.1, 1.0),
-                ui_accent: Color::new(1.0, 0.5, 0.8, 1.0),
-                bpm: 150.0,
-            },
-            shared::theme::Theme { // Neon
+            shared::theme::Theme {
+                name: "Neon".to_string(),
                 color_a: GREEN,
                 color_b: Color::new(1.0, 0.0, 1.0, 1.0), // Magenta
                 bg_color: Color::new(0.0, 0.0, 0.0, 1.0),
                 ui_accent: GREEN,
+                bpm: 140.0,
+            },
+            shared::theme::Theme {
+                name: "Retro".to_string(),
+                color_a: YELLOW,
+                color_b: Color::new(0.4, 0.2, 0.0, 1.0), // Brown
+                bg_color: Color::new(0.1, 0.1, 0.0, 1.0),
+                ui_accent: YELLOW,
+                bpm: 150.0,
+            },
+            shared::theme::Theme {
+                name: "Crystal".to_string(),
+                color_a: SKYBLUE,
+                color_b: WHITE,
+                bg_color: Color::new(0.0, 0.1, 0.2, 1.0),
+                ui_accent: SKYBLUE,
                 bpm: 160.0,
+            },
+            shared::theme::Theme {
+                name: "Inferno".to_string(),
+                color_a: RED,
+                color_b: Color::new(0.4, 0.0, 0.0, 1.0),
+                bg_color: Color::new(0.1, 0.0, 0.0, 1.0),
+                ui_accent: RED,
+                bpm: 170.0,
             },
         ];
 
@@ -400,8 +413,10 @@ impl Game {
             level: 1,
             squares_cleared_total: 0,
             theme_engine: shared::theme::ThemeEngine::new(themes),
+            style_unlocked_timer: 0.0,
         }
     }
+
     fn qualifies_for_leaderboard(&self) -> bool {
         self.high_scores.iter().any(|e| self.score > e.score) || self.high_scores.len() < MAX_HIGH_SCORES
     }
@@ -528,6 +543,8 @@ impl Game {
             return;
         }
 
+        self.style_unlocked_timer = (self.style_unlocked_timer - dt).max(0.0);
+
         // --- Time Freeze Logic ---
         if self.is_frozen {
             self.freeze_timer -= dt;
@@ -594,9 +611,13 @@ impl Game {
                 self.score += squares_this_step * SCORE_PER_SQUARE * (1 + self.combo);
                 self.squares_cleared_total += squares_this_step;
                 self.level = (self.squares_cleared_total / 10) + 1;
-                self.theme_engine.set_level(self.level);
-                let seconds_per_sweep = (60.0 / self.theme_engine.current().bpm) * BEATS_PER_SWEEP;
-                self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                
+                if self.theme_engine.set_score(self.score) {
+                    self.style_unlocked_timer = 3.0; // Show notification for 3 seconds
+                    let seconds_per_sweep = (60.0 / self.theme_engine.current().bpm) * BEATS_PER_SWEEP;
+                    self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                }
+                
                 self.squares_cleared_this_sweep += squares_this_step;
                 self.audio.play_clear(1.0 + (self.combo as f32 * 0.1).min(1.0));
             }
@@ -1145,7 +1166,21 @@ impl Game {
 
         let hud_top_text_y = pad + font_lg;
         draw_text(&format!("SCORE: {}", self.score), margin, hud_top_text_y, font_lg, WHITE);
-        draw_text(&format!("LEVEL: {}", self.level), sw / 2.0 - 40.0, hud_top_text_y, font_lg, WHITE);
+        
+        let level_text = format!("LV: {}", self.level);
+        let theme_text = self.theme_engine.current().name.to_uppercase();
+        let center_text = format!("{}  [{}]", level_text, theme_text);
+        let center_dims = measure_text(&center_text, None, font_lg as u16, 1.0);
+        draw_text(&center_text, sw / 2.0 - center_dims.width / 2.0, hud_top_text_y, font_lg, WHITE);
+
+        if self.style_unlocked_timer > 0.0 {
+            let msg = "NEW STYLE UNLOCKED!";
+            let msg_sz = font_lg * 1.2;
+            let m_dims = measure_text(msg, None, msg_sz as u16, 1.0);
+            let alpha = (self.style_unlocked_timer * 2.0).min(1.0);
+            draw_text(msg, sw / 2.0 - m_dims.width / 2.0, sh / 2.0, msg_sz, Color::new(1.0, 1.0, 0.0, alpha));
+        }
+
         if self.combo > 0 {
             draw_text(
                 &format!("COMBO x{}", self.combo),
