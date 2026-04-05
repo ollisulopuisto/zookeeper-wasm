@@ -2,6 +2,10 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.5.217] - 2026-04-05
+### Fixed
+- **Music Editor WASM:** Fixed CI/CD build failure by adding missing `index.html` and adding the project to the root Cargo workspace.
+
 ## [26.4.5.216] - 2026-04-05
 ### Fixed
 - **Lumines WASM Sync:** Decoupled visual style transitions from the score-based theme suggestion. Visuals, timeline speed, and "STYLE UNLOCKED" notifications now trigger in perfect sync with the music loop point.

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Music Editor</title>
+    <meta name="description" content="A procedural music pattern editor written in Rust/WASM.">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
+    
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            z-index: 5;
+        }
+        #start-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        #start-button {
+            padding: 1.5rem 3rem;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #111;
+            background: #f80;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 136, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" tabindex='1'></canvas>
+    <div id="start-overlay">
+        <button id="start-button" onclick="startGame()">START EDITOR</button>
+    </div>
+    
+    <script src="platform.js"></script>
+    <script src="mq_js_bundle.js"></script>
+    <script>
+        // Capture AudioContext to resume it on iOS Safari
+        let captured_ctx = null;
+        (function() {
+            const OriginalAudioContext = window.AudioContext || window.webkitAudioContext;
+            if (OriginalAudioContext) {
+                const NewAudioContext = function() {
+                    const ctx = new OriginalAudioContext();
+                    captured_ctx = ctx;
+                    return ctx;
+                };
+                NewAudioContext.prototype = OriginalAudioContext.prototype;
+                if (window.AudioContext) window.AudioContext = NewAudioContext;
+                if (window.webkitAudioContext) window.webkitAudioContext = NewAudioContext;
+            }
+        })();
+
+        let started = false;
+        function resumeAudio() {
+            if (captured_ctx) {
+                if (captured_ctx.state === 'suspended') {
+                    captured_ctx.resume().then(() => {
+                        console.log("AudioContext resumed successfully");
+                    });
+                }
+                // Force unlock with a silent oscillator
+                try {
+                    const osc = captured_ctx.createOscillator();
+                    const silent = captured_ctx.createGain();
+                    silent.gain.value = 0;
+                    osc.connect(silent);
+                    silent.connect(captured_ctx.destination);
+                    osc.start(0);
+                    osc.stop(0.1);
+                } catch (e) {
+                    console.error("Error playing silent sound:", e);
+                }
+            }
+        }
+
+        function startGame() {
+            if (started) return;
+            started = true;
+            console.log("Initializing Editor...");
+
+            // Try to resume on first click
+            resumeAudio();
+
+            document.getElementById('start-overlay').style.display = 'none';
+            
+            // Focus canvas for keyboard input
+            const canvas = document.getElementById('glcanvas');
+            if (canvas) canvas.focus();
+
+            // Standard Macroquad load
+            load("music_editor_wasm.wasm");
+        }
+
+        // Add listeners for any subsequent interaction to ensure audio is unlocked
+        window.addEventListener('click', resumeAudio, true);
+        window.addEventListener('touchstart', resumeAudio, true);
+        window.addEventListener('touchend', resumeAudio, true);
+
+        // Auto-start on non-iOS platforms
+        if (!window.GamePlatform || !window.GamePlatform.isIOS()) {
+            startGame();
+        }
+    </script>
+</body>
+</html>

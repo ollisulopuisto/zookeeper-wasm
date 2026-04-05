@@ -1,5 +1,5 @@
 GAMES := zookeeper bubbles lumines music_editor
-VERSION := v26.4.5.215
+VERSION := v26.4.5.217
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">
@@ -20,7 +20,8 @@ NAME_voxeldash := VoxelDash
 # Define control descriptions
 CTRL_zookeeper := Swap gems with mouse / touch.<br><b>P</b> to Pause.
 CTRL_bubbles   := Arrow keys / WASD to move & jump.<br>SPACE to blow bubbles. <b>P</b> to Pause.
-CTRL_lumines   := Arrow keys / WASD to move & rotate.<br>SPACE to drop. <b>P</b> to Pause.
+CTRL_lumines   := Arrow keys / WASD to move \& rotate.<br>SPACE to drop. <b>P</b> to Pause.
+CTRL_music_editor := Procedural music pattern editor.<br><b>Randomize</b> to generate new patterns.
 
 .PHONY: all setup build test lint clean rename index.html $(GAMES)
 
