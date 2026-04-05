@@ -402,6 +402,24 @@ impl Game {
             theme_engine: shared::theme::ThemeEngine::new(themes),
         }
     }
+    fn qualifies_for_leaderboard(&self) -> bool {
+        self.high_scores.iter().any(|e| self.score > e.score) || self.high_scores.len() < MAX_HIGH_SCORES
+    }
+
+    fn add_to_leaderboard(&mut self, name: &str) {
+        self.high_scores.push(LeaderboardEntry {
+            name: name.to_string(),
+            score: self.score,
+        });
+        self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
+        self.high_scores.truncate(MAX_HIGH_SCORES);
+        self.new_score_rank = self
+            .high_scores
+            .iter()
+            .rposition(|e| e.name == name && e.score == self.score);
+        save_high_scores(&self.high_scores);
+    }
+
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color) {
         for _ in 0..PARTICLE_SPAWN_COUNT {
             self.particles.push(Particle {
