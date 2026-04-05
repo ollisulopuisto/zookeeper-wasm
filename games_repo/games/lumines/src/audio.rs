@@ -8,6 +8,9 @@ pub struct AudioManager {
     pub clear: Sound,
     pub music_tracks: Vec<Sound>,
     pub current_track_idx: usize,
+    pub track_bpms: Vec<f32>,
+    pub pending_track_idx: Option<usize>,
+    pub track_time: f32,
     muted: bool,
 }
 
@@ -15,8 +18,16 @@ impl AudioManager {
     pub async fn new(bpms: &[f32]) -> Self {
         let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         let mut music_tracks = Vec::new();
-        for &bpm in bpms {
-            music_tracks.push(load_sound_from_bytes(&generate_music_wav(Some(seed), bpm)).await.unwrap());
+        
+        for i in 0..bpms.len() {
+            let current_bpm = bpms[i];
+            let next_bpm = if i + 1 < bpms.len() {
+                Some(bpms[i + 1])
+            } else {
+                None
+            };
+            
+            music_tracks.push(load_sound_from_bytes(&generate_music_wav(Some(seed), current_bpm, next_bpm)).await.unwrap());
         }
 
         Self {
@@ -26,7 +37,32 @@ impl AudioManager {
             clear: load_sound_from_bytes(&generate_clear_wav()).await.unwrap(),
             music_tracks,
             current_track_idx: 0,
+            track_bpms: bpms.to_vec(),
+            pending_track_idx: None,
+            track_time: 0.0,
             muted: false,
+        }
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        if self.muted || self.music_tracks.is_empty() {
+            return;
+        }
+
+        let bpm = self.track_bpms[self.current_track_idx];
+        let beat_dur = 60.0 / bpm;
+        let loop_dur = beat_dur * 4.0 * 32.0; // 32 bars
+
+        self.track_time += dt;
+
+        if self.track_time >= loop_dur {
+            self.track_time -= loop_dur;
+            if let Some(next_idx) = self.pending_track_idx {
+                self.stop_music();
+                self.current_track_idx = next_idx;
+                self.pending_track_idx = None;
+                self.play_music();
+            }
         }
     }
 
@@ -68,9 +104,8 @@ impl AudioManager {
 
     pub fn set_track(&mut self, idx: usize) {
         if idx < self.music_tracks.len() && idx != self.current_track_idx {
-            self.stop_music();
-            self.current_track_idx = idx;
-            self.play_music();
+            // Instead of immediate switch, we schedule it for the end of the loop.
+            self.pending_track_idx = Some(idx);
         }
     }
 

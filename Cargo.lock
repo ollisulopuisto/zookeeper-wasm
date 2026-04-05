@@ -204,7 +204,7 @@ checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
 
 [[package]]
 name = "lumines_wasm"
-version = "26.4.4"
+version = "26.4.5"
 dependencies = [
  "macroquad",
  "quad-rand",
@@ -415,6 +415,7 @@ dependencies = [
 name = "shared"
 version = "0.1.0"
 dependencies = [
+ "macroquad",
  "serde",
  "serde_json",
 ]
