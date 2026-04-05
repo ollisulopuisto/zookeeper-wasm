@@ -10,6 +10,7 @@ pub fn clear_keyboard_buffer() {
     while get_last_key_pressed().is_some() {}
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct TextInput {
     pub content: String,
     pub max_len: usize,
