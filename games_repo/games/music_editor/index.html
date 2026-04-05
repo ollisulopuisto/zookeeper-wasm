@@ -84,15 +84,45 @@
                     });
                 }
                 // Force unlock with a silent oscillator
+                let osc = null;
+                let silent = null;
                 try {
-                    const osc = captured_ctx.createOscillator();
-                    const silent = captured_ctx.createGain();
+                    const startTime = captured_ctx.currentTime;
+                    const stopTime = startTime + 0.1;
+
+                    osc = captured_ctx.createOscillator();
+                    silent = captured_ctx.createGain();
                     silent.gain.value = 0;
+
+                    osc.onended = function() {
+                        try {
+                            osc.disconnect();
+                        } catch (_) {}
+                        try {
+                            silent.disconnect();
+                        } catch (_) {}
+                    };
+
                     osc.connect(silent);
                     silent.connect(captured_ctx.destination);
-                    osc.start(0);
-                    osc.stop(0.1);
+                    osc.start(startTime);
+                    osc.stop(stopTime);
                 } catch (e) {
+                    try {
+                        if (osc) {
+                            osc.stop();
+                        }
+                    } catch (_) {}
+                    try {
+                        if (osc) {
+                            osc.disconnect();
+                        }
+                    } catch (_) {}
+                    try {
+                        if (silent) {
+                            silent.disconnect();
+                        }
+                    } catch (_) {}
                     console.error("Error playing silent sound:", e);
                 }
             }
