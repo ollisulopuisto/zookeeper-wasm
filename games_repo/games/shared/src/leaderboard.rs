@@ -8,11 +8,15 @@ extern "C" {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-unsafe fn js_load_leaderboard(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
+unsafe fn js_load_leaderboard(_ptr: *mut u8, _max_len: u32) -> u32 {
+    0
+}
 #[cfg(not(target_arch = "wasm32"))]
 unsafe fn js_save_leaderboard(_ptr: *const u8, _len: u32) {}
 #[cfg(not(target_arch = "wasm32"))]
-unsafe fn js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 { 0 }
+unsafe fn js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 {
+    0
+}
 
 pub fn load_list<T, F>(max_len: usize, mut loader: F) -> Vec<T>
 where
@@ -39,7 +43,9 @@ where
 }
 
 pub fn load_scores<T: DeserializeOwned>() -> Vec<T> {
-    load_list::<T, _>(4096, |ptr, max_len| unsafe { js_load_leaderboard(ptr, max_len) })
+    load_list::<T, _>(4096, |ptr, max_len| unsafe {
+        js_load_leaderboard(ptr, max_len)
+    })
 }
 
 pub fn save_scores<T: Serialize>(scores: &[T]) {
@@ -55,7 +61,9 @@ pub fn ask_player_name(default_name: &str) -> String {
         if len == 0 {
             return default_name.to_string();
         }
-        String::from_utf8_lossy(&buf[..len.min(buf.len())]).trim().to_string()
+        String::from_utf8_lossy(&buf[..len.min(buf.len())])
+            .trim()
+            .to_string()
     }
     #[cfg(not(target_arch = "wasm32"))]
     {

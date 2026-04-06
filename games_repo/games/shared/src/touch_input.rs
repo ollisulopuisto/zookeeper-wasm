@@ -10,6 +10,29 @@ pub fn is_tap_valid_resume(mx: f32, my: f32, ui_buttons: &[(f32, f32, f32, f32)]
     true
 }
 
+/// Detects if the current device is a mobile device (phone or tablet).
+pub fn is_mobile() -> bool {
+    let sw = macroquad::window::screen_width();
+    let sh = macroquad::window::screen_height();
+    // Typical mobile screen width threshold
+    sw < 600.0 && sw < sh
+}
+
+/// Detects if the current device is running iOS or iPadOS.
+pub fn is_ios() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        // On WASM, we can check the user agent via JS or use a heuristic.
+        // Macroquad doesn't expose the UA directly, so we rely on screen
+        // size and touch support as a proxy, or users can provide a JS shim.
+        is_mobile()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        false
+    }
+}
+
 /// Convert screen coordinates into board cell indices.
 pub fn get_grid_coords(
     mx: f32,
@@ -25,7 +48,8 @@ pub fn get_grid_coords(
         return None;
     }
 
-    if mx < offset_x || mx >= offset_x + board_size || my < offset_y || my >= offset_y + board_size {
+    if mx < offset_x || mx >= offset_x + board_size || my < offset_y || my >= offset_y + board_size
+    {
         return None;
     }
 
@@ -102,17 +126,41 @@ mod tests {
 
     #[test]
     fn keyboard_swap_target_respects_bounds() {
-        assert_eq!(keyboard_swap_target(0, 0, 8, 8, true, false, false, false), None);
-        assert_eq!(keyboard_swap_target(0, 0, 8, 8, false, false, true, false), None);
-        assert_eq!(keyboard_swap_target(7, 7, 8, 8, false, true, false, false), None);
-        assert_eq!(keyboard_swap_target(7, 7, 8, 8, false, false, false, true), None);
+        assert_eq!(
+            keyboard_swap_target(0, 0, 8, 8, true, false, false, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(0, 0, 8, 8, false, false, true, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(7, 7, 8, 8, false, true, false, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(7, 7, 8, 8, false, false, false, true),
+            None
+        );
     }
 
     #[test]
     fn keyboard_swap_target_returns_adjacent_cell() {
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, true, false, false, false), Some((3, 2)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, true, false, false), Some((3, 4)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, false, true, false), Some((2, 3)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, false, false, true), Some((4, 3)));
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, true, false, false, false),
+            Some((3, 2))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, true, false, false),
+            Some((3, 4))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, false, true, false),
+            Some((2, 3))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, false, false, true),
+            Some((4, 3))
+        );
     }
 }

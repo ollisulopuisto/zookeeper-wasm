@@ -1,4 +1,4 @@
-use macroquad::audio::{load_sound_from_bytes, Sound, play_sound, stop_sound, PlaySoundParams};
+use macroquad::audio::{load_sound_from_bytes, play_sound, stop_sound, PlaySoundParams, Sound};
 use shared::audio::{create_wav_header, generate_music_wav};
 
 pub struct AudioManager {
@@ -20,7 +20,7 @@ impl AudioManager {
         let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         let mut music_tracks = Vec::new();
         let mut track_durations = Vec::new();
-        
+
         for i in 0..bpms.len() {
             let current_bpm = bpms[i];
             let next_bpm = if i + 1 < bpms.len() {
@@ -28,7 +28,7 @@ impl AudioManager {
             } else {
                 None
             };
-            
+
             let (wav, duration) = generate_music_wav(Some(seed), current_bpm, next_bpm);
             track_durations.push(duration);
             music_tracks.push(load_sound_from_bytes(&wav).await.unwrap());
@@ -71,32 +71,62 @@ impl AudioManager {
 
     pub fn play_rotate(&self) {
         if !self.muted {
-            play_sound(&self.rotate, PlaySoundParams { looped: false, volume: 0.3 });
+            play_sound(
+                &self.rotate,
+                PlaySoundParams {
+                    looped: false,
+                    volume: 0.3,
+                },
+            );
         }
     }
 
     pub fn play_land(&self) {
         if !self.muted {
-            play_sound(&self.land, PlaySoundParams { looped: false, volume: 0.3 });
+            play_sound(
+                &self.land,
+                PlaySoundParams {
+                    looped: false,
+                    volume: 0.3,
+                },
+            );
         }
     }
 
     pub fn play_match(&self) {
         if !self.muted {
-            play_sound(&self.match_made, PlaySoundParams { looped: false, volume: 0.4 });
+            play_sound(
+                &self.match_made,
+                PlaySoundParams {
+                    looped: false,
+                    volume: 0.4,
+                },
+            );
         }
     }
 
     pub fn play_clear(&self, _pitch: f32) {
         if !self.muted {
-            play_sound(&self.clear, PlaySoundParams { looped: false, volume: 0.4 });
+            play_sound(
+                &self.clear,
+                PlaySoundParams {
+                    looped: false,
+                    volume: 0.4,
+                },
+            );
         }
     }
 
     pub fn play_music(&mut self) {
         if !self.muted && !self.music_tracks.is_empty() {
             self.music_playing = true;
-            play_sound(&self.music_tracks[self.current_track_idx], PlaySoundParams { looped: true, volume: 0.4 });
+            play_sound(
+                &self.music_tracks[self.current_track_idx],
+                PlaySoundParams {
+                    looped: true,
+                    volume: 0.4,
+                },
+            );
         }
     }
 
@@ -139,7 +169,9 @@ fn generate_rotate_wav() -> Vec<u8> {
         samples.push((sample * amplitude * 10000.0) as i16);
     }
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
-    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
+    for s in samples {
+        wav.extend_from_slice(&s.to_le_bytes());
+    }
     wav
 }
 
@@ -151,12 +183,18 @@ fn generate_land_wav() -> Vec<u8> {
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
         let freq = 100.0 * (1.0 - t / duration);
-        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 { 0.5 } else { -0.5 };
+        let sample = if (t * freq * 2.0 * std::f32::consts::PI).sin() > 0.0 {
+            0.5
+        } else {
+            -0.5
+        };
         let amplitude = 1.0 - t / duration;
         samples.push((sample * amplitude * 8000.0) as i16);
     }
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
-    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
+    for s in samples {
+        wav.extend_from_slice(&s.to_le_bytes());
+    }
     wav
 }
 
@@ -168,12 +206,15 @@ fn generate_match_wav() -> Vec<u8> {
     for i in 0..num_samples {
         let t = i as f32 / sample_rate as f32;
         let freq = 880.0;
-        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin() * 0.5 + (t * freq * 1.5 * 2.0 * std::f32::consts::PI).sin() * 0.5;
+        let sample = (t * freq * 2.0 * std::f32::consts::PI).sin() * 0.5
+            + (t * freq * 1.5 * 2.0 * std::f32::consts::PI).sin() * 0.5;
         let amplitude = 1.0 - t / duration;
         samples.push((sample * amplitude * 12000.0) as i16);
     }
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
-    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
+    for s in samples {
+        wav.extend_from_slice(&s.to_le_bytes());
+    }
     wav
 }
 
@@ -190,6 +231,8 @@ fn generate_clear_wav() -> Vec<u8> {
         samples.push((sample * amplitude * 10000.0) as i16);
     }
     let mut wav = create_wav_header((num_samples * 2) as u32, sample_rate);
-    for s in samples { wav.extend_from_slice(&s.to_le_bytes()); }
+    for s in samples {
+        wav.extend_from_slice(&s.to_le_bytes());
+    }
     wav
 }

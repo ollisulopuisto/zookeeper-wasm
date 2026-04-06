@@ -47,4 +47,51 @@ impl TextInput {
         }
         is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter)
     }
+
+    /// Extends update with touch-based mobile prompting for WASM.
+    /// `prompt_rect` is where the user taps to open native OS input.
+    /// `ok_rect` is the OK/Submit button.
+    pub fn update_with_touch(
+        &mut self,
+        prompt_rect: (f32, f32, f32, f32),
+        ok_rect: (f32, f32, f32, f32),
+        is_mobile: bool,
+    ) -> bool {
+        let mut submitted = self.update();
+
+        let (mx, my) = mouse_position();
+        let tapped = is_mouse_button_pressed(MouseButton::Left);
+
+        if tapped {
+            // Check OK button
+            if mx >= ok_rect.0
+                && mx <= ok_rect.0 + ok_rect.2
+                && my >= ok_rect.1
+                && my <= ok_rect.1 + ok_rect.3
+            {
+                submitted = true;
+            }
+
+            // Check native prompt trigger (only on mobile WASM)
+            #[cfg(target_arch = "wasm32")]
+            {
+                if is_mobile {
+                    if mx >= prompt_rect.0
+                        && mx <= prompt_rect.0 + prompt_rect.2
+                        && my >= prompt_rect.1
+                        && my <= prompt_rect.1 + prompt_rect.3
+                    {
+                        self.content = crate::leaderboard::ask_player_name(&self.content);
+                    }
+                }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = (prompt_rect, is_mobile);
+            }
+        }
+
+        submitted
+    }
 }
