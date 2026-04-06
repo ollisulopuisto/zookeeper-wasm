@@ -256,9 +256,9 @@ fn draw_stylized_block(
             );
         }
         shared::theme::BlockShape::Circle => {
-            let r = w * 0.5;
-            let cx = bx + r;
-            let cy = by + r;
+            let r = w.min(h) * 0.5;
+            let cx = bx + w * 0.5;
+            let cy = by + h * 0.5;
             draw_circle(cx, cy, r, base);
             // Top highlight arc/circle
             draw_circle(
