@@ -59,7 +59,7 @@ impl ThemeEngine {
         &self.themes[self.current_theme_idx]
     }
 
-    pub fn get_suggested_level_idx(&self, level: u32) -> usize {
+    pub fn get_suggested_theme_idx(&self, level: u32) -> usize {
         if self.themes.is_empty() {
             return 0;
         }
