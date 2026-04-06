@@ -710,9 +710,13 @@ impl Game {
         // This ensures the visual style, timeline speed, and "unlocked" message
         // all trigger in perfect sync with the music loop point.
         if let Some(target_idx) = self.next_theme_idx {
-            self.theme_transition_timer -= dt;
-            // Transition if audio switched OR if fallback timer expired
-            if self.audio.current_track_idx == target_idx || self.theme_transition_timer <= 0.0 {
+            let audio_switched = self.audio.current_track_idx == target_idx;
+            if !self.is_frozen {
+                self.theme_transition_timer -= dt;
+            }
+            let fallback_expired = !self.is_frozen && self.theme_transition_timer <= 0.0;
+            // Transition if audio switched OR if fallback timer expired while audio can advance
+            if audio_switched || fallback_expired {
                 self.theme_engine.current_theme_idx = target_idx;
                 self.style_unlocked_timer = 3.0;
                 let current_theme = self.theme_engine.current();
