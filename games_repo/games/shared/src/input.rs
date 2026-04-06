@@ -67,13 +67,19 @@ impl TextInput {
                my >= ok_rect.1 && my <= ok_rect.1 + ok_rect.3 {
                 submitted = true;
             }
-            
-            // Check native prompt trigger (only on mobile)
-            if crate::touch_input::is_mobile() {
+
+            // Check native prompt trigger on WASM targets.
+            #[cfg(target_arch = "wasm32")]
+            {
                 if mx >= prompt_rect.0 && mx <= prompt_rect.0 + prompt_rect.2 && 
                    my >= prompt_rect.1 && my <= prompt_rect.1 + prompt_rect.3 {
                     self.content = crate::leaderboard::ask_player_name(&self.content);
                 }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = prompt_rect;
             }
         }
         
