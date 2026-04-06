@@ -180,7 +180,7 @@ pub fn generate_music_wav_with_arrangement(
             let l_var = arrangement.lead_var[block_idx];
             let l_tone = arrangement.lead_tone[block_idx];
             let cp_on = arrangement.cp_active[block_idx];
-            let half_beat_idx = sixteen_idx / 8;
+            let half_bar_idx_in_bar = sixteen_idx / 8;
 
             // --- Bassline ---
             let b_note = bassline[sixteen_idx % 8] + key_offset;
@@ -316,7 +316,8 @@ pub fn generate_music_wav_with_arrangement(
             let (synth, counter) = match l_var {
                 3 => {
                     // Half-time lead
-                    let ht_step = s_step_table_4[(bar_idx + half_beat_idx) % 8];
+                    let half_note_phrase_idx = bar_idx * 2 + half_bar_idx_in_bar;
+                    let ht_step = s_step_table_4[half_note_phrase_idx % 8];
                     let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset - 12);
                     let note_dur = bar_beat_duration * 2.0;
                     let t_in_note = t_in_bar % note_dur;
