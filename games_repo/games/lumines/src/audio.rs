@@ -17,7 +17,7 @@ pub struct AudioManager {
 
 impl AudioManager {
     pub async fn new(bpms: &[f32]) -> Self {
-        let seed = macroquad::rand::gen_range(0, 0x7FFFFFFF);
+        let seed: u32 = macroquad::rand::gen_range(0, 0x7FFFFFFF);
         let mut music_tracks = Vec::new();
         let mut track_durations = Vec::new();
 

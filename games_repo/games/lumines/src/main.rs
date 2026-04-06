@@ -7,11 +7,11 @@ use macroquad::prelude::*;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
 
-use shared::theme::{BlockColor, BlockShape, Theme, ThemeEngine};
+use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.220";
+const VERSION: &str = "26.04.06.222";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
