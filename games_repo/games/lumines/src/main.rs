@@ -71,7 +71,8 @@ const MARKED_GLOW_THRESHOLD: f32 = 0.88; // pulse value above which the outer gl
                                          // Falling animation constants
 const FALL_GRAVITY: f32 = 32.0; // grid-units per second² for falling blocks
 const IMPACT_DURATION: f32 = 0.42; // seconds the impact/rebound effect lasts after landing
-                                   // Shared layout constants
+const IMPACT_REBOUND_FREQ: f32 = 1.6; // oscillation cycles during rebound phase
+                                    // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03; // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06; // pause/mute button size as fraction of sh
                                   // Landscape layout constants
@@ -1255,7 +1256,9 @@ impl Game {
                         let t = (self.impact_timers[y][x] / IMPACT_DURATION).clamp(0.0, 1.0);
                         let progress = 1.0 - t;
                         let squash = (t * std::f32::consts::PI).sin();
-                        let rebound = (progress * std::f32::consts::TAU * 1.6).sin() * t;
+                        let rebound = (progress * std::f32::consts::TAU * IMPACT_REBOUND_FREQ)
+                            .sin()
+                            * t;
                         scale_y -= squash * 0.20;
                         scale_x += squash * 0.14;
                         scale_y += rebound * 0.08;
