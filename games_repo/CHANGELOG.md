@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.6.225] - 2026-04-06
+## [26.4.6.220] - 2026-04-06
 ### Changed
 - **Refactoring & Optimization:** Improved codebase maintainability and encapsulation across shared library and games.
   - Encapsulated shape and color selection into `shared::theme::Theme` helpers.
