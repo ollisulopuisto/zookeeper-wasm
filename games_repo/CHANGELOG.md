@@ -3,6 +3,15 @@
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
 ## [26.4.6.220] - 2026-04-06
+### Fixed
+- **Lumines WASM Vertical Layout:** Redesigned the portrait (mobile) HUD to prevent UI elements from obscuring each other.
+  - Moved Level/Progress/Theme info from the top bar to the top of the bottom bar.
+  - Centered the game board vertically between the top and bottom HUDs to eliminate excessive empty space.
+  - Top bar now only displays Score and Controls in portrait mode, avoiding overlap with progress information.
+  - Adjusted "TIME FROZEN" and "STAGING AREA" offsets to dynamically follow the centered board.
+  - Improved responsiveness and centered layout for the initial "waiting to start" screen.
+
+## [26.4.6.220] - 2026-04-06
 ### Changed
 - **Refactoring & Optimization:** Improved codebase maintainability and encapsulation across shared library and games.
   - Encapsulated shape and color selection into `shared::theme::Theme` helpers.
