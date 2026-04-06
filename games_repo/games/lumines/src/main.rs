@@ -69,8 +69,8 @@ const MARKED_PULSE_FREQ: f32 = 12.0 * std::f32::consts::TAU; // radians/sec for 
 const MARKED_PULSE_AMPLITUDE: f32 = 0.35; // 0..1 amplitude of the brightness pulse (35%)
 const MARKED_GLOW_THRESHOLD: f32 = 0.88; // pulse value above which the outer glow ring appears
                                          // Falling animation constants
-const FALL_GRAVITY: f32 = 28.0; // grid-units per second² for falling blocks
-const IMPACT_DURATION: f32 = 0.30; // seconds the squish effect lasts after landing
+const FALL_GRAVITY: f32 = 32.0; // grid-units per second² for falling blocks
+const IMPACT_DURATION: f32 = 0.42; // seconds the impact/rebound effect lasts after landing
                                    // Shared layout constants
 const HUD_MARGIN_RATIO: f32 = 0.03; // horizontal gutter as fraction of sw
 const BTN_SIZE_RATIO: f32 = 0.06; // pause/mute button size as fraction of sh
@@ -1248,14 +1248,18 @@ impl Game {
                     let bx = offset_x + x as f32 * cell_size;
                     let by = offset_y + (y as f32 + self.v_offsets[y][x]) * cell_size;
 
-                    // Landing squish: briefly squash vertically and stretch horizontally.
+                    // Landing squish/rebound: squash on impact, then brief elastic rebound.
                     let mut scale_x = 1.0f32;
                     let mut scale_y = 1.0f32;
                     if self.impact_timers[y][x] > 0.0 {
                         let t = (self.impact_timers[y][x] / IMPACT_DURATION).clamp(0.0, 1.0);
-                        let s = (t * std::f32::consts::PI).sin();
-                        scale_y -= s * 0.15;
-                        scale_x += s * 0.10;
+                        let progress = 1.0 - t;
+                        let squash = (t * std::f32::consts::PI).sin();
+                        let rebound = (progress * std::f32::consts::TAU * 1.6).sin() * t;
+                        scale_y -= squash * 0.20;
+                        scale_x += squash * 0.14;
+                        scale_y += rebound * 0.08;
+                        scale_x -= rebound * 0.05;
                     }
 
                     let shape = self.theme_engine.current().get_shape(color);
