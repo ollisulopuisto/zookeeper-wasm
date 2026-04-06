@@ -1258,7 +1258,7 @@ impl Game {
                         let squash = (t * std::f32::consts::PI).sin();
                         let rebound = (progress * std::f32::consts::TAU * IMPACT_REBOUND_FREQ)
                             .sin()
-                            * t;
+                            * progress;
                         scale_y -= squash * 0.20;
                         scale_x += squash * 0.14;
                         scale_y += rebound * 0.08;
