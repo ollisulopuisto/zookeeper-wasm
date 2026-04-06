@@ -12,10 +12,31 @@ pub fn is_tap_valid_resume(mx: f32, my: f32, ui_buttons: &[(f32, f32, f32, f32)]
 
 /// Detects if the current device is a mobile device (phone or tablet).
 pub fn is_mobile() -> bool {
-    let sw = macroquad::window::screen_width();
-    let sh = macroquad::window::screen_height();
-    // Typical mobile screen width threshold
-    sw < 600.0 && sw < sh
+    #[cfg(target_arch = "wasm32")]
+    {
+        // On WASM, we can check the user agent via JS.
+        // This is a common pattern in Macroquad projects using miniquad.
+        let ua = unsafe { js_get_user_agent() };
+        ua.contains("Mobi") || ua.contains("Android") || ua.contains("iPhone") || ua.contains("iPad")
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let sw = macroquad::window::screen_width();
+        let sh = macroquad::window::screen_height();
+        sw < 600.0 && sw < sh
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn js_get_user_agent_ptr(ptr: *mut u8, max_len: u32) -> u32;
+}
+
+#[cfg(target_arch = "wasm32")]
+unsafe fn js_get_user_agent() -> String {
+    let mut buf = [0u8; 256];
+    let len = js_get_user_agent_ptr(buf.as_mut_ptr(), buf.len() as u32) as usize;
+    String::from_utf8_lossy(&buf[..len.min(buf.len())]).to_string()
 }
 
 /// Detects if the current device is running iOS or iPadOS.

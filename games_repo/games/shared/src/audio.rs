@@ -97,8 +97,8 @@ pub fn generate_music_wav_with_arrangement(
     let sample_rate = 44100;
     let beat_duration = 60.0 / bpm;
 
-    let bars = 32;
-    let transition_bars = 4;
+    let bars = 16;
+    let transition_bars = 2;
     let main_bars = bars - transition_bars;
 
     // Estimate total num_samples for pre-allocation (approximate is fine)
