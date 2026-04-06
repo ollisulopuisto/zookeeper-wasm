@@ -1,6 +1,12 @@
 use macroquad::prelude::Color;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BlockColor {
+    ColorA,
+    ColorB,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BlockShape {
     Square,
     Circle,
@@ -18,6 +24,22 @@ pub struct Theme {
     pub bpm: f32,
     pub shape_a: BlockShape,
     pub shape_b: BlockShape,
+}
+
+impl Theme {
+    pub fn get_color(&self, color: BlockColor) -> Color {
+        match color {
+            BlockColor::ColorA => self.color_a,
+            BlockColor::ColorB => self.color_b,
+        }
+    }
+
+    pub fn get_shape(&self, color: BlockColor) -> BlockShape {
+        match color {
+            BlockColor::ColorA => self.shape_a,
+            BlockColor::ColorB => self.shape_b,
+        }
+    }
 }
 
 pub struct ThemeEngine {
@@ -38,7 +60,9 @@ impl ThemeEngine {
     }
 
     pub fn set_level(&mut self, level: u32) -> bool {
-        if self.themes.is_empty() { return false; }
+        if self.themes.is_empty() {
+            return false;
+        }
         let old_idx = self.current_theme_idx;
         // Change theme every 10 levels (100 squares deleted) as a marker of progress
         self.current_theme_idx = (((level as usize).saturating_sub(1) / 10) % self.themes.len());

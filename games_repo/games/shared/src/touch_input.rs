@@ -25,7 +25,7 @@ pub fn is_ios() -> bool {
         // On WASM, we can check the user agent via JS or use a heuristic.
         // Macroquad doesn't expose the UA directly, so we rely on screen
         // size and touch support as a proxy, or users can provide a JS shim.
-        is_mobile() 
+        is_mobile()
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -48,7 +48,8 @@ pub fn get_grid_coords(
         return None;
     }
 
-    if mx < offset_x || mx >= offset_x + board_size || my < offset_y || my >= offset_y + board_size {
+    if mx < offset_x || mx >= offset_x + board_size || my < offset_y || my >= offset_y + board_size
+    {
         return None;
     }
 
@@ -125,17 +126,41 @@ mod tests {
 
     #[test]
     fn keyboard_swap_target_respects_bounds() {
-        assert_eq!(keyboard_swap_target(0, 0, 8, 8, true, false, false, false), None);
-        assert_eq!(keyboard_swap_target(0, 0, 8, 8, false, false, true, false), None);
-        assert_eq!(keyboard_swap_target(7, 7, 8, 8, false, true, false, false), None);
-        assert_eq!(keyboard_swap_target(7, 7, 8, 8, false, false, false, true), None);
+        assert_eq!(
+            keyboard_swap_target(0, 0, 8, 8, true, false, false, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(0, 0, 8, 8, false, false, true, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(7, 7, 8, 8, false, true, false, false),
+            None
+        );
+        assert_eq!(
+            keyboard_swap_target(7, 7, 8, 8, false, false, false, true),
+            None
+        );
     }
 
     #[test]
     fn keyboard_swap_target_returns_adjacent_cell() {
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, true, false, false, false), Some((3, 2)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, true, false, false), Some((3, 4)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, false, true, false), Some((2, 3)));
-        assert_eq!(keyboard_swap_target(3, 3, 8, 8, false, false, false, true), Some((4, 3)));
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, true, false, false, false),
+            Some((3, 2))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, true, false, false),
+            Some((3, 4))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, false, true, false),
+            Some((2, 3))
+        );
+        assert_eq!(
+            keyboard_swap_target(3, 3, 8, 8, false, false, false, true),
+            Some((4, 3))
+        );
     }
 }

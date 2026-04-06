@@ -7,9 +7,12 @@ use macroquad::prelude::*;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
 
+use shared::theme::{BlockColor, BlockShape, Theme, ThemeEngine};
+
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.219";
+const VERSION: &str = "26.04.06.220";
+
 
 const BEATS_PER_SWEEP: f32 = 8.0;
 const FREEZE_DURATION: f32 = 4.0;
@@ -120,33 +123,25 @@ struct HudLayout {
     meter_y: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-enum BlockColor {
-    ColorA,
-    ColorB,
+fn random_block_color() -> BlockColor {
+    if qrand::gen_range(0, 2) == 0 {
+        BlockColor::ColorA
+    } else {
+        BlockColor::ColorB
+    }
 }
 
-impl BlockColor {
-    fn random() -> Self {
-        if qrand::gen_range(0, 2) == 0 {
-            BlockColor::ColorA
-        } else {
-            BlockColor::ColorB
-        }
-    }
-
-    fn random_2x2() -> [[BlockColor; 2]; 2] {
-        [
-            [Self::random(), Self::random()],
-            [Self::random(), Self::random()],
-        ]
-    }
+fn random_2x2_block() -> [[BlockColor; 2]; 2] {
+    [
+        [random_block_color(), random_block_color()],
+        [random_block_color(), random_block_color()],
+    ]
 }
 
 /// Generate a random 2×2 block together with chain flags.
 /// With probability `CHAIN_PROBABILITY`% one random cell is a chain cell.
 fn random_block_with_chain() -> ([[BlockColor; 2]; 2], [[bool; 2]; 2]) {
-    let colors = BlockColor::random_2x2();
+    let colors = random_2x2_block();
     let mut chains = [[false; 2]; 2];
     if qrand::gen_range(0u32, 100) < CHAIN_PROBABILITY {
         let row = qrand::gen_range(0, 2);
@@ -212,6 +207,32 @@ struct Particle {
     size: f32,
 }
 
+fn draw_shape_fill(x: f32, y: f32, w: f32, h: f32, shape: BlockShape, color: Color) {
+    match shape {
+        BlockShape::Square => {
+            draw_rectangle(x, y, w, h, color);
+        }
+        BlockShape::Circle => {
+            let r = w * 0.5;
+            draw_circle(x + r, y + r, r, color);
+        }
+        BlockShape::Diamond => {
+            let hw = w * 0.5;
+            let hh = h * 0.5;
+            let cx = x + hw;
+            let cy = y + hh;
+            draw_triangle(vec2(cx, y), vec2(x, cy), vec2(x + w, cy), color);
+            draw_triangle(vec2(x, cy), vec2(x + w, cy), vec2(cx, y + h), color);
+        }
+        BlockShape::Cross => {
+            let thick = w * 0.35;
+            let inset = (w - thick) * 0.5;
+            draw_rectangle(x + inset, y, thick, h, color);
+            draw_rectangle(x, y + inset, w, thick, color);
+        }
+    }
+}
+
 fn draw_stylized_block(
     x: f32,
     y: f32,
@@ -221,11 +242,10 @@ fn draw_stylized_block(
     border_color: Color,
     scale_x: f32,
     scale_y: f32,
-    shape: shared::theme::BlockShape,
+    shape: BlockShape,
 ) {
     let w = size * scale_x;
     let h = size * scale_y;
-    // Centre horizontally, anchor to bottom so squash looks grounded.
     let bx = x + (size - w) * 0.5;
     let by = y + (size - h);
 
@@ -236,10 +256,12 @@ fn draw_stylized_block(
         1.0,
     );
 
+    // Main fill
+    draw_shape_fill(bx, by, w, h, shape, base);
+
+    // Highlights & Shadows
     match shape {
-        shared::theme::BlockShape::Square => {
-            draw_rectangle(bx, by, w, h, base);
-            // Top highlight band
+        BlockShape::Square => {
             draw_rectangle(
                 bx,
                 by,
@@ -247,7 +269,6 @@ fn draw_stylized_block(
                 h * BLOCK_HIGHLIGHT_HEIGHT_RATIO,
                 Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA),
             );
-            // Bottom-right shadow
             draw_triangle(
                 vec2(bx + w * BLOCK_SHADOW_CUTOFF_RATIO, by + h),
                 vec2(bx + w, by + h * BLOCK_SHADOW_CUTOFF_RATIO),
@@ -255,45 +276,29 @@ fn draw_stylized_block(
                 Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
             );
         }
-        shared::theme::BlockShape::Circle => {
-            let r = w.min(h) * 0.5;
-            let cx = bx + w * 0.5;
-            let cy = by + h * 0.5;
-            draw_circle(cx, cy, r, base);
-            // Top highlight arc/circle
+        BlockShape::Circle => {
+            let r = w * 0.5;
             draw_circle(
-                cx,
-                cy - r * 0.2,
+                bx + r,
+                by + r * 0.8,
                 r * 0.7,
                 Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA),
             );
         }
-        shared::theme::BlockShape::Diamond => {
+        BlockShape::Diamond => {
             let hw = w * 0.5;
             let hh = h * 0.5;
-            let cx = bx + hw;
-            let cy = by + hh;
-            draw_triangle(vec2(cx, by), vec2(bx, cy), vec2(bx + w, cy), base);
-            draw_triangle(vec2(bx, cy), vec2(bx + w, cy), vec2(cx, by + h), base);
-            // Highlight top half
             draw_triangle(
-                vec2(cx, by),
-                vec2(bx + hw * 0.5, cy - hh * 0.5),
-                vec2(bx + w - hw * 0.5, cy - hh * 0.5),
+                vec2(bx + hw, by),
+                vec2(bx + hw * 0.5, by + hh * 0.5),
+                vec2(bx + w - hw * 0.5, by + hh * 0.5),
                 color,
             );
         }
-        shared::theme::BlockShape::Cross => {
-            let thick_x = w * 0.35;
-            let thick_y = h * 0.35;
-            let inset_x = (w - thick_x) * 0.5;
-            let inset_y = (h - thick_y) * 0.5;
-            // Vertical bar
-            draw_rectangle(bx + inset_x, by, thick_x, h, base);
-            // Horizontal bar
-            draw_rectangle(bx, by + inset_y, w, thick_y, base);
-            // Highlight
-            draw_rectangle(bx + inset_x, by, thick_x, h * 0.3, color);
+        BlockShape::Cross => {
+            let thick = w * 0.35;
+            let inset = (w - thick) * 0.5;
+            draw_rectangle(bx + inset, by, thick, h * 0.3, color);
         }
     }
 
@@ -307,9 +312,9 @@ fn draw_stylized_block(
         Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA),
     );
 
-    // Outline
+    // Outlines
     match shape {
-        shared::theme::BlockShape::Square => {
+        BlockShape::Square => {
             draw_rectangle_lines(
                 bx,
                 by,
@@ -327,12 +332,11 @@ fn draw_stylized_block(
                 border_color,
             );
         }
-        shared::theme::BlockShape::Circle => {
-            let radius = w.min(h) * 0.5;
+        BlockShape::Circle => {
             draw_circle_lines(
                 bx + w * 0.5,
                 by + h * 0.5,
-                radius,
+                w * 0.5,
                 border_width,
                 border_color,
             );
@@ -678,7 +682,8 @@ impl Game {
 
             let submit = input.update_with_touch(
                 (prompt_x, prompt_y, prompt_w, prompt_h),
-                (ok_x, ok_y, ok_w, ok_h)
+                (ok_x, ok_y, ok_w, ok_h),
+                shared::touch_input::is_mobile(),
             );
             self.current_name = input.content.clone();
 
@@ -1216,10 +1221,7 @@ impl Game {
         for y in 0..ROWS {
             for x in 0..COLS {
                 if let Some(color) = self.grid[y][x] {
-                    let mut c = match color {
-                        BlockColor::ColorA => self.theme_engine.current().color_a,
-                        BlockColor::ColorB => self.theme_engine.current().color_b,
-                    };
+                    let mut c = self.theme_engine.current().get_color(color);
                     if self.is_frozen {
                         let avg = (c.r + c.g + c.b) / 3.0;
                         c = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
@@ -1239,10 +1241,7 @@ impl Game {
                         scale_x += s * 0.10;
                     }
 
-                    let shape = match color {
-                        BlockColor::ColorA => self.theme_engine.current().shape_a,
-                        BlockColor::ColorB => self.theme_engine.current().shape_b,
-                    };
+                    let shape = self.theme_engine.current().get_shape(color);
 
                     if self.marked[y][x] {
                         let t = get_time() as f32;
@@ -1364,10 +1363,10 @@ impl Game {
                     // playfield whenever they are above y=0 (e.g. during entry or just
                     // after entry expires but before the first drop moves the block down).
                     if gy >= 0.0 || self.active.y < 0.0 {
-                        let mut color = match self.active.colors[r][c] {
-                            BlockColor::ColorA => self.theme_engine.current().color_a,
-                            BlockColor::ColorB => self.theme_engine.current().color_b,
-                        };
+                        let mut color = self
+                            .theme_engine
+                            .current()
+                            .get_color(self.active.colors[r][c]);
                         if self.is_frozen {
                             let avg = (color.r + color.g + color.b) / 3.0;
                             color = Color::new(avg * 0.8, avg * 0.8, avg * 0.8, 1.0);
@@ -1386,11 +1385,21 @@ impl Game {
                         } else {
                             SKYBLUE
                         };
-                        let shape = match self.active.colors[r][c] {
-                            BlockColor::ColorA => self.theme_engine.current().shape_a,
-                            BlockColor::ColorB => self.theme_engine.current().shape_b,
-                        };
-                        draw_stylized_block(bx, by, cell_size, color, 2.0, border_color, 1.0, 1.0, shape);
+                        let shape = self
+                            .theme_engine
+                            .current()
+                            .get_shape(self.active.colors[r][c]);
+                        draw_stylized_block(
+                            bx,
+                            by,
+                            cell_size,
+                            color,
+                            2.0,
+                            border_color,
+                            1.0,
+                            1.0,
+                            shape,
+                        );
                         draw_rectangle_lines(
                             bx - 1.0,
                             by - 1.0,
@@ -1619,14 +1628,8 @@ impl Game {
         );
         for r in 0..2 {
             for c in 0..2 {
-                let color = match self.next_block[r][c] {
-                    BlockColor::ColorA => self.theme_engine.current().color_a,
-                    BlockColor::ColorB => self.theme_engine.current().color_b,
-                };
-                let shape = match self.next_block[r][c] {
-                    BlockColor::ColorA => self.theme_engine.current().shape_a,
-                    BlockColor::ColorB => self.theme_engine.current().shape_b,
-                };
+                let color = self.theme_engine.current().get_color(self.next_block[r][c]);
+                let shape = self.theme_engine.current().get_shape(self.next_block[r][c]);
                 let bx = layout.next_x + c as f32 * layout.next_cell;
                 let by = layout.next_blocks_top + r as f32 * layout.next_cell;
                 let border = if self.next_chain[r][c] { LIME } else { BLACK };
