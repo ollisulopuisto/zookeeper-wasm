@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape, Theme, ThemeEngine};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.225";
+const VERSION: &str = "26.04.06.219";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -425,6 +425,7 @@ struct Game {
     squares_cleared_total: u32,
     theme_engine: shared::theme::ThemeEngine,
     next_theme_idx: Option<usize>,
+    theme_transition_timer: f32,
     style_unlocked_timer: f32,
 }
 
@@ -559,6 +560,7 @@ impl Game {
             squares_cleared_total: 0,
             theme_engine: shared::theme::ThemeEngine::new(themes),
             next_theme_idx: None,
+            theme_transition_timer: 0.0,
             style_unlocked_timer: 0.0,
         }
     }
@@ -708,7 +710,9 @@ impl Game {
         // This ensures the visual style, timeline speed, and "unlocked" message
         // all trigger in perfect sync with the music loop point.
         if let Some(target_idx) = self.next_theme_idx {
-            if self.audio.current_track_idx == target_idx {
+            self.theme_transition_timer -= dt;
+            // Transition if audio switched OR if fallback timer expired
+            if self.audio.current_track_idx == target_idx || self.theme_transition_timer <= 0.0 {
                 self.theme_engine.current_theme_idx = target_idx;
                 self.style_unlocked_timer = 3.0;
                 let current_theme = self.theme_engine.current();
@@ -802,12 +806,14 @@ impl Game {
                 // Update drop interval based on level (0.98^level curve)
                 self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
 
-                if self.theme_engine.set_level(self.level) && self.next_theme_idx.is_none() {
-                    let suggested = self.theme_engine.current_theme_idx;
+                let suggested = self.theme_engine.get_suggested_level_idx(self.level);
+                if suggested != self.theme_engine.current_theme_idx && self.next_theme_idx.is_none()
+                {
                     // Start transition by telling audio we WANT a new track.
                     // It will switch current_track_idx only when the current loop finishes.
                     self.audio.set_track(suggested);
                     self.next_theme_idx = Some(suggested);
+                    self.theme_transition_timer = 5.0; // 5 second safety fallback
                 }
 
                 self.squares_cleared_this_sweep += squares_this_step;
