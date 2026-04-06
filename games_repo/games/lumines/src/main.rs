@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape, Theme, ThemeEngine};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.220";
+const VERSION: &str = "26.04.06.225";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -793,6 +793,11 @@ impl Game {
 
                 let old_level = self.level;
                 self.level = (self.squares_cleared_total / 10) + 1;
+
+                if self.level > old_level {
+                    self.style_unlocked_timer = 2.0;
+                    self.audio.play_match(); // Use match sound as a level-up placeholder
+                }
 
                 // Update drop interval based on level (0.98^level curve)
                 self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
