@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.6.218] - 2026-04-06
+## [26.4.6.219] - 2026-04-06
 ### Added
 - **Lumines WASM Difficulty Progression:** Implemented a new leveling system inspired by *Lumines Remastered* and *Lumines Arise*.
   - Added level progression (Level up every 10 squares deleted).
