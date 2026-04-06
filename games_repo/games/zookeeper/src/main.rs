@@ -892,34 +892,20 @@ async fn main() {
                 } else { board.state = GameState::LevelUp { timer }; }
             }
             GameState::EnteringName { score, combo, ref mut input, snail } => {
-                let mut submitted = input.update();
-
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
                 let ok_y = sh * 0.7;
                 let ok_h = sh * 0.1;
-                let _font_size = sh * 0.05;
 
                 let prompt_w = sw * 0.4;
-                let _prompt_x = sw / 2.0 - prompt_w / 2.0;
-                let _prompt_y = sh * 0.6;
-                let _prompt_h = sh * 0.06;
+                let prompt_x = sw / 2.0 - prompt_w / 2.0;
+                let prompt_y = sh * 0.6;
+                let prompt_h = sh * 0.06;
 
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let is_mobile = sw < 600.0 && sw < sh;
-                    if is_mobile {
-                        if is_mouse_button_pressed(MouseButton::Left) && mx >= _prompt_x && mx <= _prompt_x + prompt_w && my >= _prompt_y && my <= _prompt_y + _prompt_h {
-                            input.content = shared::leaderboard::ask_player_name(&input.content);
-                        }
-                    }
-                }
-
-                if !submitted && is_mouse_button_pressed(MouseButton::Left) {
-                    if mx >= ok_x && mx <= ok_x + ok_w && my >= ok_y && my <= ok_y + ok_h {
-                        submitted = true;
-                    }
-                }
+                let submitted = input.update_with_touch(
+                    (prompt_x, prompt_y, prompt_w, prompt_h),
+                    (ok_x, ok_y, ok_w, ok_h)
+                );
 
                 if submitted {
                     let current_name = if input.content.is_empty() { "---".to_string() } else { input.content.clone() };
