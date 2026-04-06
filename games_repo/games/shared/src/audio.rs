@@ -34,8 +34,8 @@ pub struct Arrangement {
 impl Arrangement {
     pub fn from_seed(seed: u32) -> Self {
         use Tone::*;
-        let mut drum_var: [u8; 8] = [0, 1, 2, 3, 4, 1, 0, 3];
-        let mut lead_var: [u8; 8] = [0, 1, 2, 0, 1, 2, 0, 1];
+        let mut drum_var: [u8; 8] = [0, 1, 2, 3, 4, 5, 0, 3];
+        let mut lead_var: [u8; 8] = [0, 1, 2, 3, 1, 2, 0, 1];
         let mut lead_tone: [Tone; 8] = [Sine, Saw, Square, Sine, Saw, Square, Saw, Sine];
         let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
 
@@ -71,8 +71,8 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
         Arrangement::from_seed(s)
     } else {
         Arrangement {
-            drum_var: [0, 1, 2, 3, 4, 1, 0, 3],
-            lead_var: [0, 1, 2, 0, 1, 2, 0, 1],
+            drum_var: [0, 1, 2, 3, 4, 5, 0, 3],
+            lead_var: [0, 1, 2, 3, 1, 2, 0, 1],
             lead_tone: [
                 Tone::Sine,
                 Tone::Saw,
@@ -116,6 +116,7 @@ pub fn generate_music_wav_with_arrangement(
     // Phrase variations for the lead
     let s_step_table_2 = [0usize, 2, 4, 2, 0, 3, 5, 3];
     let s_step_table_3 = [7usize, 6, 5, 4, 3, 2, 1, 0];
+    let s_step_table_4 = [0usize, 0, 2, 2, 4, 4, 6, 6];
 
     // Track total time for smooth continuous generation
     let mut current_time = 0.0f32;
@@ -203,6 +204,22 @@ pub fn generate_music_wav_with_arrangement(
             };
 
             match d_var {
+                5 => {
+                    // Half-time groove
+                    let k_trigger = matches!(in_bar_16, 0 | 10);
+                    if k_trigger && t_sixteen < 0.18 {
+                        let kf = 150.0 * (1.0 - t_sixteen / 0.18).powf(2.2) + 45.0;
+                        kick = (t_sixteen * kf * 2.0 * std::f32::consts::PI).sin()
+                            * 0.75
+                            * (1.0 - t_sixteen / 0.18);
+                    }
+                    if in_bar_16 == 8 && t_sixteen < 0.12 {
+                        snare = get_noise() * 0.28 * (1.0 - t_sixteen / 0.12).powf(1.6);
+                    }
+                    if in_bar_16 % 4 == 2 && t_sixteen < 0.035 {
+                        hihat = get_noise() * 0.09 * (1.0 - t_sixteen / 0.035);
+                    }
+                }
                 3 => {
                     // Syncopated "broken" beat
                     let k_trigger = matches!(in_bar_16, 0 | 3 | 6 | 10);
@@ -296,6 +313,21 @@ pub fn generate_music_wav_with_arrangement(
             };
 
             let (synth, counter) = match l_var {
+                3 => {
+                    // Half-time lead
+                    let ht_step = s_step_table_4[(bar_idx + beat_idx / 2) % 8];
+                    let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset - 12);
+                    let note_dur = bar_beat_duration * 2.0;
+                    let t_in_note = t_in_bar % note_dur;
+                    let env = if t_in_note < 0.03 {
+                        t_in_note / 0.03
+                    } else if t_in_note > note_dur - 0.08 {
+                        ((note_dur - t_in_note) / 0.08).max(0.0)
+                    } else {
+                        1.0
+                    };
+                    (get_osc(t * ht_freq, l_tone) * 0.13 * env, 0.0f32)
+                }
                 2 => {
                     // Power chord lead
                     let chord_step = (sixteen_idx / 8) % 8;
@@ -376,4 +408,16 @@ pub fn generate_music_wav_with_arrangement(
         wav.extend_from_slice(&s.to_le_bytes());
     }
     (wav, actual_duration)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Arrangement;
+
+    #[test]
+    fn seeded_arrangement_contains_new_half_time_variants() {
+        let arrangement = Arrangement::from_seed(42);
+        assert!(arrangement.drum_var.contains(&5));
+        assert!(arrangement.lead_var.contains(&3));
+    }
 }
