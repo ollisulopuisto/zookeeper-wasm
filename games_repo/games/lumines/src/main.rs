@@ -121,6 +121,7 @@ struct HudLayout {
     meter_w: f32,
     meter_h: f32,
     meter_y: f32,
+    info_y: f32,
 }
 
 fn random_block_color() -> BlockColor {
@@ -1217,12 +1218,12 @@ impl Game {
         };
         let margin = sw * HUD_MARGIN_RATIO; // horizontal gutter
 
-        // Board fills the space between the two bars, centred horizontally.
+        // Board fills the space between the two bars, centered.
         let cell_size = (sw / COLS as f32).min((sh - hud_h - bot_h) / ROWS as f32);
         let board_w = cell_size * COLS as f32;
         let board_h = cell_size * ROWS as f32;
         let offset_x = (sw - board_w) / 2.0;
-        let offset_y = hud_h;
+        let offset_y = hud_h + (sh - hud_h - bot_h - board_h) / 2.0;
 
         // Draw Background
         let bg_color = if self.is_frozen {
@@ -1492,13 +1493,15 @@ impl Game {
         let theme_text = self.theme_engine.current().name.to_uppercase();
         let center_text = format!("{}  {}  [{}]", level_text, progress_text, theme_text);
         let center_dims = measure_text(&center_text, None, font_lg as u16, 1.0);
-        draw_text(
-            &center_text,
-            sw / 2.0 - center_dims.width / 2.0,
-            hud_top_text_y,
-            font_lg,
-            WHITE,
-        );
+        if !is_portrait {
+            draw_text(
+                &center_text,
+                sw / 2.0 - center_dims.width / 2.0,
+                hud_top_text_y,
+                font_lg,
+                WHITE,
+            );
+        }
 
         if self.style_unlocked_timer > 0.0 {
             let msg = "NEW STYLE UNLOCKED!";
@@ -1568,23 +1571,28 @@ impl Game {
             // --- Portrait (mobile) bottom info bar ---
             // Anchor the bar to the reserved bottom area so it stays fixed at the screen bottom.
             let bar_top = sh - bot_h;
-            let bar_mid_y = bar_top + bot_h * 0.5;
+            
+            // Shared info (LV, NEXT IN, THEME) – top of the bottom bar
+            let info_y = bar_top + font_lg * 1.1;
 
-            // NEXT preview – left portion of the bar, vertically centred.
+            // Bar mid for content below info
+            let content_mid_y = bar_top + (bot_h + font_lg) * 0.55;
+
+            // NEXT preview – left portion, vertically centred in remaining space.
             let next_cell =
                 (bot_h * PORTRAIT_NEXT_CELL_HUD_RATIO).min(sw * PORTRAIT_NEXT_CELL_SCREEN_RATIO);
             let next_w = next_cell * 2.0;
             let next_min_x = margin;
             let next_max_x = (sw - margin - next_w).max(next_min_x);
             let next_x = (sw * PORTRAIT_NEXT_X_CENTER - next_w * 0.5).clamp(next_min_x, next_max_x);
-            let next_blocks_top = bar_mid_y - next_cell; // centre 2 rows vertically
+            let next_blocks_top = content_mid_y - next_cell;
             let next_label_y = next_blocks_top - font_sm * 0.5;
 
-            // FREEZE meter – right side of the bar.
+            // FREEZE meter – right side, vertically centred in remaining space.
             let meter_x = sw * PORTRAIT_METER_X_RATIO + margin;
             let meter_w = sw * PORTRAIT_METER_W_RATIO - margin * 2.0;
             let meter_h = bot_h * PORTRAIT_METER_H_RATIO;
-            let meter_y = bar_mid_y - meter_h * 0.5;
+            let meter_y = content_mid_y - meter_h * 0.5;
 
             HudLayout {
                 next_cell,
@@ -1595,6 +1603,7 @@ impl Game {
                 meter_w,
                 meter_h,
                 meter_y,
+                info_y,
             }
         } else {
             // --- Landscape: original single-HUD layout ---
@@ -1630,8 +1639,20 @@ impl Game {
                 meter_w,
                 meter_h,
                 meter_y,
+                info_y: 0.0, // not used in landscape top bar
             }
         };
+
+        // Draw centered info in bottom bar ONLY in portrait mode.
+        if is_portrait {
+            draw_text(
+                &center_text,
+                sw / 2.0 - center_dims.width / 2.0,
+                layout.info_y,
+                font_lg,
+                WHITE,
+            );
+        }
 
         // Draw NEXT preview (shared for both orientations).
         draw_text(
@@ -1694,68 +1715,57 @@ impl Game {
 
         if self.waiting_to_start {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.85));
+            let title = "LUMINES WASM";
+            let title_sz = (sw * 0.12).clamp(40.0, 80.0);
+            let tm = measure_text(title, None, title_sz as u16, 1.0);
             draw_text(
-                "LUMINES WASM",
-                sw / 2.0 - 160.0,
-                sh / 2.0 - 130.0,
-                60.0,
+                title,
+                sw / 2.0 - tm.width / 2.0,
+                sh * 0.25,
+                title_sz,
                 self.theme_engine.current().ui_accent,
             );
 
-            let rule_sz = 18.0;
-            let rule_x = sw / 2.0 - 150.0;
-            let mut current_y = sh / 2.0 - 70.0;
-            let rule_spacing = 20.0;
-
-            draw_text(
+            let rule_sz = (sh * 0.025).clamp(14.0, 22.0);
+            let rule_spacing = rule_sz * 1.2;
+            let mut current_y = sh * 0.4;
+            
+            let rules = [
                 "Match 2x2 blocks of same color",
-                rule_x,
-                current_y,
-                rule_sz,
-                WHITE,
-            );
-            current_y += rule_spacing;
-            draw_text(
                 "The sweep line clears matches",
-                rule_x,
-                current_y,
-                rule_sz,
-                WHITE,
-            );
-            current_y += rule_spacing;
-            draw_text(
                 "Chain (+) blocks clear all same-color links",
-                rule_x,
+            ];
+
+            for rule in rules {
+                let rm = measure_text(rule, None, rule_sz as u16, 1.0);
+                draw_text(rule, sw / 2.0 - rm.width / 2.0, current_y, rule_sz, WHITE);
+                current_y += rule_spacing;
+            }
+
+            current_y += sh * 0.08;
+
+            let start_text = "TAP or SPACE to Start";
+            let start_sz = (sh * 0.04).clamp(24.0, 36.0);
+            let sm = measure_text(start_text, None, start_sz as u16, 1.0);
+            draw_text(
+                start_text,
+                sw / 2.0 - sm.width / 2.0,
                 current_y,
-                rule_sz,
+                start_sz,
                 WHITE,
             );
-
-            current_y += 60.0; // Gap before controls
-
-            draw_text(
-                "TAP or SPACE to Start",
-                sw / 2.0 - 130.0,
-                current_y,
-                30.0,
-                WHITE,
-            );
-            current_y += 40.0;
-            draw_text(
-                "SHIFT / Swipe Up: Time Freeze (when full)",
-                sw / 2.0 - 150.0,
-                current_y,
-                20.0,
-                SKYBLUE,
-            );
-            current_y += 30.0;
-            draw_text(
-                "Swipe L/R/Down: Move / Drop",
-                sw / 2.0 - 110.0,
-                current_y,
-                20.0,
-                GRAY,
-            );
+            
+            current_y += sh * 0.05;
+            let tip1 = "SHIFT / Swipe Up: Time Freeze (when full)";
+            let tip2 = "Swipe L/R/Down: Move / Drop";
+            let tip_sz = (sh * 0.025).clamp(12.0, 20.0);
+            
+            let tm1 = measure_text(tip1, None, tip_sz as u16, 1.0);
+            draw_text(tip1, sw / 2.0 - tm1.width / 2.0, current_y, tip_sz, SKYBLUE);
+            current_y += tip_sz * 1.3;
+            
+            let tm2 = measure_text(tip2, None, tip_sz as u16, 1.0);
+            draw_text(tip2, sw / 2.0 - tm2.width / 2.0, current_y, tip_sz, GRAY);
         }
 
         if self.game_over {
