@@ -813,7 +813,7 @@ impl Game {
                     // It will switch current_track_idx only when the current loop finishes.
                     self.audio.set_track(suggested);
                     self.next_theme_idx = Some(suggested);
-                    self.theme_transition_timer = 5.0; // 5 second safety fallback
+                    self.theme_transition_timer = 10.0; // 10 second safety fallback
                 }
 
                 self.squares_cleared_this_sweep += squares_this_step;
