@@ -142,12 +142,17 @@ fn random_2x2_block() -> [[BlockColor; 2]; 2] {
     ]
 }
 
+/// Returns automatic drop interval for a given level.
+/// Uses an exponential 0.98^(level-1) curve and clamps to 0.05s so late-game
+/// speed remains challenging but still human-playable.
 fn drop_interval_for_level(level: u32) -> f32 {
     DROP_INTERVAL_PER_LEVEL
         .powi(level.saturating_sub(1) as i32)
         .max(0.05)
 }
 
+/// Returns timeline speed multiplier for a given level.
+/// Starts at 1.0 on level 1, increases by 1% per level, and is capped at 1.35x.
 fn timeline_speedup_for_level(level: u32) -> f32 {
     (1.0 + level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
 }
@@ -2023,8 +2028,10 @@ mod tests {
     fn drop_interval_decreases_with_level() {
         let level_1 = drop_interval_for_level(1);
         let level_10 = drop_interval_for_level(10);
+        let level_1000 = drop_interval_for_level(1000);
         assert!((level_1 - 1.0).abs() < f32::EPSILON);
         assert!(level_10 < level_1);
+        assert!((level_1000 - 0.05).abs() < f32::EPSILON);
     }
 
     #[test]
