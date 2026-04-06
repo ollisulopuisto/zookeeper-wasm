@@ -49,6 +49,10 @@ pub struct ThemeEngine {
 
 impl ThemeEngine {
     pub fn new(themes: Vec<Theme>) -> Self {
+        assert!(
+            !themes.is_empty(),
+            "ThemeEngine must be initialized with at least one theme"
+        );
         Self {
             themes,
             current_theme_idx: 0,
@@ -60,9 +64,6 @@ impl ThemeEngine {
     }
 
     pub fn get_suggested_theme_idx(&self, level: u32) -> usize {
-        if self.themes.is_empty() {
-            return 0;
-        }
         // Change theme every 10 levels (100 squares deleted) as a marker of progress
         ((level as usize).saturating_sub(1) / 10) % self.themes.len()
     }
