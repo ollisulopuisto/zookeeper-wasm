@@ -19,6 +19,9 @@ const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
 const SCORE_PER_SQUARE: u32 = 50; // points awarded per 2×2 square cleared
 const COMBO_MIN_SQUARES: u32 = 4; // min squares per sweep to maintain combo
+const DROP_INTERVAL_PER_LEVEL: f32 = 0.98; // 2% faster drop cadence per level
+const TIMELINE_SPEEDUP_PER_LEVEL: f32 = 0.01; // 1% faster timeline sweep per level
+const TIMELINE_SPEEDUP_MAX: f32 = 1.35; // cap timeline speed-up to +35%
 const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
 const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
 const ENTRY_DELAY: f32 = 1.0; // seconds block is held above playfield for repositioning
@@ -138,6 +141,21 @@ fn random_2x2_block() -> [[BlockColor; 2]; 2] {
         [random_block_color(), random_block_color()],
         [random_block_color(), random_block_color()],
     ]
+}
+
+/// Returns automatic drop interval for a given level.
+/// Uses an exponential 0.98^(level-1) curve and clamps to 0.05s so late-game
+/// speed remains challenging but still human-playable.
+fn drop_interval_for_level(level: u32) -> f32 {
+    DROP_INTERVAL_PER_LEVEL
+        .powi(level.saturating_sub(1) as i32)
+        .max(0.05)
+}
+
+/// Returns timeline speed multiplier for a given level.
+/// Starts at 1.0 on level 1, increases by 1% per level, and is capped at 1.35x.
+fn timeline_speedup_for_level(level: u32) -> f32 {
+    (1.0 + level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
 }
 
 /// Generate a random 2×2 block together with chain flags.
@@ -432,6 +450,15 @@ struct Game {
 }
 
 impl Game {
+    fn update_difficulty(&mut self) {
+        self.drop_interval = drop_interval_for_level(self.level);
+        let level_speedup = timeline_speedup_for_level(self.level);
+        let current_theme = self.theme_engine.current();
+        let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
+        let base_timeline_speed = COLS as f32 / seconds_per_sweep;
+        self.timeline_speed = base_timeline_speed * level_speedup;
+    }
+
     async fn new() -> Self {
         let themes = vec![
             shared::theme::Theme {
@@ -721,9 +748,7 @@ impl Game {
             if audio_switched || fallback_expired {
                 self.theme_engine.current_theme_idx = target_idx;
                 self.style_unlocked_timer = 3.0;
-                let current_theme = self.theme_engine.current();
-                let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
-                self.timeline_speed = COLS as f32 / seconds_per_sweep;
+                self.update_difficulty();
                 self.next_theme_idx = None;
             }
         }
@@ -807,8 +832,7 @@ impl Game {
                 if self.level > old_level {
                     self.audio.play_match(); // Level-up sound
 
-                    // Update drop interval based on level (0.98^level curve)
-                    self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
+                    self.update_difficulty();
 
                     let suggested = self.theme_engine.get_suggested_theme_idx(self.level);
                     if suggested != self.theme_engine.current_theme_idx {
@@ -2000,5 +2024,30 @@ async fn main() {
         }
 
         next_frame().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drop_interval_decreases_with_level() {
+        let level_1 = drop_interval_for_level(1);
+        let level_10 = drop_interval_for_level(10);
+        let level_1000 = drop_interval_for_level(1000);
+        assert!((level_1 - 1.0).abs() < f32::EPSILON);
+        assert!(level_10 < level_1);
+        assert!((level_1000 - 0.05).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn timeline_speedup_increases_with_level_and_caps() {
+        let level_1 = timeline_speedup_for_level(1);
+        let level_20 = timeline_speedup_for_level(20);
+        let level_200 = timeline_speedup_for_level(200);
+        assert!((level_1 - 1.0).abs() < f32::EPSILON);
+        assert!(level_20 > level_1);
+        assert!((level_200 - TIMELINE_SPEEDUP_MAX).abs() < f32::EPSILON);
     }
 }
