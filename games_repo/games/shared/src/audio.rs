@@ -180,6 +180,7 @@ pub fn generate_music_wav_with_arrangement(
             let l_var = arrangement.lead_var[block_idx];
             let l_tone = arrangement.lead_tone[block_idx];
             let cp_on = arrangement.cp_active[block_idx];
+            let half_beat_idx = sixteen_idx / 8;
 
             // --- Bassline ---
             let b_note = bassline[sixteen_idx % 8] + key_offset;
@@ -315,7 +316,7 @@ pub fn generate_music_wav_with_arrangement(
             let (synth, counter) = match l_var {
                 3 => {
                     // Half-time lead
-                    let ht_step = s_step_table_4[(bar_idx + beat_idx / 2) % 8];
+                    let ht_step = s_step_table_4[(bar_idx + half_beat_idx) % 8];
                     let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset - 12);
                     let note_dur = bar_beat_duration * 2.0;
                     let t_in_note = t_in_bar % note_dur;
@@ -412,12 +413,29 @@ pub fn generate_music_wav_with_arrangement(
 
 #[cfg(test)]
 mod tests {
-    use super::Arrangement;
+    use super::{generate_music_wav_with_arrangement, Arrangement, Tone};
 
     #[test]
     fn seeded_arrangement_contains_new_half_time_variants() {
         let arrangement = Arrangement::from_seed(42);
         assert!(arrangement.drum_var.contains(&5));
         assert!(arrangement.lead_var.contains(&3));
+    }
+
+    #[test]
+    fn half_time_variants_generate_non_silent_audio() {
+        let arrangement = Arrangement {
+            drum_var: [5; 8],
+            lead_var: [3; 8],
+            lead_tone: [Tone::Sine; 8],
+            cp_active: [false; 8],
+        };
+        let (wav, duration) = generate_music_wav_with_arrangement(arrangement, 130.0, None);
+        assert!(duration > 0.0);
+        assert!(wav.len() > 44);
+        let has_non_zero_sample = wav[44..]
+            .chunks_exact(2)
+            .any(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]) != 0);
+        assert!(has_non_zero_sample);
     }
 }
