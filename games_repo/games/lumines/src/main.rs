@@ -806,7 +806,7 @@ impl Game {
                 // Update drop interval based on level (0.98^level curve)
                 self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
 
-                let suggested = self.theme_engine.get_suggested_level_idx(self.level);
+                let suggested = self.theme_engine.get_suggested_theme_idx(self.level);
                 if suggested != self.theme_engine.current_theme_idx && self.next_theme_idx.is_none()
                 {
                     // Start transition by telling audio we WANT a new track.
