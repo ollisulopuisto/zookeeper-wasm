@@ -2,6 +2,14 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.6.223] - 2026-04-06
+### Fixed
+- **Lumines WASM Polish:** Refined block rendering and HUD transitions.
+  - Removed "NEW STYLE LOADING..." message to make theme switches feel more immediate and fluid.
+  - Fixed "square outline" issue by making marked and active block glows shape-aware.
+  - Corrected specular glint (sparkle) positions for non-square shapes to ensure they stay within the shape's boundaries.
+  - Updated circle and ellipse rendering to correctly handle vertical squishing during landing animations.
+
 ## [26.4.6.222] - 2026-04-06
 ### Fixed
 - **Lumines WASM Build:** Fixed `E0689` ambiguous numeric type error in `audio.rs` by specifying `seed` type.

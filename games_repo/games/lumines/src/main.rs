@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.222";
+const VERSION: &str = "26.04.06.223";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -214,8 +214,7 @@ fn draw_shape_fill(x: f32, y: f32, w: f32, h: f32, shape: BlockShape, color: Col
             draw_rectangle(x, y, w, h, color);
         }
         BlockShape::Circle => {
-            let r = w * 0.5;
-            draw_circle(x + r, y + r, r, color);
+            draw_ellipse(x + w * 0.5, y + h * 0.5, w * 0.5, h * 0.5, 0.0, color);
         }
         BlockShape::Diamond => {
             let hw = w * 0.5;
@@ -230,6 +229,67 @@ fn draw_shape_fill(x: f32, y: f32, w: f32, h: f32, shape: BlockShape, color: Col
             let inset = (w - thick) * 0.5;
             draw_rectangle(x + inset, y, thick, h, color);
             draw_rectangle(x, y + inset, w, thick, color);
+        }
+    }
+}
+
+fn draw_shape_outline(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    thickness: f32,
+    shape: BlockShape,
+    color: Color,
+) {
+    match shape {
+        BlockShape::Square => {
+            draw_rectangle_lines(x, y, w, h, thickness, color);
+        }
+        BlockShape::Circle => {
+            let segments = 32;
+            let cx = x + w * 0.5;
+            let cy = y + h * 0.5;
+            let rx = w * 0.5;
+            let ry = h * 0.5;
+            for i in 0..segments {
+                let t1 = (i as f32 / segments as f32) * std::f32::consts::TAU;
+                let t2 = ((i + 1) as f32 / segments as f32) * std::f32::consts::TAU;
+                draw_line(
+                    cx + t1.cos() * rx,
+                    cy + t1.sin() * ry,
+                    cx + t2.cos() * rx,
+                    cy + t2.sin() * ry,
+                    thickness,
+                    color,
+                );
+            }
+        }
+        BlockShape::Diamond => {
+            let hw = w * 0.5;
+            let hh = h * 0.5;
+            let points = [
+                vec2(x + hw, y),
+                vec2(x + w, y + hh),
+                vec2(x + hw, y + h),
+                vec2(x, y + hh),
+            ];
+            for i in 0..4 {
+                draw_line(
+                    points[i].x,
+                    points[i].y,
+                    points[(i + 1) % 4].x,
+                    points[(i + 1) % 4].y,
+                    thickness,
+                    color,
+                );
+            }
+        }
+        BlockShape::Cross => {
+            let thick = w * 0.35;
+            let inset = (w - thick) * 0.5;
+            draw_rectangle_lines(x + inset, y, thick, h, thickness, color);
+            draw_rectangle_lines(x, y + inset, w, thick, thickness, color);
         }
     }
 }
@@ -260,7 +320,14 @@ fn draw_stylized_block(
     // Main fill
     draw_shape_fill(bx, by, w, h, shape, base);
 
-    // Highlights & Shadows
+    // Highlights, Shadows & specular glint
+    let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
+    let gx = bx + w * BLOCK_GLINT_OFFSET_RATIO;
+    let gy_glint = by + h * BLOCK_GLINT_OFFSET_RATIO;
+    let gw = g;
+    let gh = g * BLOCK_GLINT_ASPECT;
+    let glint_color = Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA);
+
     match shape {
         BlockShape::Square => {
             draw_rectangle(
@@ -276,15 +343,20 @@ fn draw_stylized_block(
                 vec2(bx + w, by + h),
                 Color::new(0.0, 0.0, 0.0, BLOCK_SHADOW_ALPHA),
             );
+            draw_rectangle(gx, gy_glint, gw, gh, glint_color);
         }
         BlockShape::Circle => {
-            let r = w * 0.5;
-            draw_circle(
-                bx + r,
-                by + r * 0.8,
-                r * 0.7,
+            // Highlight: ellipse slightly shifted up
+            draw_ellipse(
+                bx + w * 0.5,
+                by + h * 0.4,
+                w * 0.35,
+                h * 0.35,
+                0.0,
                 Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA),
             );
+            // Glint for circle: safe inside-edge position
+            draw_circle(bx + w * 0.28, by + h * 0.28, g * 0.45, glint_color);
         }
         BlockShape::Diamond => {
             let hw = w * 0.5;
@@ -293,29 +365,33 @@ fn draw_stylized_block(
                 vec2(bx + hw, by),
                 vec2(bx + hw * 0.5, by + hh * 0.5),
                 vec2(bx + w - hw * 0.5, by + hh * 0.5),
-                color,
+                Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA),
             );
+            draw_rectangle(bx + w * 0.45, by + h * 0.25, g * 0.6, g * 0.3, glint_color);
         }
         BlockShape::Cross => {
             let thick = w * 0.35;
             let inset = (w - thick) * 0.5;
-            draw_rectangle(bx + inset, by, thick, h * 0.3, color);
+            draw_rectangle(
+                bx + inset,
+                by,
+                thick,
+                h * 0.3,
+                Color::new(color.r, color.g, color.b, BLOCK_HIGHLIGHT_ALPHA),
+            );
+            draw_rectangle(
+                bx + inset + thick * 0.2,
+                by + h * 0.1,
+                g * 0.5,
+                g * 0.3,
+                glint_color,
+            );
         }
     }
 
-    // Small specular glint
-    let g = (size * BLOCK_GLINT_SIZE_RATIO).max(BLOCK_GLINT_MIN_PX);
-    draw_rectangle(
-        bx + w * BLOCK_GLINT_OFFSET_RATIO,
-        by + h * BLOCK_GLINT_OFFSET_RATIO,
-        g,
-        g * BLOCK_GLINT_ASPECT,
-        Color::new(1.0, 1.0, 1.0, BLOCK_GLINT_ALPHA),
-    );
-
     // Outlines
-    match shape {
-        BlockShape::Square => {
+    if border_width > 0.0 {
+        if shape == BlockShape::Square {
             draw_rectangle_lines(
                 bx,
                 by,
@@ -332,18 +408,8 @@ fn draw_stylized_block(
                 border_width,
                 border_color,
             );
-        }
-        BlockShape::Circle => {
-            draw_circle_lines(
-                bx + w * 0.5,
-                by + h * 0.5,
-                w * 0.5,
-                border_width,
-                border_color,
-            );
-        }
-        _ => {
-            draw_rectangle_lines(bx, by, w, h, border_width, border_color);
+        } else {
+            draw_shape_outline(bx, by, w, h, border_width, shape, border_color);
         }
     }
 }
@@ -1281,12 +1347,13 @@ impl Game {
                             let glow_a = ((pulse - MARKED_GLOW_THRESHOLD)
                                 / (1.0 - MARKED_GLOW_THRESHOLD))
                                 * 0.55;
-                            draw_rectangle_lines(
+                            draw_shape_outline(
                                 bx - 2.0,
                                 by - 2.0,
                                 cell_size + 4.0,
                                 cell_size + 4.0,
                                 2.0,
+                                shape,
                                 Color::new(1.0, 1.0, 0.8, glow_a),
                             );
                         }
@@ -1417,12 +1484,13 @@ impl Game {
                             1.0,
                             shape,
                         );
-                        draw_rectangle_lines(
+                        draw_shape_outline(
                             bx - 1.0,
                             by - 1.0,
                             cell_size + 2.0,
                             cell_size + 2.0,
                             1.0,
+                            shape,
                             Color::new(0.6, 0.85, 1.0, glow_alpha),
                         );
                         if self.active.is_chain[r][c] {
@@ -1504,19 +1572,11 @@ impl Game {
             );
         }
 
-        if self.style_unlocked_timer > 0.0 || self.next_theme_idx.is_some() {
-            let msg = if self.next_theme_idx.is_some() {
-                "NEW STYLE LOADING..."
-            } else {
-                "NEW STYLE UNLOCKED!"
-            };
+        if self.style_unlocked_timer > 0.0 {
+            let msg = "NEW STYLE UNLOCKED!";
             let msg_sz = font_lg * 1.2;
             let m_dims = measure_text(msg, None, msg_sz as u16, 1.0);
-            let alpha = if self.next_theme_idx.is_some() {
-                0.7 + (get_time() * 8.0).sin() as f32 * 0.3
-            } else {
-                (self.style_unlocked_timer * 2.0).min(1.0)
-            };
+            let alpha = (self.style_unlocked_timer * 2.0).min(1.0);
             draw_text(
                 msg,
                 sw / 2.0 - m_dims.width / 2.0,
