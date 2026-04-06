@@ -328,10 +328,11 @@ fn draw_stylized_block(
             );
         }
         shared::theme::BlockShape::Circle => {
+            let radius = w.min(h) * 0.5;
             draw_circle_lines(
                 bx + w * 0.5,
                 by + h * 0.5,
-                w * 0.5,
+                radius,
                 border_width,
                 border_color,
             );
