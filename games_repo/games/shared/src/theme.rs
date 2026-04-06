@@ -64,7 +64,7 @@ impl ThemeEngine {
     }
 
     pub fn get_suggested_theme_idx(&self, level: u32) -> usize {
-        // Change theme every 10 levels (100 squares deleted) as a marker of progress
-        ((level as usize).saturating_sub(1) / 10) % self.themes.len()
+        // Change theme every level (10 squares deleted) as a marker of progress
+        (level as usize).saturating_sub(1) % self.themes.len()
     }
 }

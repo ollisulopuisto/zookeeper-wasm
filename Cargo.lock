@@ -46,7 +46,7 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bubbles"
-version = "26.3.300169"
+version = "26.4.6"
 dependencies = [
  "macroquad",
  "quad-rand",
@@ -204,7 +204,7 @@ checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
 
 [[package]]
 name = "lumines_wasm"
-version = "26.4.5"
+version = "26.4.6"
 dependencies = [
  "macroquad",
  "quad-rand",
@@ -274,6 +274,15 @@ checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
 dependencies = [
  "adler2",
  "simd-adler32",
+]
+
+[[package]]
+name = "music_editor_wasm"
+version = "26.4.6"
+dependencies = [
+ "macroquad",
+ "quad-rand",
+ "shared",
 ]
 
 [[package]]
@@ -488,7 +497,7 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
 name = "zookeeper_wasm"
-version = "26.3.300177"
+version = "26.4.6"
 dependencies = [
  "macroquad",
  "quad-rand",

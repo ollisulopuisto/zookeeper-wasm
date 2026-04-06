@@ -29,7 +29,8 @@ impl AudioManager {
                 None
             };
 
-            let (wav, duration) = generate_music_wav(Some(seed), current_bpm, next_bpm);
+            let track_seed = seed.wrapping_add(i as u32);
+            let (wav, duration) = generate_music_wav(Some(track_seed), current_bpm, next_bpm);
             track_durations.push(duration);
             music_tracks.push(load_sound_from_bytes(&wav).await.unwrap());
         }

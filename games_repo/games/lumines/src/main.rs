@@ -803,21 +803,22 @@ impl Game {
                 self.level = (self.squares_cleared_total / 10) + 1;
 
                 if self.level > old_level {
-                    self.style_unlocked_timer = 2.0;
-                    self.audio.play_match(); // Use match sound as a level-up placeholder
-                }
+                    self.audio.play_match(); // Level-up sound
 
-                // Update drop interval based on level (0.98^level curve)
-                self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
+                    // Update drop interval based on level (0.98^level curve)
+                    self.drop_interval = (1.0 * 0.98f32.powi(self.level as i32 - 1)).max(0.05);
 
-                let suggested = self.theme_engine.get_suggested_theme_idx(self.level);
-                if suggested != self.theme_engine.current_theme_idx && self.next_theme_idx.is_none()
-                {
-                    // Start transition by telling audio we WANT a new track.
-                    // It will switch current_track_idx only when the current loop finishes.
-                    self.audio.set_track(suggested);
-                    self.next_theme_idx = Some(suggested);
-                    self.theme_transition_timer = 10.0; // 10 second safety fallback
+                    let suggested = self.theme_engine.get_suggested_theme_idx(self.level);
+                    if suggested != self.theme_engine.current_theme_idx {
+                        if self.next_theme_idx != Some(suggested) {
+                            self.audio.set_track(suggested);
+                            self.next_theme_idx = Some(suggested);
+                            self.theme_transition_timer = 10.0; // 10 second safety fallback
+                        }
+                    } else {
+                        // Level up but no style change (e.g. at max themes)
+                        self.style_unlocked_timer = 2.0;
+                    }
                 }
 
                 self.squares_cleared_this_sweep += squares_this_step;
@@ -1500,11 +1501,19 @@ impl Game {
             WHITE,
         );
 
-        if self.style_unlocked_timer > 0.0 {
-            let msg = "NEW STYLE UNLOCKED!";
+        if self.style_unlocked_timer > 0.0 || self.next_theme_idx.is_some() {
+            let msg = if self.next_theme_idx.is_some() {
+                "NEW STYLE LOADING..."
+            } else {
+                "NEW STYLE UNLOCKED!"
+            };
             let msg_sz = font_lg * 1.2;
             let m_dims = measure_text(msg, None, msg_sz as u16, 1.0);
-            let alpha = (self.style_unlocked_timer * 2.0).min(1.0);
+            let alpha = if self.next_theme_idx.is_some() {
+                0.7 + (get_time() * 8.0).sin() as f32 * 0.3
+            } else {
+                (self.style_unlocked_timer * 2.0).min(1.0)
+            };
             draw_text(
                 msg,
                 sw / 2.0 - m_dims.width / 2.0,
@@ -1866,8 +1875,7 @@ impl Game {
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    let is_mobile = sw < MOBILE_POPUP_MAX_WIDTH && sw < sh;
-                    if is_mobile {
+                    if shared::touch_input::is_mobile() {
                         let prompt_w = sw * 0.4;
                         let prompt_x = sw / 2.0 - prompt_w / 2.0;
                         let prompt_y = sh * 0.62;
