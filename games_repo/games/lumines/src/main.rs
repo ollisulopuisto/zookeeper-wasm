@@ -284,14 +284,16 @@ fn draw_stylized_block(
             );
         }
         shared::theme::BlockShape::Cross => {
-            let thick = w * 0.35;
-            let inset = (w - thick) * 0.5;
+            let thick_x = w * 0.35;
+            let thick_y = h * 0.35;
+            let inset_x = (w - thick_x) * 0.5;
+            let inset_y = (h - thick_y) * 0.5;
             // Vertical bar
-            draw_rectangle(bx + inset, by, thick, h, base);
+            draw_rectangle(bx + inset_x, by, thick_x, h, base);
             // Horizontal bar
-            draw_rectangle(bx, by + inset, w, thick, base);
+            draw_rectangle(bx, by + inset_y, w, thick_y, base);
             // Highlight
-            draw_rectangle(bx + inset, by, thick, h * 0.3, color);
+            draw_rectangle(bx + inset_x, by, thick_x, h * 0.3, color);
         }
     }
 
