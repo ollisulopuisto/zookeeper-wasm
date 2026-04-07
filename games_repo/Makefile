@@ -1,5 +1,5 @@
 GAMES := zookeeper bubbles lumines music_editor
-VERSION := v26.4.5.217
+VERSION := v26.4.7.228
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">

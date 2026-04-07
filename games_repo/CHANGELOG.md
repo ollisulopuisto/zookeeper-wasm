@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.7.227] - 2026-04-07
+## [26.4.7.228] - 2026-04-07
 ### Added
 - **Lumines WASM Difficulty Progression:** Deepened the challenge mode mechanics to match original Lumines games.
   - Implemented theme transitions every 4 levels for the early progression and every 5 levels for the later progression, cycling through the available skins.
