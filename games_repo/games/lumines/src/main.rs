@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.06.223";
+const VERSION: &str = "26.04.07.227";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -24,7 +24,8 @@ const TIMELINE_SPEEDUP_PER_LEVEL: f32 = 0.01; // 1% faster timeline sweep per le
 const TIMELINE_SPEEDUP_MAX: f32 = 1.35; // cap timeline speed-up to +35%
 const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
 const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
-const ENTRY_DELAY: f32 = 1.0; // seconds block is held above playfield for repositioning
+const ENTRY_DELAY: f32 = 1.0; // initial seconds block is held above playfield for repositioning
+const SQUARES_PER_LEVEL: u32 = 5; // gain one level for every 5 squares cleared
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -146,18 +147,55 @@ fn random_2x2_block() -> [[BlockColor; 2]; 2] {
 /// Returns automatic drop interval for a given level.
 /// Uses an exponential 0.98^(level-1) curve and clamps to 0.05s so late-game
 /// speed remains challenging but still human-playable.
+/// Speed plateaus after level 105.
 fn drop_interval_for_level(level: u32) -> f32 {
+    let effective_level = level.min(105);
     DROP_INTERVAL_PER_LEVEL
-        .powi(level.saturating_sub(1) as i32)
+        .powi(effective_level.saturating_sub(1) as i32)
         .max(0.05)
 }
 
 /// Returns timeline speed multiplier for a given level.
 /// Starts at 1.0 on level 1, increases by 1% per level, and is capped at 1.35x.
+/// Speed plateaus at level 36 (due to TIMELINE_SPEEDUP_MAX).
 fn timeline_speedup_for_level(level: u32) -> f32 {
-    (1.0 + level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
+    let effective_level = level.min(105);
+    (1.0 + effective_level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
 }
 
+/// Returns lock delay (entry grace period) for a given level.
+/// Decreases steadily to make the game more demanding as the player advances.
+fn lock_delay_for_level(level: u32) -> f32 {
+    let effective_level = level.min(105);
+    (ENTRY_DELAY * 0.985f32.powi(effective_level.saturating_sub(1) as i32)).max(0.12)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_delay_decreases_with_level() {
+        assert!(lock_delay_for_level(2) < lock_delay_for_level(1));
+        assert!(lock_delay_for_level(50) < lock_delay_for_level(10));
+        assert!(lock_delay_for_level(105) < lock_delay_for_level(104));
+    }
+
+    #[test]
+    fn lock_delay_plateaus_after_level_105() {
+        let at_cap = lock_delay_for_level(105);
+        assert_eq!(at_cap, lock_delay_for_level(106));
+        assert_eq!(at_cap, lock_delay_for_level(200));
+    }
+
+    #[test]
+    fn lock_delay_never_goes_below_floor() {
+        let at_cap = lock_delay_for_level(105);
+        assert!(at_cap >= 0.12);
+        assert_eq!(at_cap, 0.12);
+        assert_eq!(lock_delay_for_level(u32::MAX), 0.12);
+    }
+}
 /// Generate a random 2×2 block together with chain flags.
 /// With probability `CHAIN_PROBABILITY`% one random cell is a chain cell.
 fn random_block_with_chain() -> ([[BlockColor; 2]; 2], [[bool; 2]; 2]) {
@@ -577,6 +615,36 @@ impl Game {
                 shape_a: shared::theme::BlockShape::Cross,
                 shape_b: shared::theme::BlockShape::Square,
             },
+            shared::theme::Theme {
+                name: "Space".to_string(),
+                color_a: Color::new(0.8, 0.8, 1.0, 1.0), // Pale blue
+                color_b: Color::new(0.1, 0.1, 0.3, 1.0), // Deep blue
+                bg_color: Color::new(0.0, 0.0, 0.05, 1.0),
+                ui_accent: SKYBLUE,
+                bpm: 120.0,
+                shape_a: shared::theme::BlockShape::Circle,
+                shape_b: shared::theme::BlockShape::Diamond,
+            },
+            shared::theme::Theme {
+                name: "Forest".to_string(),
+                color_a: Color::new(0.2, 0.8, 0.2, 1.0),
+                color_b: Color::new(0.5, 0.3, 0.1, 1.0),
+                bg_color: Color::new(0.0, 0.1, 0.0, 1.0),
+                ui_accent: LIME,
+                bpm: 135.0,
+                shape_a: shared::theme::BlockShape::Square,
+                shape_b: shared::theme::BlockShape::Cross,
+            },
+            shared::theme::Theme {
+                name: "Twilight".to_string(),
+                color_a: Color::new(0.6, 0.4, 0.8, 1.0),
+                color_b: Color::new(0.1, 0.1, 0.2, 1.0),
+                bg_color: Color::new(0.05, 0.0, 0.1, 1.0),
+                ui_accent: MAGENTA,
+                bpm: 155.0,
+                shape_a: shared::theme::BlockShape::Diamond,
+                shape_b: shared::theme::BlockShape::Square,
+            },
         ];
 
         let bpms: Vec<f32> = themes.iter().map(|t| t.bpm).collect();
@@ -893,7 +961,10 @@ impl Game {
                 self.squares_cleared_total += squares_this_step;
 
                 let old_level = self.level;
-                self.level = (self.squares_cleared_total / 10) + 1;
+                // Lumines Challenge Progression: 1 level per 5 squares cleared.
+                // The level counter continues increasing; only theme/difficulty progression
+                // loops or plateaus on a 105-level cycle.
+                self.level = (self.squares_cleared_total / SQUARES_PER_LEVEL) + 1;
 
                 if self.level > old_level {
                     self.audio.play_match(); // Level-up sound
@@ -1162,8 +1233,9 @@ impl Game {
             if self.collides(self.active.x, self.active.y.floor() as i32) {
                 self.game_over = true;
             } else {
-                // Start the entry phase so the player can position the block
-                self.entry_timer = ENTRY_DELAY;
+                // Start the entry phase so the player can position the block.
+                // Grace period (lock delay) decreases as level increases.
+                self.entry_timer = lock_delay_for_level(self.level);
                 self.drop_timer = 0.0;
             }
         }
@@ -1463,7 +1535,7 @@ impl Game {
                     Color::new(0.6, 0.85, 1.0, 0.5),
                 );
                 // Countdown bar: full = entry is fresh, empty = about to drop
-                let bar_frac = self.entry_timer / ENTRY_DELAY;
+                let bar_frac = (self.entry_timer / lock_delay_for_level(self.level)).min(1.0);
                 let bar_h = (cell_size * 0.12).max(3.0);
                 let bar_y = staging_top - bar_h - 3.0;
                 draw_rectangle(bx, bar_y, staging_w, bar_h, Color::new(0.2, 0.2, 0.3, 0.8));
@@ -1587,7 +1659,7 @@ impl Game {
             WHITE,
         );
 
-        let squares_to_next = 10 - (self.squares_cleared_total % 10);
+        let squares_to_next = SQUARES_PER_LEVEL - (self.squares_cleared_total % SQUARES_PER_LEVEL);
         let level_text = format!("LV: {}", self.level);
         let progress_text = format!("(NEXT IN: {})", squares_to_next);
         let theme_text = self.theme_engine.current().name.to_uppercase();
