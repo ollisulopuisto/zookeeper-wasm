@@ -157,7 +157,7 @@ fn drop_interval_for_level(level: u32) -> f32 {
 
 /// Returns timeline speed multiplier for a given level.
 /// Starts at 1.0 on level 1, increases by 1% per level, and is capped at 1.35x.
-/// Speed plateaus after level 105.
+/// Speed plateaus at level 36 (due to TIMELINE_SPEEDUP_MAX).
 fn timeline_speedup_for_level(level: u32) -> f32 {
     let effective_level = level.min(105);
     (1.0 + effective_level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
