@@ -936,7 +936,8 @@ impl Game {
 
                 let old_level = self.level;
                 // Lumines Challenge Progression: 1 level per 5 squares cleared.
-                // 105 levels total in one "loop".
+                // The level counter continues increasing; only theme/difficulty progression
+                // loops or plateaus on a 105-level cycle.
                 self.level = (self.squares_cleared_total / SQUARES_PER_LEVEL) + 1;
 
                 if self.level > old_level {
