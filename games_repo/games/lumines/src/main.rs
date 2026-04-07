@@ -170,6 +170,32 @@ fn lock_delay_for_level(level: u32) -> f32 {
     (ENTRY_DELAY * 0.985f32.powi(effective_level.saturating_sub(1) as i32)).max(0.12)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lock_delay_decreases_with_level() {
+        assert!(lock_delay_for_level(2) < lock_delay_for_level(1));
+        assert!(lock_delay_for_level(50) < lock_delay_for_level(10));
+        assert!(lock_delay_for_level(105) < lock_delay_for_level(104));
+    }
+
+    #[test]
+    fn lock_delay_plateaus_after_level_105() {
+        let at_cap = lock_delay_for_level(105);
+        assert_eq!(at_cap, lock_delay_for_level(106));
+        assert_eq!(at_cap, lock_delay_for_level(200));
+    }
+
+    #[test]
+    fn lock_delay_never_goes_below_floor() {
+        let at_cap = lock_delay_for_level(105);
+        assert!(at_cap >= 0.12);
+        assert_eq!(at_cap, 0.12);
+        assert_eq!(lock_delay_for_level(u32::MAX), 0.12);
+    }
+}
 /// Generate a random 2×2 block together with chain flags.
 /// With probability `CHAIN_PROBABILITY`% one random cell is a chain cell.
 fn random_block_with_chain() -> ([[BlockColor; 2]; 2], [[bool; 2]; 2]) {
