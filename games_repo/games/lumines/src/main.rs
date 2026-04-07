@@ -1508,7 +1508,7 @@ impl Game {
                     Color::new(0.6, 0.85, 1.0, 0.5),
                 );
                 // Countdown bar: full = entry is fresh, empty = about to drop
-                let bar_frac = self.entry_timer / lock_delay_for_level(self.level);
+                let bar_frac = (self.entry_timer / lock_delay_for_level(self.level)).min(1.0);
                 let bar_h = (cell_size * 0.12).max(3.0);
                 let bar_y = staging_top - bar_h - 3.0;
                 draw_rectangle(bx, bar_y, staging_w, bar_h, Color::new(0.2, 0.2, 0.3, 0.8));
