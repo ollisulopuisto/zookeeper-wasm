@@ -2,6 +2,15 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.7.227] - 2026-04-07
+### Added
+- **Lumines WASM Difficulty Progression:** Deepened the challenge mode mechanics to match original Lumines games.
+  - Implemented skin transitions every 4 levels (first 15 skins) and 5 levels (last 9 skins).
+  - Added 3 new procedural themes: "Space", "Forest", and "Twilight", bringing the total to 8 skins.
+  - Introduced dynamic "Lock Delay" (entry grace period) that scales down as levels increase.
+  - Refined level gain to 1 level per 5 squares cleared (105 levels per loop).
+  - Implemented speed plateaus for drop interval and timeline speed after level 105.
+
 ## [26.4.6.223] - 2026-04-06
 ### Fixed
 - **Lumines WASM Polish:** Refined block rendering and HUD transitions.

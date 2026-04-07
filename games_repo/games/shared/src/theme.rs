@@ -64,7 +64,20 @@ impl ThemeEngine {
     }
 
     pub fn get_suggested_theme_idx(&self, level: u32) -> usize {
-        // Change theme every level (10 squares deleted) as a marker of progress
-        (level as usize).saturating_sub(1) % self.themes.len()
+        // Lumines Challenge Mode progression:
+        // First 15 skins: 4 levels each (60 levels total)
+        // Next 9 skins: 5 levels each (45 levels total)
+        // Total loop: 105 levels
+        let skin_num = if level <= 60 {
+            (level.saturating_sub(1) / 4) as usize
+        } else if level <= 105 {
+            15 + ((level.saturating_sub(61) / 5) as usize)
+        } else {
+            // Loop back after level 105
+            let loop_level = (level.saturating_sub(106) % 105) + 1;
+            return self.get_suggested_theme_idx(loop_level);
+        };
+        
+        skin_num % self.themes.len()
     }
 }

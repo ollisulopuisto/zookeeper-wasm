@@ -1,6 +1,6 @@
 [package]
 name = "music_editor_wasm"
-version = "26.4.6"
+version = "26.4.7"
 edition = "2021"
 
 [dependencies]
