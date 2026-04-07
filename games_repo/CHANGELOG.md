@@ -5,7 +5,7 @@ All notable changes to the games in this monorepo will be documented in this fil
 ## [26.4.7.227] - 2026-04-07
 ### Added
 - **Lumines WASM Difficulty Progression:** Deepened the challenge mode mechanics to match original Lumines games.
-  - Implemented skin transitions every 4 levels (first 15 skins) and 5 levels (last 9 skins).
+  - Implemented theme transitions every 4 levels for the early progression and every 5 levels for the later progression, cycling through the available skins.
   - Added 3 new procedural themes: "Space", "Forest", and "Twilight", bringing the total to 8 skins.
   - Introduced dynamic "Lock Delay" (entry grace period) that scales down as levels increase.
   - Refined level gain to 1 level per 5 squares cleared (105 levels per loop).
