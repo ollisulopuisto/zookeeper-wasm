@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.09.230";
+const VERSION: &str = "26.04.09.232";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -2082,7 +2082,8 @@ impl Game {
 #[macroquad::main("Lumines WASM")]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
-    let mut game = Game::new().await;
+    let is_mobile = shared::touch_input::is_mobile();
+    let mut game = Game::new(is_mobile).await;
 
     loop {
         clear_background(BLACK);
@@ -2121,7 +2122,7 @@ async fn main() {
 
             let audio = game.audio;
             let muted = audio.is_muted();
-            game = Game::new().await;
+            game = Game::new(is_mobile).await;
             game.audio = audio;
             game.audio.set_muted(muted);
             game.waiting_to_start = false;

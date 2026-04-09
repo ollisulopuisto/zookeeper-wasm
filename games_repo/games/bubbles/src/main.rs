@@ -28,6 +28,7 @@ async fn main() {
     let mut game = Game::new(false);
     let mut state = AppState::Menu;
     let mut two_player = false;
+    let is_mobile = shared::touch_input::is_mobile();
 
     loop {
         // Dynamic virtual height: only reserve space for controls if touch is active
@@ -100,7 +101,7 @@ async fn main() {
                 let submitted = input.update_with_touch(
                     (btn_x, js_btn_y, btn_w, btn_h),
                     (btn_x, btn_y, btn_w, btn_h),
-                    shared::touch_input::is_mobile(),
+                    is_mobile,
                 );
 
                 if submitted {
@@ -173,7 +174,7 @@ async fn main() {
                 let btn_h = 30.0 * scale;
                 let btn_x = vx + (VIRTUAL_WIDTH / 2.0) * scale - btn_w / 2.0;
                 
-                if shared::touch_input::is_mobile() {
+                if is_mobile && cfg!(target_arch = "wasm32") {
                     draw_rectangle(btn_x, vy + 140.0 * scale, btn_w, btn_h, Color::new(0.2, 0.2, 0.2, 1.0));
                     draw_text("TAP FOR POPUP", btn_x + 5.0 * scale, vy + 160.0 * scale, 12.0 * scale, WHITE);
                 }
