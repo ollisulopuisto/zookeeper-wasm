@@ -16,7 +16,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.3.300177";
+const VERSION: &str = "26.04.09.232";
 
 // Animation Constants
 const LEVEL_UP_TOTAL_DELAY: f32 = 1.0;
@@ -1692,8 +1692,7 @@ async fn main() {
 
             #[cfg(target_arch = "wasm32")]
             {
-                let is_mobile = sw < 600.0 && sw < sh;
-                if is_mobile {
+                if shared::touch_input::is_mobile() {
                     let prompt_w = sw * 0.4;
                     let prompt_x = sw / 2.0 - prompt_w / 2.0;
                     let prompt_y = sh * 0.6;

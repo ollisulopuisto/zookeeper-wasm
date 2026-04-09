@@ -6,10 +6,6 @@ pub struct ScoreEntry {
     pub score: u32,
 }
 
-pub fn ask_name_js() -> String {
-    shared::leaderboard::ask_player_name("BUB")
-}
-
 pub fn load_scores() -> Vec<ScoreEntry> {
     shared::leaderboard::load_scores()
 }

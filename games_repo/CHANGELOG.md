@@ -2,6 +2,16 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.9.232] - 2026-04-09
+### Fixed
+- **Optimization:** Cached `is_mobile()` calls in `bubbles`, `zookeeper`, and `lumines` to avoid inefficient WASM-to-JS bridge calls and heap allocations in the main loop.
+- **WASM UX:** Gated the "TAP FOR POPUP" UI on `wasm32` target in `bubbles`, `zookeeper`, and `lumines` to prevent non-functional buttons on small-window non-wasm builds.
+- **Touch Device Text Input:** Restored the ability for iPad and other touch device users to enter their names for high scores.
+  - Replaced restrictive screen-size-based mobile detection with a more robust user-agent and touch-point heuristic in `shared` library.
+  - Added missing `js_get_user_agent_ptr` bridge to `index.html` for Zookeeper and Bubbles.
+  - Improved `js_get_user_agent_ptr` to correctly identify iPads even when running in "Desktop Mode" (Safari default).
+  - Updated Bubbles to use the shared `update_with_touch` name entry logic for consistency across all games.
+
 ## [26.4.7.228] - 2026-04-07
 ### Added
 - **Lumines WASM Difficulty Progression:** Deepened the challenge mode mechanics to match original Lumines games.

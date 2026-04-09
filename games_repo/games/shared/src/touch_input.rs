@@ -17,7 +17,12 @@ pub fn is_mobile() -> bool {
         // On WASM, we can check the user agent via JS.
         // This is a common pattern in Macroquad projects using miniquad.
         let ua = unsafe { js_get_user_agent() };
-        ua.contains("Mobi") || ua.contains("Android") || ua.contains("iPhone") || ua.contains("iPad")
+        ua.contains("Mobi")
+            || ua.contains("Android")
+            || ua.contains("iPhone")
+            || ua.contains("iPad")
+            || ua.contains("Touch")
+            || ua.contains("Tablet")
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
