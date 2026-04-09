@@ -85,8 +85,6 @@ async fn main() {
                 }
             }
             AppState::EnteringName { ref mut input } => {
-                let mut submitted = input.update();
-                
                 // UI calculations
                 let sw = screen_width();
                 let sh = screen_height();
@@ -97,19 +95,13 @@ async fn main() {
                 let btn_h = 30.0 * scale;
                 let btn_x = vx + (VIRTUAL_WIDTH / 2.0) * scale - btn_w / 2.0;
                 let btn_y = vy + 180.0 * scale;
+                let js_btn_y = vy + 140.0 * scale;
 
-                if is_mouse_button_pressed(MouseButton::Left) {
-                    let (mx, my) = mouse_position();
-                    if mx >= btn_x && mx <= btn_x + btn_w && my >= btn_y && my <= btn_y + btn_h {
-                        submitted = true;
-                    }
-                    
-                    // JS Prompt button
-                    let js_btn_y = vy + 140.0 * scale;
-                    if mx >= btn_x && mx <= btn_x + btn_w && my >= js_btn_y && my <= js_btn_y + btn_h {
-                        input.content = storage::ask_name_js();
-                    }
-                }
+                let submitted = input.update_with_touch(
+                    (btn_x, js_btn_y, btn_w, btn_h),
+                    (btn_x, btn_y, btn_w, btn_h),
+                    shared::touch_input::is_mobile(),
+                );
 
                 if submitted {
                     let final_name = if input.content.is_empty() { "BUB".to_string() } else { input.content.clone() };
@@ -181,8 +173,10 @@ async fn main() {
                 let btn_h = 30.0 * scale;
                 let btn_x = vx + (VIRTUAL_WIDTH / 2.0) * scale - btn_w / 2.0;
                 
-                draw_rectangle(btn_x, vy + 140.0 * scale, btn_w, btn_h, Color::new(0.2, 0.2, 0.2, 1.0));
-                draw_text("TAP FOR POPUP", btn_x + 5.0 * scale, vy + 160.0 * scale, 12.0 * scale, WHITE);
+                if shared::touch_input::is_mobile() {
+                    draw_rectangle(btn_x, vy + 140.0 * scale, btn_w, btn_h, Color::new(0.2, 0.2, 0.2, 1.0));
+                    draw_text("TAP FOR POPUP", btn_x + 5.0 * scale, vy + 160.0 * scale, 12.0 * scale, WHITE);
+                }
 
                 draw_rectangle(btn_x, vy + 180.0 * scale, btn_w, btn_h, Color::new(0.3, 0.8, 0.3, 1.0));
                 draw_text("OK", btn_x + 40.0 * scale, vy + 200.0 * scale, 20.0 * scale, WHITE);

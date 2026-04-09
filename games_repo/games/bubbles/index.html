@@ -109,6 +109,16 @@
                     heap.set(bytes.subarray(0, len), ptr);
                     return len;
                 };
+                importObject.env.js_get_user_agent_ptr = function (ptr, max_len) {
+                    const ua = navigator.userAgent;
+                    const isIPad = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                    const fullUA = ua + (isIPad ? " iPad" : "");
+                    const bytes = new TextEncoder().encode(fullUA);
+                    const len = Math.min(bytes.length, max_len);
+                    const heap = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
+                    heap.set(bytes.subarray(0, len), ptr);
+                    return len;
+                };
             }
         });
 

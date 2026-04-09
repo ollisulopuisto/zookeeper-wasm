@@ -1692,8 +1692,7 @@ async fn main() {
 
             #[cfg(target_arch = "wasm32")]
             {
-                let is_mobile = sw < 600.0 && sw < sh;
-                if is_mobile {
+                if shared::touch_input::is_mobile() {
                     let prompt_w = sw * 0.4;
                     let prompt_x = sw / 2.0 - prompt_w / 2.0;
                     let prompt_y = sh * 0.6;
