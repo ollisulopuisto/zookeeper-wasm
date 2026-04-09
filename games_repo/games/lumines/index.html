@@ -89,8 +89,8 @@
                     const fullUA = ua + (isIPad ? " iPad" : "");
                     const bytes = new TextEncoder().encode(fullUA);
                     const len = Math.min(bytes.length, max_len);
-                    const memory = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
-                    memory.set(bytes.slice(0, len), ptr);
+                    const heap = new Uint8Array((importObject.env.memory || wasm_memory).buffer);
+                    heap.set(bytes.subarray(0, len), ptr);
                     return len;
                 };
             }
