@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.09.237";
+const VERSION: &str = "26.04.09.239";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -1737,7 +1737,8 @@ impl Game {
             WHITE,
         );
 
-        let squares_to_next = SQUARES_PER_LEVEL - (self.squares_cleared_total % SQUARES_PER_LEVEL);
+        let sq_per_lvl = self.difficulty.squares_per_level();
+        let squares_to_next = sq_per_lvl - (self.squares_cleared_total % sq_per_lvl);
         let level_text = format!("LV: {}", self.level);
         let progress_text = format!("(NEXT IN: {})", squares_to_next);
         let theme_text = self.theme_engine.current().name.to_uppercase();
