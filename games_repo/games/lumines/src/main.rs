@@ -469,8 +469,9 @@ fn draw_chain_symbol(x: f32, y: f32, size: f32) {
     );
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 enum Difficulty {
+    #[default]
     Easy,
     Normal,
     Hard,
