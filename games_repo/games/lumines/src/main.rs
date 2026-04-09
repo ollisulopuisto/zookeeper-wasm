@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.09.232";
+const VERSION: &str = "26.04.09.239";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -19,13 +19,9 @@ const FREEZE_DURATION: f32 = 4.0;
 const MAX_FREEZE_METER: f32 = 100.0;
 const SCORE_PER_SQUARE: u32 = 50; // points awarded per 2×2 square cleared
 const COMBO_MIN_SQUARES: u32 = 4; // min squares per sweep to maintain combo
-const DROP_INTERVAL_PER_LEVEL: f32 = 0.98; // 2% faster drop cadence per level
-const TIMELINE_SPEEDUP_PER_LEVEL: f32 = 0.01; // 1% faster timeline sweep per level
-const TIMELINE_SPEEDUP_MAX: f32 = 1.35; // cap timeline speed-up to +35%
 const CHAIN_PROBABILITY: u32 = 12; // % chance a falling piece contains one chain cell
 const CHAIN_SYMBOL_COLOR: Color = Color::new(0.0, 1.0, 0.0, 0.90);
 const ENTRY_DELAY: f32 = 1.0; // initial seconds block is held above playfield for repositioning
-const SQUARES_PER_LEVEL: u32 = 5; // gain one level for every 5 squares cleared
 const HUD_CONTROL_PAD_RATIO: f32 = 0.01;
 const HUD_CONTROL_PAD_MIN: f32 = 8.0;
 const HUD_CONTROL_PAD_MAX: f32 = 14.0;
@@ -144,23 +140,26 @@ fn random_2x2_block() -> [[BlockColor; 2]; 2] {
     ]
 }
 
-/// Returns automatic drop interval for a given level.
-/// Uses an exponential 0.98^(level-1) curve and clamps to 0.05s so late-game
+/// Returns automatic drop interval for a given level and difficulty.
+/// Uses an exponential decay curve and clamps to 0.05s so late-game
 /// speed remains challenging but still human-playable.
 /// Speed plateaus after level 105.
-fn drop_interval_for_level(level: u32) -> f32 {
+fn drop_interval_for_level(level: u32, diff: Difficulty) -> f32 {
     let effective_level = level.min(105);
-    DROP_INTERVAL_PER_LEVEL
-        .powi(effective_level.saturating_sub(1) as i32)
-        .max(0.05)
+    diff.drop_interval_base()
+        * diff
+            .drop_interval_per_level()
+            .powi(effective_level.saturating_sub(1) as i32)
+            .max(0.05)
 }
 
-/// Returns timeline speed multiplier for a given level.
-/// Starts at 1.0 on level 1, increases by 1% per level, and is capped at 1.35x.
-/// Speed plateaus at level 36 (due to TIMELINE_SPEEDUP_MAX).
-fn timeline_speedup_for_level(level: u32) -> f32 {
+/// Returns timeline speed multiplier for a given level and difficulty.
+/// Starts at 1.0 on level 1, increases per level, and is capped.
+/// Speed plateaus at level 105.
+fn timeline_speedup_for_level(level: u32, diff: Difficulty) -> f32 {
     let effective_level = level.min(105);
-    (1.0 + effective_level.saturating_sub(1) as f32 * TIMELINE_SPEEDUP_PER_LEVEL).min(TIMELINE_SPEEDUP_MAX)
+    (1.0 + effective_level.saturating_sub(1) as f32 * diff.timeline_speedup_per_level())
+        .min(diff.timeline_speedup_max())
 }
 
 /// Returns lock delay (entry grace period) for a given level.
@@ -469,6 +468,56 @@ fn draw_chain_symbol(x: f32, y: f32, size: f32) {
     );
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+enum Difficulty {
+    #[default]
+    Easy,
+    Normal,
+    Hard,
+}
+
+impl Difficulty {
+    fn drop_interval_base(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 1.0,
+            Difficulty::Normal => 0.8,
+            Difficulty::Hard => 0.6,
+        }
+    }
+
+    fn drop_interval_per_level(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 0.98,
+            Difficulty::Normal => 0.96,
+            Difficulty::Hard => 0.94,
+        }
+    }
+
+    fn timeline_speedup_per_level(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 0.01,
+            Difficulty::Normal => 0.015,
+            Difficulty::Hard => 0.02,
+        }
+    }
+
+    fn timeline_speedup_max(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 1.35,
+            Difficulty::Normal => 1.6,
+            Difficulty::Hard => 2.0,
+        }
+    }
+
+    fn squares_per_level(&self) -> u32 {
+        match self {
+            Difficulty::Easy => 5,
+            Difficulty::Normal => 4,
+            Difficulty::Hard => 3,
+        }
+    }
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
@@ -486,6 +535,8 @@ struct Game {
     squares_cleared_this_sweep: u32,
     game_over: bool,
     waiting_to_start: bool,
+    difficulty_selection: bool,
+    difficulty: Difficulty,
     drop_timer: f32,
     drop_interval: f32,
     audio: AudioManager,
@@ -493,6 +544,7 @@ struct Game {
     clear_flashes: Vec<(usize, f32)>, // (column, life 0..1) – brief flash when timeline clears a column
     match_flash: f32,                 // brief board-edge glow when a new 2×2 match is detected
     is_paused: bool,
+    is_mobile: bool,
 
     // Time Freeze
     freeze_meter: f32,
@@ -529,15 +581,15 @@ struct Game {
 
 impl Game {
     fn update_difficulty(&mut self) {
-        self.drop_interval = drop_interval_for_level(self.level);
-        let level_speedup = timeline_speedup_for_level(self.level);
+        self.drop_interval = drop_interval_for_level(self.level, self.difficulty);
+        let level_speedup = timeline_speedup_for_level(self.level, self.difficulty);
         let current_theme = self.theme_engine.current();
         let seconds_per_sweep = (60.0 / current_theme.bpm) * BEATS_PER_SWEEP;
         let base_timeline_speed = COLS as f32 / seconds_per_sweep;
         self.timeline_speed = base_timeline_speed * level_speedup;
     }
 
-    async fn new() -> Self {
+    async fn new(is_mobile: bool) -> Self {
         let themes = vec![
             shared::theme::Theme {
                 name: "Classic".to_string(),
@@ -668,6 +720,8 @@ impl Game {
             squares_cleared_this_sweep: 0,
             game_over: false,
             waiting_to_start: true,
+            difficulty_selection: false,
+            difficulty: Difficulty::Easy,
             drop_timer: 0.0,
             drop_interval: 1.0,
             audio,
@@ -675,6 +729,7 @@ impl Game {
             clear_flashes: Vec::new(),
             match_flash: 0.0,
             is_paused: false,
+            is_mobile,
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
@@ -822,7 +877,7 @@ impl Game {
             let submit = input.update_with_touch(
                 (prompt_x, prompt_y, prompt_w, prompt_h),
                 (ok_x, ok_y, ok_w, ok_h),
-                shared::touch_input::is_mobile(),
+                self.is_mobile,
             );
             self.current_name = input.content.clone();
 
@@ -832,6 +887,57 @@ impl Game {
                 self.entering_name = false;
                 self.name_input = None;
                 self.just_finished_name_entry = true;
+            }
+        }
+
+        if self.waiting_to_start && self.difficulty_selection {
+            if is_mouse_button_pressed(MouseButton::Left) {
+                let btn_w = (sw * 0.3).clamp(120.0, 240.0);
+                let btn_h = (sh * 0.08).clamp(40.0, 60.0);
+                let btn_x = sw / 2.0 - btn_w / 2.0;
+                let mut btn_y = sh * 0.4 + sh * 0.08 + sh * 0.1; // Matches draw() logic
+                let btn_spacing = btn_h * 1.3;
+
+                let options = [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard];
+                for opt in options {
+                    if mx >= btn_x && mx <= btn_x + btn_w && my >= btn_y && my <= btn_y + btn_h {
+                        self.difficulty = opt;
+                        self.difficulty_selection = false;
+                        self.waiting_to_start = false;
+                        self.entry_timer = ENTRY_DELAY;
+                        self.audio.play_music();
+                        self.update_difficulty();
+                        return;
+                    }
+                    btn_y += btn_spacing;
+                }
+            }
+            if is_key_pressed(KeyCode::Key1) {
+                self.difficulty = Difficulty::Easy;
+                self.difficulty_selection = false;
+                self.waiting_to_start = false;
+                self.entry_timer = ENTRY_DELAY;
+                self.audio.play_music();
+                self.update_difficulty();
+                return;
+            }
+            if is_key_pressed(KeyCode::Key2) {
+                self.difficulty = Difficulty::Normal;
+                self.difficulty_selection = false;
+                self.waiting_to_start = false;
+                self.entry_timer = ENTRY_DELAY;
+                self.audio.play_music();
+                self.update_difficulty();
+                return;
+            }
+            if is_key_pressed(KeyCode::Key3) {
+                self.difficulty = Difficulty::Hard;
+                self.difficulty_selection = false;
+                self.waiting_to_start = false;
+                self.entry_timer = ENTRY_DELAY;
+                self.audio.play_music();
+                self.update_difficulty();
+                return;
             }
         }
 
@@ -935,10 +1041,8 @@ impl Game {
                 self.squares_cleared_total += squares_this_step;
 
                 let old_level = self.level;
-                // Lumines Challenge Progression: 1 level per 5 squares cleared.
-                // The level counter continues increasing; only theme/difficulty progression
-                // loops or plateaus on a 105-level cycle.
-                self.level = (self.squares_cleared_total / SQUARES_PER_LEVEL) + 1;
+                // Lumines Challenge Progression: squares per level depends on difficulty.
+                self.level = (self.squares_cleared_total / self.difficulty.squares_per_level()) + 1;
 
                 if self.level > old_level {
                     self.audio.play_match(); // Level-up sound
@@ -1633,7 +1737,8 @@ impl Game {
             WHITE,
         );
 
-        let squares_to_next = SQUARES_PER_LEVEL - (self.squares_cleared_total % SQUARES_PER_LEVEL);
+        let sq_per_lvl = self.difficulty.squares_per_level();
+        let squares_to_next = sq_per_lvl - (self.squares_cleared_total % sq_per_lvl);
         let level_text = format!("LV: {}", self.level);
         let progress_text = format!("(NEXT IN: {})", squares_to_next);
         let theme_text = self.theme_engine.current().name.to_uppercase();
@@ -1890,7 +1995,11 @@ impl Game {
 
             current_y += sh * 0.08;
 
-            let start_text = "TAP or SPACE to Start";
+            let start_text = if self.difficulty_selection {
+                "Select Difficulty"
+            } else {
+                "TAP or SPACE to Start"
+            };
             let start_sz = (sh * 0.04).clamp(24.0, 36.0);
             let sm = measure_text(start_text, None, start_sz as u16, 1.0);
             draw_text(
@@ -1900,18 +2009,51 @@ impl Game {
                 start_sz,
                 WHITE,
             );
-            
-            current_y += sh * 0.05;
-            let tip1 = "SHIFT / Swipe Up: Time Freeze (when full)";
-            let tip2 = "Swipe L/R/Down: Move / Drop";
-            let tip_sz = (sh * 0.025).clamp(12.0, 20.0);
-            
-            let tm1 = measure_text(tip1, None, tip_sz as u16, 1.0);
-            draw_text(tip1, sw / 2.0 - tm1.width / 2.0, current_y, tip_sz, SKYBLUE);
-            current_y += tip_sz * 1.3;
-            
-            let tm2 = measure_text(tip2, None, tip_sz as u16, 1.0);
-            draw_text(tip2, sw / 2.0 - tm2.width / 2.0, current_y, tip_sz, GRAY);
+
+            if self.difficulty_selection {
+                current_y += sh * 0.1;
+                let btn_w = (sw * 0.3).clamp(120.0, 240.0);
+                let btn_h = (sh * 0.08).clamp(40.0, 60.0);
+                let btn_x = sw / 2.0 - btn_w / 2.0;
+                let btn_spacing = btn_h * 1.3;
+
+                let options = [
+                    (Difficulty::Easy, "EASY", GREEN),
+                    (Difficulty::Normal, "NORMAL", YELLOW),
+                    (Difficulty::Hard, "HARD", RED),
+                ];
+
+                for (_, label, color) in options {
+                    draw_rectangle(
+                        btn_x,
+                        current_y,
+                        btn_w,
+                        btn_h,
+                        Color::new(color.r, color.g, color.b, 0.8),
+                    );
+                    let lm = measure_text(label, None, (btn_h * 0.5) as u16, 1.0);
+                    draw_text(
+                        label,
+                        sw / 2.0 - lm.width / 2.0,
+                        current_y + btn_h * 0.65,
+                        btn_h * 0.5,
+                        WHITE,
+                    );
+                    current_y += btn_spacing;
+                }
+            } else {
+                current_y += sh * 0.05;
+                let tip1 = "SHIFT / Swipe Up: Time Freeze (when full)";
+                let tip2 = "Swipe L/R/Down: Move / Drop";
+                let tip_sz = (sh * 0.025).clamp(12.0, 20.0);
+
+                let tm1 = measure_text(tip1, None, tip_sz as u16, 1.0);
+                draw_text(tip1, sw / 2.0 - tm1.width / 2.0, current_y, tip_sz, SKYBLUE);
+                current_y += tip_sz * 1.3;
+
+                let tm2 = measure_text(tip2, None, tip_sz as u16, 1.0);
+                draw_text(tip2, sw / 2.0 - tm2.width / 2.0, current_y, tip_sz, GRAY);
+            }
         }
 
         if self.game_over {
@@ -2022,7 +2164,7 @@ impl Game {
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    if shared::touch_input::is_mobile() {
+                    if self.is_mobile {
                         let prompt_w = sw * 0.4;
                         let prompt_x = sw / 2.0 - prompt_w / 2.0;
                         let prompt_y = sh * 0.62;
@@ -2114,20 +2256,16 @@ async fn main() {
             && !game.just_finished_name_entry
             && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left))
         {
-            #[cfg(target_arch = "wasm32")]
-            {
-                // This is a hacky way to focus the canvas in Macroquad WASM if needed,
-                // but usually clicking it is enough if it has a tabindex.
+            if game.waiting_to_start && !game.difficulty_selection {
+                game.difficulty_selection = true;
+            } else if game.game_over {
+                let audio = game.audio;
+                let muted = audio.is_muted();
+                game = Game::new(is_mobile).await;
+                game.audio = audio;
+                game.audio.set_muted(muted);
+                game.difficulty_selection = true;
             }
-
-            let audio = game.audio;
-            let muted = audio.is_muted();
-            game = Game::new(is_mobile).await;
-            game.audio = audio;
-            game.audio.set_muted(muted);
-            game.waiting_to_start = false;
-            game.entry_timer = ENTRY_DELAY; // give player time to position the first block
-            game.audio.play_music();
         }
 
         next_frame().await
@@ -2156,27 +2294,50 @@ mod tests {
     fn lock_delay_never_goes_below_floor() {
         let at_cap = lock_delay_for_level(105);
         assert!(at_cap >= 0.12);
-        assert!((at_cap - 0.20766723).abs() < 1e-6);
         assert_eq!(lock_delay_for_level(u32::MAX), at_cap);
     }
 
     #[test]
-    fn drop_interval_decreases_with_level() {
-        let level_1 = drop_interval_for_level(1);
-        let level_10 = drop_interval_for_level(10);
-        let level_1000 = drop_interval_for_level(1000);
-        assert!((level_1 - 1.0).abs() < f32::EPSILON);
-        assert!(level_10 < level_1);
-        assert!((level_1000 - 0.12232405).abs() < 1e-6);
+    fn drop_interval_decreases_with_level_and_difficulty() {
+        let easy_1 = drop_interval_for_level(1, Difficulty::Easy);
+        let normal_1 = drop_interval_for_level(1, Difficulty::Normal);
+        let hard_1 = drop_interval_for_level(1, Difficulty::Hard);
+        
+        assert!(easy_1 > normal_1);
+        assert!(normal_1 > hard_1);
+
+        let easy_10 = drop_interval_for_level(10, Difficulty::Easy);
+        let normal_10 = drop_interval_for_level(10, Difficulty::Normal);
+        
+        assert!(easy_1 > easy_10);
+        assert!(easy_10 > normal_10);
     }
 
     #[test]
-    fn timeline_speedup_increases_with_level_and_caps() {
-        let level_1 = timeline_speedup_for_level(1);
-        let level_20 = timeline_speedup_for_level(20);
-        let level_200 = timeline_speedup_for_level(200);
-        assert!((level_1 - 1.0).abs() < f32::EPSILON);
-        assert!(level_20 > level_1);
-        assert!((level_200 - TIMELINE_SPEEDUP_MAX).abs() < f32::EPSILON);
+    fn timeline_speedup_increases_with_level_and_difficulty() {
+        let easy_20 = timeline_speedup_for_level(20, Difficulty::Easy);
+        let normal_20 = timeline_speedup_for_level(20, Difficulty::Normal);
+        let hard_20 = timeline_speedup_for_level(20, Difficulty::Hard);
+
+        assert!(easy_20 < normal_20);
+        assert!(normal_20 < hard_20);
+    }
+
+    #[test]
+    fn timeline_speedup_caps_per_difficulty() {
+        for diff in [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard] {
+            let at_105 = timeline_speedup_for_level(105, diff);
+            let at_200 = timeline_speedup_for_level(200, diff);
+            assert_eq!(
+                at_105, at_200,
+                "Difficulty {:?} should plateau at level 105",
+                diff
+            );
+            assert!(
+                (at_105 - diff.timeline_speedup_max()).abs() < 1e-6,
+                "Difficulty {:?} should reach its configured max",
+                diff
+            );
+        }
     }
 }

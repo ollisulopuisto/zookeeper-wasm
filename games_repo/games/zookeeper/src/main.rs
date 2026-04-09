@@ -16,7 +16,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.04.09.232";
+const VERSION: &str = "26.04.09.239";
 
 // Animation Constants
 const LEVEL_UP_TOTAL_DELAY: f32 = 1.0;
@@ -477,6 +477,8 @@ async fn main() {
         slow_mode: false,
     });
 
+    let is_mobile = shared::touch_input::is_mobile();
+
     let tex_snail = Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None);
 
     let textures = [
@@ -488,7 +490,7 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None), // Panda
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None), // Frog
         tex_snail.clone(), // Snail (reuse existing texture handle)
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f99b.png"), None), // Hippo
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f981.png"), None), // Lion
         Texture2D::from_file_with_format(include_bytes!("../assets/1f993.png"), None), // Zebra
         Texture2D::from_file_with_format(include_bytes!("../assets/1f437.png"), None), // Pig
         Texture2D::from_file_with_format(include_bytes!("../assets/1f428.png"), None), // Koala
@@ -1147,7 +1149,7 @@ async fn main() {
                 let submitted = input.update_with_touch(
                     (prompt_x, prompt_y, prompt_w, prompt_h),
                     (ok_x, ok_y, ok_w, ok_h),
-                    shared::touch_input::is_mobile(),
+                    is_mobile,
                 );
 
                 if submitted {
@@ -1692,7 +1694,7 @@ async fn main() {
 
             #[cfg(target_arch = "wasm32")]
             {
-                if shared::touch_input::is_mobile() {
+                if is_mobile {
                     let prompt_w = sw * 0.4;
                     let prompt_x = sw / 2.0 - prompt_w / 2.0;
                     let prompt_y = sh * 0.6;
