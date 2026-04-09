@@ -477,6 +477,8 @@ async fn main() {
         slow_mode: false,
     });
 
+    let is_mobile = shared::touch_input::is_mobile();
+
     let tex_snail = Texture2D::from_file_with_format(include_bytes!("../assets/1f40c.png"), None);
 
     let textures = [
@@ -1147,7 +1149,7 @@ async fn main() {
                 let submitted = input.update_with_touch(
                     (prompt_x, prompt_y, prompt_w, prompt_h),
                     (ok_x, ok_y, ok_w, ok_h),
-                    shared::touch_input::is_mobile(),
+                    is_mobile,
                 );
 
                 if submitted {
@@ -1692,7 +1694,7 @@ async fn main() {
 
             #[cfg(target_arch = "wasm32")]
             {
-                if shared::touch_input::is_mobile() {
+                if is_mobile {
                     let prompt_w = sw * 0.4;
                     let prompt_x = sw / 2.0 - prompt_w / 2.0;
                     let prompt_y = sh * 0.6;

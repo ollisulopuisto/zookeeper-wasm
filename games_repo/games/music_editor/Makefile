@@ -1,4 +1,4 @@
-VERSION=26.4.9.230
+VERSION=26.4.9.232
 
 .PHONY: build serve
 

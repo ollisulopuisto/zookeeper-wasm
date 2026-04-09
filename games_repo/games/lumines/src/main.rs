@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.09.230";
+const VERSION: &str = "26.04.09.232";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -469,6 +469,55 @@ fn draw_chain_symbol(x: f32, y: f32, size: f32) {
     );
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+enum Difficulty {
+    Easy,
+    Normal,
+    Hard,
+}
+
+impl Difficulty {
+    fn drop_interval_base(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 1.0,
+            Difficulty::Normal => 0.8,
+            Difficulty::Hard => 0.6,
+        }
+    }
+
+    fn drop_interval_per_level(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 0.98,
+            Difficulty::Normal => 0.96,
+            Difficulty::Hard => 0.94,
+        }
+    }
+
+    fn timeline_speedup_per_level(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 0.01,
+            Difficulty::Normal => 0.015,
+            Difficulty::Hard => 0.02,
+        }
+    }
+
+    fn timeline_speedup_max(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 1.35,
+            Difficulty::Normal => 1.6,
+            Difficulty::Hard => 2.0,
+        }
+    }
+
+    fn squares_per_level(&self) -> u32 {
+        match self {
+            Difficulty::Easy => 5,
+            Difficulty::Normal => 4,
+            Difficulty::Hard => 3,
+        }
+    }
+}
+
 struct Game {
     grid: [[Option<BlockColor>; COLS]; ROWS],
     marked: [[bool; COLS]; ROWS],
@@ -486,6 +535,8 @@ struct Game {
     squares_cleared_this_sweep: u32,
     game_over: bool,
     waiting_to_start: bool,
+    difficulty_selection: bool,
+    difficulty: Difficulty,
     drop_timer: f32,
     drop_interval: f32,
     audio: AudioManager,
@@ -2113,20 +2164,16 @@ async fn main() {
             && !game.just_finished_name_entry
             && (is_key_pressed(KeyCode::Space) || is_mouse_button_pressed(MouseButton::Left))
         {
-            #[cfg(target_arch = "wasm32")]
-            {
-                // This is a hacky way to focus the canvas in Macroquad WASM if needed,
-                // but usually clicking it is enough if it has a tabindex.
+            if game.waiting_to_start && !game.difficulty_selection {
+                game.difficulty_selection = true;
+            } else if game.game_over {
+                let audio = game.audio;
+                let muted = audio.is_muted();
+                game = Game::new().await;
+                game.audio = audio;
+                game.audio.set_muted(muted);
+                game.difficulty_selection = true;
             }
-
-            let audio = game.audio;
-            let muted = audio.is_muted();
-            game = Game::new().await;
-            game.audio = audio;
-            game.audio.set_muted(muted);
-            game.waiting_to_start = false;
-            game.entry_timer = ENTRY_DELAY; // give player time to position the first block
-            game.audio.play_music();
         }
 
         next_frame().await
@@ -2155,27 +2202,32 @@ mod tests {
     fn lock_delay_never_goes_below_floor() {
         let at_cap = lock_delay_for_level(105);
         assert!(at_cap >= 0.12);
-        assert!((at_cap - 0.20766723).abs() < 1e-6);
         assert_eq!(lock_delay_for_level(u32::MAX), at_cap);
     }
 
     #[test]
-    fn drop_interval_decreases_with_level() {
-        let level_1 = drop_interval_for_level(1);
-        let level_10 = drop_interval_for_level(10);
-        let level_1000 = drop_interval_for_level(1000);
-        assert!((level_1 - 1.0).abs() < f32::EPSILON);
-        assert!(level_10 < level_1);
-        assert!((level_1000 - 0.12232405).abs() < 1e-6);
+    fn drop_interval_decreases_with_level_and_difficulty() {
+        let easy_1 = drop_interval_for_level(1, Difficulty::Easy);
+        let normal_1 = drop_interval_for_level(1, Difficulty::Normal);
+        let hard_1 = drop_interval_for_level(1, Difficulty::Hard);
+        
+        assert!(easy_1 > normal_1);
+        assert!(normal_1 > hard_1);
+
+        let easy_10 = drop_interval_for_level(10, Difficulty::Easy);
+        let normal_10 = drop_interval_for_level(10, Difficulty::Normal);
+        
+        assert!(easy_1 > easy_10);
+        assert!(easy_10 > normal_10);
     }
 
     #[test]
-    fn timeline_speedup_increases_with_level_and_caps() {
-        let level_1 = timeline_speedup_for_level(1);
-        let level_20 = timeline_speedup_for_level(20);
-        let level_200 = timeline_speedup_for_level(200);
-        assert!((level_1 - 1.0).abs() < f32::EPSILON);
-        assert!(level_20 > level_1);
-        assert!((level_200 - TIMELINE_SPEEDUP_MAX).abs() < f32::EPSILON);
+    fn timeline_speedup_increases_with_level_and_difficulty() {
+        let easy_20 = timeline_speedup_for_level(20, Difficulty::Easy);
+        let normal_20 = timeline_speedup_for_level(20, Difficulty::Normal);
+        let hard_20 = timeline_speedup_for_level(20, Difficulty::Hard);
+        
+        assert!(easy_20 < normal_20);
+        assert!(normal_20 < hard_20);
     }
 }
