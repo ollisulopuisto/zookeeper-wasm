@@ -490,7 +490,7 @@ async fn main() {
         Texture2D::from_file_with_format(include_bytes!("../assets/1f43c.png"), None), // Panda
         Texture2D::from_file_with_format(include_bytes!("../assets/1f438.png"), None), // Frog
         tex_snail.clone(), // Snail (reuse existing texture handle)
-        Texture2D::from_file_with_format(include_bytes!("../assets/1f99b.png"), None), // Hippo
+        Texture2D::from_file_with_format(include_bytes!("../assets/1f981.png"), None), // Lion
         Texture2D::from_file_with_format(include_bytes!("../assets/1f993.png"), None), // Zebra
         Texture2D::from_file_with_format(include_bytes!("../assets/1f437.png"), None), // Pig
         Texture2D::from_file_with_format(include_bytes!("../assets/1f428.png"), None), // Koala

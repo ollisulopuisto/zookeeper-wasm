@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.9.234] - 2026-04-09
+## [26.4.9.235] - 2026-04-09
 ### Fixed
 - **Zookeeper Visual Clarity:** Replaced the Hippo icon (1f99b) with a more distinctive Lion (1f981) icon to resolve visual confusion with the Elephant (1f418).
 - **Lumines Difficulty Progression:** Fully implemented selectable difficulty levels (**Easy**, **Normal**, **Hard**).
