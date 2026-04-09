@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.09.236";
+const VERSION: &str = "26.04.09.237";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -544,6 +544,7 @@ struct Game {
     clear_flashes: Vec<(usize, f32)>, // (column, life 0..1) – brief flash when timeline clears a column
     match_flash: f32,                 // brief board-edge glow when a new 2×2 match is detected
     is_paused: bool,
+    is_mobile: bool,
 
     // Time Freeze
     freeze_meter: f32,
@@ -588,7 +589,7 @@ impl Game {
         self.timeline_speed = base_timeline_speed * level_speedup;
     }
 
-    async fn new() -> Self {
+    async fn new(is_mobile: bool) -> Self {
         let themes = vec![
             shared::theme::Theme {
                 name: "Classic".to_string(),
@@ -728,6 +729,7 @@ impl Game {
             clear_flashes: Vec::new(),
             match_flash: 0.0,
             is_paused: false,
+            is_mobile,
             freeze_meter: 0.0,
             is_frozen: false,
             freeze_timer: 0.0,
@@ -875,7 +877,7 @@ impl Game {
             let submit = input.update_with_touch(
                 (prompt_x, prompt_y, prompt_w, prompt_h),
                 (ok_x, ok_y, ok_w, ok_h),
-                shared::touch_input::is_mobile(),
+                self.is_mobile,
             );
             self.current_name = input.content.clone();
 
@@ -2161,7 +2163,7 @@ impl Game {
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    if shared::touch_input::is_mobile() {
+                    if self.is_mobile {
                         let prompt_w = sw * 0.4;
                         let prompt_x = sw / 2.0 - prompt_w / 2.0;
                         let prompt_y = sh * 0.62;
@@ -2221,7 +2223,8 @@ impl Game {
 #[macroquad::main("Lumines WASM")]
 async fn main() {
     qrand::srand(macroquad::miniquad::date::now() as _);
-    let mut game = Game::new().await;
+    let is_mobile = shared::touch_input::is_mobile();
+    let mut game = Game::new(is_mobile).await;
 
     loop {
         clear_background(BLACK);
@@ -2257,7 +2260,7 @@ async fn main() {
             } else if game.game_over {
                 let audio = game.audio;
                 let muted = audio.is_muted();
-                game = Game::new().await;
+                game = Game::new(is_mobile).await;
                 game.audio = audio;
                 game.audio.set_muted(muted);
                 game.difficulty_selection = true;
