@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.9.229] - 2026-04-09
+## [26.4.9.230] - 2026-04-09
 ### Fixed
 - **Touch Device Text Input:** Restored the ability for iPad and other touch device users to enter their names for high scores.
   - Replaced restrictive screen-size-based mobile detection with a more robust user-agent and touch-point heuristic in `shared` library.
