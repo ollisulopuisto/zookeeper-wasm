@@ -87,8 +87,8 @@ impl Player {
             blow_timer: 0.0,
             respawn_timer: 0.0,
             max_bubbles: 10,
-            bubble_speed: 3.5,
-            bubble_range: 0.5, // 0.5 seconds of forward travel
+            bubble_speed: 2.2,
+            bubble_range: 0.4, // 0.4 seconds of forward travel
             bubble_scale: 1.0,
             powerup_timer: 0.0,
             active_powerup: None,
@@ -372,16 +372,16 @@ impl Game {
             if b.range_timer > 0.0 {
                 b.range_timer -= 0.016;
                 if b.range_timer <= 0.0 { b.vel.x = 0.0; b.vel.y = -0.6; }
+
+                // Only check for horizontal wall collisions while moving horizontally
+                let tx_left = (b.pos.x / 16.0) as i32;
+                let tx_right = ((b.pos.x + 15.0) / 16.0) as i32;
+                let ty = ((b.pos.y + 8.0) / 16.0) as i32;
+                if self.level.is_wall(tx_left, ty) { b.pos.x = (tx_left * 16 + 16) as f32; b.vel.x = -b.vel.x; }
+                if self.level.is_wall(tx_right, ty) { b.pos.x = (tx_right * 16 - 16) as f32; b.vel.x = -b.vel.x; }
             } else {
                 b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
             }
-            
-            // Bubble side wall collision
-            let tx_left = (b.pos.x / 16.0) as i32;
-            let tx_right = ((b.pos.x + 15.0) / 16.0) as i32;
-            let ty = ((b.pos.y + 8.0) / 16.0) as i32;
-            if self.level.is_wall(tx_left, ty) { b.pos.x = (tx_left * 16 + 16) as f32; b.vel.x = -b.vel.x; }
-            if self.level.is_wall(tx_right, ty) { b.pos.x = (tx_right * 16 - 16) as f32; b.vel.x = -b.vel.x; }
 
             if b.trapped_kind.is_some() {
                 b.pos.x = b.pos.x.clamp(clamp_min, clamp_max);

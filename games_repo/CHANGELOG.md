@@ -2,12 +2,19 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.10.231] - 2026-04-10
+## [26.4.10.232] - 2026-04-10
+### Fixed
+- **Bubbles "Zipping" Bug:** Captured enemies no longer warp sideways when rising through platforms. Bubbles now only check for horizontal wall collisions during their initial forward travel phase.
+### Changed
+- **Bubbles Balancing:** Downgraded initial bubble speed (3.5 -> 2.2) and range (0.5s -> 0.4s) to make upgrades more meaningful and improve game progression.
+
+## [26.04.10.231] - 2026-04-10
 ### Fixed
 - **Bubbles Physics:** Fixed an issue where bubbles would get stuck and jitter at the ceiling by correctly zeroing vertical velocity on collision.
 - **Bubbles High Scores:** Fixed high scores not saving by ensuring the leaderboard is initialized with defaults and adding debug logging for persistence troubleshooting.
 - **Performance:** Optimized `Bubbles` by loading high scores once when entering the `Leaderboard` state instead of every frame.
 - **Workspace Consistency:** Added `test` and `lint` targets to `lumines` and `music_editor` Makefiles to ensure uniform CI/CD across all games.
+
 - **Zookeeper Visual Clarity:** Replaced the Hippo icon (1f99b) with a more distinctive Lion (1f981) icon to resolve visual confusion with the Elephant (1f418).
 - **Lumines Difficulty Progression:** Fully implemented selectable difficulty levels (**Easy**, **Normal**, **Hard**).
   - Added a dedicated difficulty selection screen at the start and after game over.
