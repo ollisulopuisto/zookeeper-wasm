@@ -397,9 +397,10 @@ impl Game {
             let tx = ((b.pos.x + 8.0) / TILE_SIZE) as i32;
             if b.pos.y < -8.0 {
                 if !self.level.is_wall(tx, 0) && !self.level.is_wall(tx, 13) {
-                    b.pos.y = PLAY_HEIGHT; 
+                    b.pos.y = PLAY_HEIGHT;
                 } else {
-                    b.pos.y = 0.0; 
+                    b.pos.y = 0.0;
+                    b.vel.y = 0.0;
                 }
             }
         }

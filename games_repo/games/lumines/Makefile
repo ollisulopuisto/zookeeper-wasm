@@ -1,6 +1,14 @@
 VERSION=26.04.03.2
 
-.PHONY: build serve
+.PHONY: build serve test lint
+
+test:
+	@echo "Running tests..."
+	cargo test
+
+lint:
+	@echo "Running clippy..."
+	cargo clippy -- -D warnings
 
 build:
 	@echo "Building Lumines WASM for version $(VERSION)..."

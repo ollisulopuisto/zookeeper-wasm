@@ -29,7 +29,15 @@ where
         return Vec::new();
     }
 
-    serde_json::from_slice(&buffer[..len as usize]).unwrap_or_default()
+    let json_slice = &buffer[..len as usize];
+    match serde_json::from_slice(json_slice) {
+        Ok(v) => v,
+        Err(e) => {
+            let json_str = String::from_utf8_lossy(json_slice);
+            macroquad::prelude::error!("Leaderboard parse error: {} | Raw data ({} bytes): {}", e, len, json_str);
+            Vec::new()
+        }
+    }
 }
 
 pub fn save_list<T, F>(entries: &[T], mut saver: F)

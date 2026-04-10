@@ -10,14 +10,14 @@ use crate::gfx::SpriteManager;
 use crate::input::InputManager;
 use crate::game::{Game, VIRTUAL_WIDTH, HUD_HEIGHT, PLAY_HEIGHT};
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum AppState {
     Menu,
     Playing,
     Paused,
     GameOver,
     EnteringName { input: shared::input::TextInput },
-    Leaderboard { last_scores: Vec<(String, u32)> },
+    Leaderboard { last_scores: Vec<(String, u32)>, all_scores: Vec<storage::ScoreEntry> },
 }
 
 #[macroquad::main("Bubbles")]
@@ -111,7 +111,10 @@ async fn main() {
                         storage::add_score(final_name.clone(), p.score);
                         last_scores.push((final_name.clone(), p.score));
                     }
-                    state = AppState::Leaderboard { last_scores };
+                    state = AppState::Leaderboard { 
+                        last_scores, 
+                        all_scores: storage::load_scores() 
+                    };
                 }
             }
             AppState::Leaderboard { .. } => {
@@ -182,7 +185,7 @@ async fn main() {
                 draw_rectangle(btn_x, vy + 180.0 * scale, btn_w, btn_h, Color::new(0.3, 0.8, 0.3, 1.0));
                 draw_text("OK", btn_x + 40.0 * scale, vy + 200.0 * scale, 20.0 * scale, WHITE);
             }
-            AppState::Leaderboard { ref last_scores } => {
+            AppState::Leaderboard { ref last_scores, ref all_scores } => {
                 let title_size = 30.0 * scale;
                 let text_size = 15.0 * scale;
                 let center_x = vx + (VIRTUAL_WIDTH / 2.0) * scale;
@@ -192,12 +195,11 @@ async fn main() {
                 let t_dims = measure_text(title, None, title_size as u16, 1.0);
                 draw_text(title, center_x - t_dims.width / 2.0, vy + 40.0 * scale, title_size, MAGENTA);
 
-                let scores = storage::load_scores();
                 let rank_x = center_x - 80.0 * scale;
                 let name_x = center_x - 50.0 * scale;
                 let score_x = center_x + 80.0 * scale;
 
-                for (i, s) in scores.iter().enumerate() {
+                for (i, s) in all_scores.iter().enumerate() {
                     let is_highlight = last_scores.iter().any(|(ln, ls)| ln == &s.name && ls == &s.score);
                     let color = if is_highlight { YELLOW } else { WHITE };
                     let y = vy + 70.0 * scale + (i as f32 * 15.0 * scale);
