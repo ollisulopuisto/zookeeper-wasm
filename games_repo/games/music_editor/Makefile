@@ -1,6 +1,14 @@
-VERSION=26.4.9.239
+VERSION=26.4.10.232
 
-.PHONY: build serve
+.PHONY: build serve test lint
+
+test:
+	@echo "Running tests..."
+	cargo test
+
+lint:
+	@echo "Running clippy..."
+	cargo clippy -- -D warnings
 
 build:
 	@echo "Building Music Editor WASM for version $(VERSION)..."
