@@ -428,6 +428,7 @@ mod tests {
         
         let cleared = board.clear_lines();
         assert_eq!(cleared, 1);
+        board.update(0.3); // Advance time to finalize clear
         for x in 0..COLS {
             assert!(board.grid[ROWS - 1][x].is_none());
         }
