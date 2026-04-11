@@ -2006,7 +2006,7 @@ impl Game {
             current_y += sh * 0.08;
 
             let start_text = if self.difficulty_selection {
-                "Select GameMode"
+                "Select Difficulty"
             } else {
                 "TAP or SPACE to Start"
             };
