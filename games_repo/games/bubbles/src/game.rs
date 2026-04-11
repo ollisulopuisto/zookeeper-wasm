@@ -657,8 +657,9 @@ impl Game {
             });
         }
 
-        let font_size = (12.0 * scale) as u16;
-        let hud_y = vy + 12.0 * scale;
+        let font_size = (11.0 * scale) as u16;
+        let hud_y = vy + 11.0 * scale;
+        let center_x = vx + (VIRTUAL_WIDTH / 2.0) * scale;
         
         // P1 HUD
         draw_text(&format!("P1: {:06} L:{}", self.players[0].score, self.players[0].lives), vx + 5.0 * scale, hud_y, font_size as f32, GREEN);
@@ -669,14 +670,16 @@ impl Game {
                 UpgradeType::LongerDistance => "RANGE",
                 UpgradeType::DoubleSize => "BIG",
             };
-            draw_text(label, vx + 5.0 * scale, hud_y + 10.0 * scale, font_size as f32 * 0.6, SKYBLUE);
+            draw_text(label, vx + 5.0 * scale, hud_y + 10.0 * scale, font_size as f32 * 0.7, SKYBLUE);
             draw_rectangle(vx + 5.0 * scale, hud_y + 12.0 * scale, (self.players[0].powerup_timer / 10.0) * 40.0 * scale, 2.0 * scale, SKYBLUE);
         }
 
         // P2 HUD
         if self.players.len() > 1 {
-            let p2_x = vx + 170.0 * scale;
-            draw_text(&format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives), p2_x, hud_y, font_size as f32, BLUE);
+            let p2_text = format!("P2: {:06} L:{}", self.players[1].score, self.players[1].lives);
+            let p2_dims = measure_text(&p2_text, None, font_size, 1.0);
+            let p2_x = vx + VIRTUAL_WIDTH * scale - p2_dims.width - 5.0 * scale;
+            draw_text(&p2_text, p2_x, hud_y, font_size as f32, BLUE);
             if let Some(upg) = self.players[1].active_powerup {
                 let label = match upg {
                     UpgradeType::MoreBubbles => "B-MAX",
@@ -684,16 +687,21 @@ impl Game {
                     UpgradeType::LongerDistance => "RANGE",
                     UpgradeType::DoubleSize => "BIG",
                 };
-                draw_text(label, p2_x, hud_y + 10.0 * scale, font_size as f32 * 0.6, SKYBLUE);
+                draw_text(label, p2_x, hud_y + 10.0 * scale, font_size as f32 * 0.7, SKYBLUE);
                 draw_rectangle(p2_x, hud_y + 12.0 * scale, (self.players[1].powerup_timer / 10.0) * 40.0 * scale, 2.0 * scale, SKYBLUE);
             }
         }
-        draw_text(&format!("LEVEL {:02}", self.current_level_idx + 1), vx + 105.0 * scale, vy + 12.0 * scale, font_size as f32, YELLOW);
 
-        // Draw Timer
+        // Level display centered
+        let level_text = format!("LEVEL {:02}", self.current_level_idx + 1);
+        let lv_dims = measure_text(&level_text, None, font_size, 1.0);
+        draw_text(&level_text, center_x - lv_dims.width / 2.0, vy + 11.0 * scale, font_size as f32, YELLOW);
+
+        // Draw Timer centered below Level
         let timer_color = if self.level_timer < 10.0 { RED } else { WHITE };
         let timer_text = if self.level_timer > 0.0 { format!("TIME: {:.0}", self.level_timer) } else { "FURIOUS!".to_string() };
-        draw_text(&timer_text, vx + 80.0 * scale, vy + 24.0 * scale, font_size as f32, timer_color);
+        let t_dims = measure_text(&timer_text, None, font_size, 1.0);
+        draw_text(&timer_text, center_x - t_dims.width / 2.0, vy + 22.0 * scale, font_size as f32, timer_color);
 
         // Draw shrinking borders
         if self.furious {

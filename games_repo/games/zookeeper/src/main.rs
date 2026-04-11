@@ -19,6 +19,7 @@ const ROWS: usize = 8;
 /// The game version (CalVer).
 const VERSION: &str = "26.04.11.235";
 
+
 // Animation Constants
 const LEVEL_UP_TOTAL_DELAY: f32 = 1.0;
 const LEVEL_UP_ANIM_DURATION: f32 = 0.4;
