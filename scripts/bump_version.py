@@ -82,8 +82,17 @@ def main():
     ):
         changed_files.append(bubbles_main)
 
+    # Update Gravitris main.rs version
+    gravitris_main = os.path.join(games_dir, "gravitris", "src", "main.rs")
+    if update_file(
+        gravitris_main,
+        r'const VERSION: &str = ".*"',
+        f'const VERSION: &str = "{version_long}"',
+    ):
+        changed_files.append(gravitris_main)
+
     # Update Cargo.toml for other games
-    for game in ["zookeeper", "bubbles", "music_editor"]:
+    for game in ["zookeeper", "bubbles", "music_editor", "gravitris"]:
         cargo_path = os.path.join(games_dir, game, "Cargo.toml")
         if update_file(cargo_path, r'^version = ".*"', f'version = "{version_cargo}"'):
             changed_files.append(cargo_path)

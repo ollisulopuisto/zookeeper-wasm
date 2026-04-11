@@ -2,8 +2,12 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.235] - 2026-04-11
+## [26.4.11.236] - 2026-04-11
 ### Added
+- **New Game: Gravitris WASM:** A Tetris clone with "Gravity Wells" that pull the active piece towards them.
+  - Implemented core Tetris mechanics (movement, rotation, line clearing).
+  - Added gravity well system with configurable strength and pulse animations.
+  - Integrated into the games portal and deployment pipeline.
 - **Leaderboard Abstraction:** Unified high score mode and difficulty tracking into the `shared` library.
 - **Lumines High Scores:** Difficulty level (Easy, Normal, Hard) is now stored and displayed in the high score list.
 ### Changed
