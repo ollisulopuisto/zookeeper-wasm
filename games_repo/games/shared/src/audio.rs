@@ -29,6 +29,7 @@ pub struct Arrangement {
     pub lead_var: [u8; 8],
     pub lead_tone: [Tone; 8],
     pub cp_active: [bool; 8],
+    pub scale: [i32; 8],
 }
 
 impl Arrangement {
@@ -38,6 +39,7 @@ impl Arrangement {
         let mut lead_var: [u8; 8] = [0, 1, 2, 3, 1, 2, 0, 1];
         let mut lead_tone: [Tone; 8] = [Sine, Saw, Square, Sine, Saw, Square, Saw, Sine];
         let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
+        let scale: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
 
         let mut rng = seed;
         let mut next_rng = || {
@@ -62,6 +64,7 @@ impl Arrangement {
             lead_var,
             lead_tone,
             cp_active,
+            scale,
         }
     }
 }
@@ -84,6 +87,7 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
                 Tone::Sine,
             ],
             cp_active: [false, true, false, true, true, false, false, true],
+            scale: [60, 63, 65, 67, 70, 72, 75, 77],
         }
     };
     generate_music_wav_with_arrangement(arrangement, bpm, next_bpm)
@@ -111,7 +115,7 @@ pub fn generate_music_wav_with_arrangement(
     let mut noise_seed = 0x12345678u32;
 
     let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
-    let s_notes: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
+    let s_notes = arrangement.scale;
 
     // Phrase variations for the lead
     let s_step_table_2 = [0usize, 2, 4, 2, 0, 3, 5, 3];
