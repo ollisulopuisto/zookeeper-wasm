@@ -7,7 +7,7 @@ use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.246";
+const VERSION: &str = "26.04.11.247";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {

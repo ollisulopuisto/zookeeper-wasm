@@ -446,6 +446,14 @@ mod tests {
             lead_var: [3; 8],
             lead_tone: [Tone::Sine; 8],
             cp_active: [false; 8],
+            scale: [60, 63, 65, 67, 70, 72, 75, 77],
+            bassline: [36, 36, 48, 36, 36, 36, 46, 36],
+            phrases: [
+                [0, 1, 2, 3, 4, 5, 6, 7],
+                [0, 2, 4, 2, 0, 3, 5, 3],
+                [7, 6, 5, 4, 3, 2, 1, 0],
+                [0, 0, 2, 2, 4, 4, 6, 6],
+            ],
         };
         let (wav, duration) = generate_music_wav_with_arrangement(arrangement, 130.0, None);
         assert!(duration > 0.0);
