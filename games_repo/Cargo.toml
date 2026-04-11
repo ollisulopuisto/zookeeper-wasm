@@ -5,6 +5,7 @@ members = [
     "games/bubbles",
     "games/lumines",
     "games/music_editor",
+    "games/gravitris",
 ]
 resolver = "2"
 

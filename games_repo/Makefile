@@ -1,10 +1,11 @@
-GAMES := zookeeper bubbles lumines music_editor
-VERSION := v26.04.10.232
+GAMES := zookeeper bubbles lumines gravitris music_editor
+VERSION := v26.04.11.236
 
 # Define icons for each game (img tag or span for emoji)
 ICON_zookeeper := <img src="assets/icon.png" alt="Zookeeper">
 ICON_bubbles   := <img src="assets/bubbles_icon.png" alt="Bubbles">
 ICON_lumines   := <span style="font-size: 5rem; margin-bottom: 1rem;">🔲</span>
+ICON_gravitris := <span style="font-size: 5rem; margin-bottom: 1rem;">🧲</span>
 ICON_music_editor := <span style="font-size: 5rem; margin-bottom: 1rem;">🎵</span>
 ICON_jetpac    := <img src="assets/1f680.png" alt="Jetpac">
 ICON_voxeldash := <span style="font-size: 5rem; margin-bottom: 1rem;">📦</span>
@@ -13,6 +14,7 @@ ICON_voxeldash := <span style="font-size: 5rem; margin-bottom: 1rem;">📦</span
 NAME_zookeeper := Zookeeper
 NAME_bubbles   := Bubbles
 NAME_lumines   := Lumines
+NAME_gravitris := Gravitris
 NAME_music_editor := Music Editor
 NAME_jetpac    := Jetpac
 NAME_voxeldash := VoxelDash
@@ -21,6 +23,7 @@ NAME_voxeldash := VoxelDash
 CTRL_zookeeper := Swap gems with mouse / touch.<br><b>P</b> to Pause.
 CTRL_bubbles   := Arrow keys / WASD to move &amp; jump.<br>SPACE to blow bubbles. <b>P</b> to Pause.
 CTRL_lumines   := Arrow keys / WASD to move &amp; rotate.<br>SPACE to drop. <b>P</b> to Pause.
+CTRL_gravitris := Arrow keys to move &amp; rotate.<br>SPACE to drop. Gravity pulls you!
 CTRL_music_editor := Procedural music pattern editor.<br><b>Randomize</b> to generate new patterns.
 
 .PHONY: all setup build test lint clean rename index.html $(GAMES)

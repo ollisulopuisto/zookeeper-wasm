@@ -56,7 +56,7 @@ jobs:
           fi
 
           CHANGED_GAMES=""
-          for game in zookeeper bubbles lumines; do
+          for game in zookeeper bubbles lumines gravitris; do
             if echo "$CHANGED_FILES" | grep -q "^games_repo/games/$game/"; then
               CHANGED_GAMES="$CHANGED_GAMES $game"
             fi
@@ -89,6 +89,12 @@ jobs:
         with:
           path: games_repo/games/lumines/dist
           key: lumines-dist-${{ hashFiles('games_repo/games/lumines/**', 'games_repo/scripts/**', 'games_repo/assets/**', 'games_repo/Cargo.toml', 'games_repo/Cargo.lock', 'Cargo.toml', 'Cargo.lock') }}
+
+      - name: Cache gravitris dist
+        uses: actions/cache@v4
+        with:
+          path: games_repo/games/gravitris/dist
+          key: gravitris-dist-${{ hashFiles('games_repo/games/gravitris/**', 'games_repo/scripts/**', 'games_repo/assets/**', 'games_repo/Cargo.toml', 'games_repo/Cargo.lock', 'Cargo.toml', 'Cargo.lock') }}
 
       - name: Install Linux dependencies
         run: |
