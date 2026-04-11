@@ -31,7 +31,7 @@ pub struct Arrangement {
     pub cp_active: [bool; 8],
     pub scale: [i32; 8],
     pub bassline: [i32; 8],
-    pub phrases: [[usize; 8]; 4],
+    pub phrases: [[i32; 8]; 4],
 }
 
 impl Arrangement {
@@ -43,7 +43,7 @@ impl Arrangement {
         let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
         let scale: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
         let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
-        let phrases: [[usize; 8]; 4] = [
+        let phrases: [[i32; 8]; 4] = [
             [0, 1, 2, 3, 4, 5, 6, 7],
             [0, 2, 4, 2, 0, 3, 5, 3],
             [7, 6, 5, 4, 3, 2, 1, 0],
@@ -335,7 +335,7 @@ pub fn generate_music_wav_with_arrangement(
                     // Phrase 3
                     let half_note_phrase_idx = bar_idx * 2 + half_bar_idx_in_bar;
                     let ht_step = arrangement.phrases[3][half_note_phrase_idx % 8];
-                    let ht_freq = midi_to_freq(s_notes[ht_step % s_notes.len()] + key_offset - 12);
+                    let ht_freq = midi_to_freq(s_notes[ht_step.rem_euclid(s_notes.len() as i32) as usize] + key_offset - 12);
                     let note_dur = bar_beat_duration * 2.0;
                     let t_in_note = t_in_bar % note_dur;
                     let env = if t_in_note < 0.03 {
@@ -351,7 +351,7 @@ pub fn generate_music_wav_with_arrangement(
                     // Phrase 2
                     let chord_step = (sixteen_idx / 8) % 8;
                     let root_step = arrangement.phrases[2][chord_step % 8];
-                    let root = s_notes[root_step % s_notes.len()] + key_offset;
+                    let root = s_notes[root_step.rem_euclid(s_notes.len() as i32) as usize] + key_offset;
                     let fifth = root + 7;
                     let octave = root + 12;
                     let f1 = midi_to_freq(root);
@@ -371,7 +371,7 @@ pub fn generate_music_wav_with_arrangement(
                     // Phrase 1 (Legato)
                     let ht_step = (sixteen_idx / 8) % 8;
                     let note_step = arrangement.phrases[1][ht_step % 8];
-                    let ht_freq = midi_to_freq(s_notes[note_step % s_notes.len()] + key_offset);
+                    let ht_freq = midi_to_freq(s_notes[note_step.rem_euclid(s_notes.len() as i32) as usize] + key_offset);
                     let note_dur = bar_sixteen_duration * 8.0;
                     let t_in_note = t_in_bar % note_dur;
                     let env = if t_in_note < 0.02 {
@@ -389,7 +389,7 @@ pub fn generate_music_wav_with_arrangement(
                     let step_in_phrase = sixteen_idx % 8;
                     let s_step = arrangement.phrases[0][step_in_phrase];
                     
-                    let s_freq = midi_to_freq(s_notes[s_step % s_notes.len()] + key_offset);
+                    let s_freq = midi_to_freq(s_notes[s_step.rem_euclid(s_notes.len() as i32) as usize] + key_offset);
                     let gate = if (sixteen_idx % 4 == 0) || (phrase_idx > 1 && sixteen_idx % 2 == 0)
                     {
                         (1.0 - t_sixteen / bar_sixteen_duration).powf(0.5)
@@ -399,7 +399,7 @@ pub fn generate_music_wav_with_arrangement(
                     let s = get_osc(t * s_freq, l_tone) * 0.15 * gate;
                     let c = if cp_on {
                         let cp_step = 7 - (s_step % 8);
-                        let cp_freq = midi_to_freq(s_notes[cp_step % s_notes.len()] + key_offset);
+                        let cp_freq = midi_to_freq(s_notes[cp_step.rem_euclid(s_notes.len() as i32) as usize] + key_offset);
                         let tri_phase = t * cp_freq % 1.0;
                         let tri = if tri_phase < 0.5 {
                             tri_phase * 4.0 - 1.0
