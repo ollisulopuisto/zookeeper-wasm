@@ -484,45 +484,40 @@ impl LuminesGameMode for GameMode {
     fn drop_interval_base(&self) -> f32 {
         match self {
             GameMode::Easy => 1.0,
-            GameMode::Normal => 0.8,
+            GameMode::Normal | GameMode::Slow => 0.8,
             GameMode::Hard => 0.6,
-            _ => 0.8,
         }
     }
 
     fn drop_interval_per_level(&self) -> f32 {
         match self {
             GameMode::Easy => 0.98,
-            GameMode::Normal => 0.96,
+            GameMode::Normal | GameMode::Slow => 0.96,
             GameMode::Hard => 0.94,
-            _ => 0.96,
         }
     }
 
     fn timeline_speedup_per_level(&self) -> f32 {
         match self {
             GameMode::Easy => 0.01,
-            GameMode::Normal => 0.015,
+            GameMode::Normal | GameMode::Slow => 0.015,
             GameMode::Hard => 0.02,
-            _ => 0.015,
         }
     }
 
     fn timeline_speedup_max(&self) -> f32 {
         match self {
             GameMode::Easy => 1.35,
-            GameMode::Normal => 1.6,
+            GameMode::Normal | GameMode::Slow => 1.6,
             GameMode::Hard => 2.0,
-            _ => 1.6,
         }
     }
 
     fn squares_per_level(&self) -> u32 {
         match self {
             GameMode::Easy => 5,
-            GameMode::Normal => 4,
+            GameMode::Normal | GameMode::Slow => 4,
             GameMode::Hard => 3,
-            _ => 4,
         }
     }
 }
