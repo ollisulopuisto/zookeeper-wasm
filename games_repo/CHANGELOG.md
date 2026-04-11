@@ -2,9 +2,13 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.238] - 2026-04-11
+## [26.4.11.239] - 2026-04-11
+### Added
+- **Gravitris Progression:** Implemented level-up system where gravity well count and strength increase every 10 lines cleared. Wells are now randomized in the lower half of the board.
+- **Gravitris Difficulty Selection:** Added a starting menu with Easy, Normal, and Hard difficulty levels that scale the gravitational pull of wells.
 ### Added
 - **New Game: Gravitris WASM:** A Tetris clone with "Gravity Wells" that pull the active piece towards them.
+
   - Implemented core Tetris mechanics (movement, rotation, line clearing).
   - Added gravity well system with configurable strength and pulse animations.
   - Integrated into the games portal and deployment pipeline.

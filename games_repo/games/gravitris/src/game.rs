@@ -41,6 +41,24 @@ impl PieceType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub enum Difficulty {
+    Easy,
+    #[default]
+    Normal,
+    Hard,
+}
+
+impl Difficulty {
+    pub fn well_strength_mult(&self) -> f32 {
+        match self {
+            Difficulty::Easy => 0.5,
+            Difficulty::Normal => 1.0,
+            Difficulty::Hard => 2.0,
+        }
+    }
+}
+
 pub struct ActivePiece {
     pub piece_type: PieceType,
     pub x: i32,
@@ -59,14 +77,49 @@ pub struct Board {
     pub grid: [[Option<PieceType>; COLS]; ROWS],
     pub active: Option<ActivePiece>,
     pub wells: Vec<GravityWell>,
+    pub level: u32,
+    pub lines_cleared_total: u32,
+    pub difficulty: Difficulty,
 }
 
 impl Board {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(difficulty: Difficulty) -> Self {
+        let mut board = Self {
             grid: [[None; COLS]; ROWS],
             active: None,
             wells: Vec::new(),
+            level: 1,
+            lines_cleared_total: 0,
+            difficulty,
+        };
+        board.update_wells();
+        board
+    }
+
+    pub fn update_wells(&mut self) {
+        self.wells.clear();
+        // Number of wells: 1 at level 1, +1 every 5 levels, max 4
+        let num_wells = (1 + (self.level - 1) / 5).min(4);
+        // Base strength increases with level and difficulty
+        let base_strength = (20.0 + self.level as f32 * 5.0) * self.difficulty.well_strength_mult();
+
+        for _ in 0..num_wells {
+            let wx = quad_rand::gen_range(0, COLS as i32);
+            let wy = quad_rand::gen_range(ROWS as i32 / 2, ROWS as i32); // Wells in lower half
+            self.wells.push(GravityWell {
+                x: wx,
+                y: wy,
+                strength: base_strength,
+            });
+        }
+    }
+
+    pub fn add_lines_cleared(&mut self, lines: u32) {
+        self.lines_cleared_total += lines;
+        let new_level = 1 + self.lines_cleared_total / 10;
+        if new_level > self.level {
+            self.level = new_level;
+            self.update_wells();
         }
     }
 
@@ -253,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_move_piece() {
-        let mut board = Board::new();
+        let mut board = Board::new(Difficulty::Normal);
         board.active = Some(ActivePiece {
             piece_type: PieceType::O,
             x: 4,
@@ -269,7 +322,7 @@ mod tests {
 
     #[test]
     fn test_rotate_piece() {
-        let mut board = Board::new();
+        let mut board = Board::new(Difficulty::Normal);
         board.active = Some(ActivePiece {
             piece_type: PieceType::T,
             x: 4,
@@ -285,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_clear_lines() {
-        let mut board = Board::new();
+        let mut board = Board::new(Difficulty::Normal);
         for x in 0..COLS {
             board.grid[ROWS - 1][x] = Some(PieceType::O);
         }
@@ -299,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_gravity_well_pull() {
-        let mut board = Board::new();
+        let mut board = Board::new(Difficulty::Normal);
         board.active = Some(ActivePiece {
             piece_type: PieceType::O,
             x: 0,
