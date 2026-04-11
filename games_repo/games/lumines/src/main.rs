@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.11.232";
+const VERSION: &str = "26.04.11.233";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;
@@ -98,10 +98,14 @@ const MAX_NAME_LENGTH: usize = 10;
 #[cfg(target_arch = "wasm32")]
 const MOBILE_POPUP_MAX_WIDTH: f32 = 600.0;
 
+use shared::leaderboard::GameMode;
+
 #[derive(Serialize, Deserialize, Clone)]
 struct LeaderboardEntry {
     name: String,
     score: u32,
+    #[serde(default)]
+    mode: GameMode,
 }
 
 fn load_high_scores() -> Vec<LeaderboardEntry> {
@@ -144,7 +148,7 @@ fn random_2x2_block() -> [[BlockColor; 2]; 2] {
 /// Uses an exponential decay curve and clamps to 0.05s so late-game
 /// speed remains challenging but still human-playable.
 /// Speed plateaus after level 105.
-fn drop_interval_for_level(level: u32, diff: Difficulty) -> f32 {
+fn drop_interval_for_level(level: u32, diff: GameMode) -> f32 {
     let effective_level = level.min(105);
     diff.drop_interval_base()
         * diff
@@ -156,7 +160,7 @@ fn drop_interval_for_level(level: u32, diff: Difficulty) -> f32 {
 /// Returns timeline speed multiplier for a given level and difficulty.
 /// Starts at 1.0 on level 1, increases per level, and is capped.
 /// Speed plateaus at level 105.
-fn timeline_speedup_for_level(level: u32, diff: Difficulty) -> f32 {
+fn timeline_speedup_for_level(level: u32, diff: GameMode) -> f32 {
     let effective_level = level.min(105);
     (1.0 + effective_level.saturating_sub(1) as f32 * diff.timeline_speedup_per_level())
         .min(diff.timeline_speedup_max())
@@ -468,52 +472,57 @@ fn draw_chain_symbol(x: f32, y: f32, size: f32) {
     );
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
-enum Difficulty {
-    #[default]
-    Easy,
-    Normal,
-    Hard,
+trait LuminesGameMode {
+    fn drop_interval_base(&self) -> f32;
+    fn drop_interval_per_level(&self) -> f32;
+    fn timeline_speedup_per_level(&self) -> f32;
+    fn timeline_speedup_max(&self) -> f32;
+    fn squares_per_level(&self) -> u32;
 }
 
-impl Difficulty {
+impl LuminesGameMode for GameMode {
     fn drop_interval_base(&self) -> f32 {
         match self {
-            Difficulty::Easy => 1.0,
-            Difficulty::Normal => 0.8,
-            Difficulty::Hard => 0.6,
+            GameMode::Easy => 1.0,
+            GameMode::Normal => 0.8,
+            GameMode::Hard => 0.6,
+            _ => 0.8,
         }
     }
 
     fn drop_interval_per_level(&self) -> f32 {
         match self {
-            Difficulty::Easy => 0.98,
-            Difficulty::Normal => 0.96,
-            Difficulty::Hard => 0.94,
+            GameMode::Easy => 0.98,
+            GameMode::Normal => 0.96,
+            GameMode::Hard => 0.94,
+            _ => 0.96,
         }
     }
 
     fn timeline_speedup_per_level(&self) -> f32 {
         match self {
-            Difficulty::Easy => 0.01,
-            Difficulty::Normal => 0.015,
-            Difficulty::Hard => 0.02,
+            GameMode::Easy => 0.01,
+            GameMode::Normal => 0.015,
+            GameMode::Hard => 0.02,
+            _ => 0.015,
         }
     }
 
     fn timeline_speedup_max(&self) -> f32 {
         match self {
-            Difficulty::Easy => 1.35,
-            Difficulty::Normal => 1.6,
-            Difficulty::Hard => 2.0,
+            GameMode::Easy => 1.35,
+            GameMode::Normal => 1.6,
+            GameMode::Hard => 2.0,
+            _ => 1.6,
         }
     }
 
     fn squares_per_level(&self) -> u32 {
         match self {
-            Difficulty::Easy => 5,
-            Difficulty::Normal => 4,
-            Difficulty::Hard => 3,
+            GameMode::Easy => 5,
+            GameMode::Normal => 4,
+            GameMode::Hard => 3,
+            _ => 4,
         }
     }
 }
@@ -536,7 +545,7 @@ struct Game {
     game_over: bool,
     waiting_to_start: bool,
     difficulty_selection: bool,
-    difficulty: Difficulty,
+    difficulty: GameMode,
     drop_timer: f32,
     drop_interval: f32,
     audio: AudioManager,
@@ -721,7 +730,7 @@ impl Game {
             game_over: false,
             waiting_to_start: true,
             difficulty_selection: false,
-            difficulty: Difficulty::Easy,
+            difficulty: GameMode::Easy,
             drop_timer: 0.0,
             drop_interval: 1.0,
             audio,
@@ -766,6 +775,7 @@ impl Game {
         self.high_scores.push(LeaderboardEntry {
             name: name.to_string(),
             score: self.score,
+            mode: self.difficulty,
         });
         self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
         self.high_scores.truncate(MAX_HIGH_SCORES);
@@ -898,7 +908,7 @@ impl Game {
                 let mut btn_y = sh * 0.4 + sh * 0.08 + sh * 0.1; // Matches draw() logic
                 let btn_spacing = btn_h * 1.3;
 
-                let options = [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard];
+                let options = [GameMode::Easy, GameMode::Normal, GameMode::Hard];
                 for opt in options {
                     if mx >= btn_x && mx <= btn_x + btn_w && my >= btn_y && my <= btn_y + btn_h {
                         self.difficulty = opt;
@@ -913,7 +923,7 @@ impl Game {
                 }
             }
             if is_key_pressed(KeyCode::Key1) {
-                self.difficulty = Difficulty::Easy;
+                self.difficulty = GameMode::Easy;
                 self.difficulty_selection = false;
                 self.waiting_to_start = false;
                 self.entry_timer = ENTRY_DELAY;
@@ -922,7 +932,7 @@ impl Game {
                 return;
             }
             if is_key_pressed(KeyCode::Key2) {
-                self.difficulty = Difficulty::Normal;
+                self.difficulty = GameMode::Normal;
                 self.difficulty_selection = false;
                 self.waiting_to_start = false;
                 self.entry_timer = ENTRY_DELAY;
@@ -931,7 +941,7 @@ impl Game {
                 return;
             }
             if is_key_pressed(KeyCode::Key3) {
-                self.difficulty = Difficulty::Hard;
+                self.difficulty = GameMode::Hard;
                 self.difficulty_selection = false;
                 self.waiting_to_start = false;
                 self.entry_timer = ENTRY_DELAY;
@@ -1996,7 +2006,7 @@ impl Game {
             current_y += sh * 0.08;
 
             let start_text = if self.difficulty_selection {
-                "Select Difficulty"
+                "Select GameMode"
             } else {
                 "TAP or SPACE to Start"
             };
@@ -2018,9 +2028,9 @@ impl Game {
                 let btn_spacing = btn_h * 1.3;
 
                 let options = [
-                    (Difficulty::Easy, "EASY", GREEN),
-                    (Difficulty::Normal, "NORMAL", YELLOW),
-                    (Difficulty::Hard, "HARD", RED),
+                    (GameMode::Easy, "EASY", GREEN),
+                    (GameMode::Normal, "NORMAL", YELLOW),
+                    (GameMode::Hard, "HARD", RED),
                 ];
 
                 for (_, label, color) in options {
@@ -2108,6 +2118,9 @@ impl Game {
                     let score_str = format!("{}", entry.score);
                     let sem = measure_text(&score_str, None, entry_sz as u16, 1.0);
                     draw_text(&score_str, score_x - sem.width, y, entry_sz, color);
+
+                    // Mode indicator
+                    entry.mode.draw_icon(score_x + 10.0, y, entry_sz * 0.7, color, None);
                 }
             }
 
@@ -2299,15 +2312,15 @@ mod tests {
 
     #[test]
     fn drop_interval_decreases_with_level_and_difficulty() {
-        let easy_1 = drop_interval_for_level(1, Difficulty::Easy);
-        let normal_1 = drop_interval_for_level(1, Difficulty::Normal);
-        let hard_1 = drop_interval_for_level(1, Difficulty::Hard);
+        let easy_1 = drop_interval_for_level(1, GameMode::Easy);
+        let normal_1 = drop_interval_for_level(1, GameMode::Normal);
+        let hard_1 = drop_interval_for_level(1, GameMode::Hard);
         
         assert!(easy_1 > normal_1);
         assert!(normal_1 > hard_1);
 
-        let easy_10 = drop_interval_for_level(10, Difficulty::Easy);
-        let normal_10 = drop_interval_for_level(10, Difficulty::Normal);
+        let easy_10 = drop_interval_for_level(10, GameMode::Easy);
+        let normal_10 = drop_interval_for_level(10, GameMode::Normal);
         
         assert!(easy_1 > easy_10);
         assert!(easy_10 > normal_10);
@@ -2315,9 +2328,9 @@ mod tests {
 
     #[test]
     fn timeline_speedup_increases_with_level_and_difficulty() {
-        let easy_20 = timeline_speedup_for_level(20, Difficulty::Easy);
-        let normal_20 = timeline_speedup_for_level(20, Difficulty::Normal);
-        let hard_20 = timeline_speedup_for_level(20, Difficulty::Hard);
+        let easy_20 = timeline_speedup_for_level(20, GameMode::Easy);
+        let normal_20 = timeline_speedup_for_level(20, GameMode::Normal);
+        let hard_20 = timeline_speedup_for_level(20, GameMode::Hard);
 
         assert!(easy_20 < normal_20);
         assert!(normal_20 < hard_20);
@@ -2325,17 +2338,17 @@ mod tests {
 
     #[test]
     fn timeline_speedup_caps_per_difficulty() {
-        for diff in [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard] {
+        for diff in [GameMode::Easy, GameMode::Normal, GameMode::Hard] {
             let at_105 = timeline_speedup_for_level(105, diff);
             let at_200 = timeline_speedup_for_level(200, diff);
             assert_eq!(
                 at_105, at_200,
-                "Difficulty {:?} should plateau at level 105",
+                "GameMode {:?} should plateau at level 105",
                 diff
             );
             assert!(
                 (at_105 - diff.timeline_speedup_max()).abs() < 1e-6,
-                "Difficulty {:?} should reach its configured max",
+                "GameMode {:?} should reach its configured max",
                 diff
             );
         }

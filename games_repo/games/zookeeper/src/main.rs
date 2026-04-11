@@ -8,6 +8,7 @@ use macroquad::prelude::collections::storage;
 use macroquad::prelude::*;
 use quad_rand as qrand;
 use serde::{Deserialize, Serialize};
+use shared::leaderboard::GameMode;
 use shared::easing::ease_back_out;
 use shared::touch_input::{get_grid_coords, keyboard_swap_target};
 
@@ -16,7 +17,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.04.11.232";
+const VERSION: &str = "26.04.11.233";
 
 // Animation Constants
 const LEVEL_UP_TOTAL_DELAY: f32 = 1.0;
@@ -107,6 +108,8 @@ struct LeaderboardEntry {
     score: u32,
     combo: u32,
     #[serde(default)]
+    mode: GameMode,
+    #[serde(default, skip_serializing)]
     snail: bool,
 }
 
@@ -147,7 +150,7 @@ enum GameState {
         score: u32,
         combo: u32,
         input: shared::input::TextInput,
-        snail: bool,
+        mode: GameMode,
     },
     /// The board is being shuffled because no moves are left.
     Shuffling {
@@ -249,12 +252,19 @@ impl Board {
 
     fn load_high_scores() -> Vec<LeaderboardEntry> {
         let mut scores: Vec<LeaderboardEntry> = shared::leaderboard::load_scores();
+        // Migration: convert snail: bool to mode: GameMode
+        for entry in scores.iter_mut() {
+            if entry.snail && entry.mode == GameMode::Normal {
+                entry.mode = GameMode::Slow;
+            }
+        }
         if scores.is_empty() {
             scores = vec![
                 LeaderboardEntry {
                     name: "---".to_string(),
                     score: 0,
                     combo: 0,
+                    mode: GameMode::Normal,
                     snail: false
                 };
                 MAX_HIGH_SCORES
@@ -268,7 +278,7 @@ impl Board {
             || self.high_scores.len() < MAX_HIGH_SCORES
     }
 
-    fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32, snail: bool) {
+    fn add_to_leaderboard(&mut self, name: String, score: u32, combo: u32, mode: GameMode) {
         let name = if name.trim().is_empty() {
             "ANON".to_string()
         } else {
@@ -285,7 +295,8 @@ impl Board {
             name,
             score,
             combo,
-            snail,
+            mode,
+            snail: false,
         });
         self.high_scores.sort_by(|a, b| b.score.cmp(&a.score));
         self.high_scores.truncate(MAX_HIGH_SCORES);
@@ -590,7 +601,11 @@ async fn main() {
                         score: board.score,
                         combo: board.max_combo,
                         input: shared::input::TextInput::new(10, "".to_string()),
-                        snail: board.snail_used,
+                        mode: if board.snail_used {
+                            GameMode::Slow
+                        } else {
+                            GameMode::Normal
+                        },
                     };
                 } else {
                     board.state = GameState::GameOver;
@@ -1134,7 +1149,7 @@ async fn main() {
                 score,
                 combo,
                 ref mut input,
-                snail,
+                mode,
             } => {
                 let ok_w = sw * 0.3;
                 let ok_x = sw / 2.0 - ok_w / 2.0;
@@ -1158,7 +1173,7 @@ async fn main() {
                     } else {
                         input.content.clone()
                     };
-                    board.add_to_leaderboard(current_name, score, combo, snail);
+                    board.add_to_leaderboard(current_name, score, combo, mode);
                     board.state = GameState::GameOver;
                 }
             }
@@ -1596,19 +1611,13 @@ async fn main() {
                     color,
                 );
 
-                if entry.snail {
-                    let snail_s = font_size * 0.4;
-                    draw_texture_ex(
-                        &tex_snail,
-                        score_x + 10.0,
-                        y - snail_s * 0.8,
-                        color,
-                        DrawTextureParams {
-                            dest_size: Some(vec2(snail_s, snail_s)),
-                            ..Default::default()
-                        },
-                    );
-                }
+                entry.mode.draw_icon(
+                    score_x + 10.0,
+                    y,
+                    font_size * 0.4,
+                    color,
+                    Some(&tex_snail),
+                );
             }
             if (get_time() * 2.0) as i32 % 2 == 0 {
                 draw_text_centered("TAP TO RESTART", sh * 0.9, font_size * 0.7, YELLOW);
@@ -1673,14 +1682,14 @@ async fn main() {
             score,
             combo,
             input,
-            snail,
+            mode,
         } = &board.state
         {
             draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.9));
             draw_text_centered("NEW HIGH SCORE!", sh * 0.15, font_size, YELLOW);
             let mut stats = format!("SCORE: {}  COMBO: X{}", score, combo);
-            if *snail {
-                stats.push_str(" (SNAIL)");
+            if *mode != GameMode::Normal {
+                stats.push_str(&format!(" ({})", mode.label()));
             }
             draw_text_centered(&stats, sh * 0.25, font_size * 0.6, WHITE);
 
