@@ -7,7 +7,7 @@ use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.247";
+const VERSION: &str = "26.04.11.248";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
@@ -23,6 +23,12 @@ async fn main() {
     let mut input = InputManager::new();
     let mut audio = AudioManager::new().await;
     let mut state = AppState::Menu;
+
+    // Load UI Icons
+    let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../assets/mute_on.png"), None);
+    let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../assets/mute_off.png"), None);
+    let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../assets/pause.png"), None);
+    let tex_play = Texture2D::from_file_with_format(include_bytes!("../../assets/play.png"), None);
     
     let mut last_update = get_time();
     let mut last_gravity = get_time();
@@ -46,9 +52,33 @@ async fn main() {
         let vx = (sw - virtual_width * scale) / 2.0;
         let vy = (sh - virtual_height * scale) / 2.0;
 
+        // UI Button regions
+        let btn_size = 24.0 * scale;
+        let pad = 5.0 * scale;
+        let mute_x = vx + virtual_width * scale - btn_size - pad;
+        let mute_y = vy + pad;
+        let pause_x = mute_x - btn_size - pad;
+        let pause_y = vy + pad;
+
         // Toggle Mute
         if is_key_pressed(KeyCode::M) {
             audio.toggle_mute();
+        }
+
+        // Handle Mouse/Touch clicks on UI icons
+        if is_mouse_button_pressed(MouseButton::Left) {
+            let (mx, my) = mouse_position();
+            if mx >= mute_x && mx <= mute_x + btn_size && my >= mute_y && my <= mute_y + btn_size {
+                audio.toggle_mute();
+            } else if mx >= pause_x && mx <= pause_x + btn_size && my >= pause_y && my <= pause_y + btn_size {
+                if state == AppState::Playing {
+                    state = AppState::Paused;
+                    audio.stop_music();
+                } else if state == AppState::Paused {
+                    state = AppState::Playing;
+                    audio.play_music();
+                }
+            }
         }
 
         match state {
@@ -201,10 +231,16 @@ async fn main() {
             draw_text(&format!("LINES: {}", board.lines_cleared_total), vx + 10.0 * scale, vy + 60.0 * scale, hud_font_size, WHITE);
             draw_text(&format!("MODE: {:?}", board.difficulty), vx + 10.0 * scale, vy + 80.0 * scale, hud_font_size, GRAY);
 
-            // Mute indicator
-            if audio.is_muted() {
-                draw_text("MUTED", vx + virtual_width * scale - 50.0 * scale, vy + 20.0 * scale, hud_font_size, RED);
-            }
+            // Draw UI Icons
+            let mute_tex = if audio.is_muted() { &tex_mute_on } else { &tex_mute_off };
+            draw_texture_ex(mute_tex, mute_x, mute_y, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(btn_size, btn_size)), ..Default::default()
+            });
+
+            let pause_tex = if state == AppState::Paused { &tex_play } else { &tex_pause };
+            draw_texture_ex(pause_tex, pause_x, pause_y, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(btn_size, btn_size)), ..Default::default()
+            });
 
             // Draw Touch Controls
             if state == AppState::Playing {
