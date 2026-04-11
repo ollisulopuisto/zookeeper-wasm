@@ -10,6 +10,7 @@ use crate::gfx::SpriteManager;
 use crate::input::InputManager;
 use crate::game::{Game, VIRTUAL_WIDTH, HUD_HEIGHT, PLAY_HEIGHT};
 
+#[allow(dead_code)]
 const VERSION: &str = "26.04.11.236";
 
 #[derive(Clone, PartialEq, Debug)]
