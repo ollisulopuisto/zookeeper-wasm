@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.248] - 2026-04-11
+## [26.4.11.249] - 2026-04-11
 ### Added
 - **Gravitris Audio:** Integrated a Lumines-inspired procedural music system and unique sound effects for rotation, landing, and line clears.
 - **Gravitris Animations:** Added expressive "squash and stretch" effects for piece movement and board impacts. Implemented a scaling clear animation for disappearing lines.

@@ -7,7 +7,7 @@ use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.248";
+const VERSION: &str = "26.04.11.249";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
@@ -286,6 +286,16 @@ async fn main() {
             let h_text = "3: HARD";
             let h_dims = measure_text(h_text, None, text_size as u16, 1.0);
             draw_text(h_text, center_x - h_dims.width / 2.0, vy + 182.0 * scale, text_size, BLACK);
+
+            // Controls Help
+            let help_text = "ARROWS/WASD: Move & Rotate  SPACE: Drop";
+            let h_size = 10.0 * scale;
+            let h_dims = measure_text(help_text, None, h_size as u16, 1.0);
+            draw_text(help_text, center_x - h_dims.width / 2.0, vy + 205.0 * scale, h_size, WHITE);
+
+            let help_text2 = "P: Pause  M: Mute";
+            let h_dims2 = measure_text(help_text2, None, h_size as u16, 1.0);
+            draw_text(help_text2, center_x - h_dims2.width / 2.0, vy + 218.0 * scale, h_size, WHITE);
         }
 
         // Draw Version
