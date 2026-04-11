@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.10.232] - 2026-04-10
+## [26.4.11.232] - 2026-04-10
 ### Fixed
 - **Bubbles "Zipping" Bug:** Captured enemies no longer warp sideways when rising through platforms. Bubbles now only check for horizontal wall collisions during their initial forward travel phase.
 ### Changed
