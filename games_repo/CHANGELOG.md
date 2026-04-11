@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.237] - 2026-04-11
+## [26.4.11.238] - 2026-04-11
 ### Added
 - **New Game: Gravitris WASM:** A Tetris clone with "Gravity Wells" that pull the active piece towards them.
   - Implemented core Tetris mechanics (movement, rotation, line clearing).
