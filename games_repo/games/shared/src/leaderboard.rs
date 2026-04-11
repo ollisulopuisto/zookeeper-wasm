@@ -18,6 +18,58 @@ unsafe fn js_ask_name(_ptr: *mut u8, _max_len: u32) -> u32 {
     0
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+pub enum GameMode {
+    #[default]
+    Normal,
+    Easy,
+    Hard,
+    Slow, // Zookeeper's snail mode
+}
+
+impl GameMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            GameMode::Normal => "NORMAL",
+            GameMode::Easy => "EASY",
+            GameMode::Hard => "HARD",
+            GameMode::Slow => "SNAIL",
+        }
+    }
+
+    pub fn draw_icon(
+        &self,
+        x: f32,
+        y: f32,
+        size: f32,
+        color: macroquad::prelude::Color,
+        tex_snail: Option<&macroquad::prelude::Texture2D>,
+    ) {
+        use macroquad::prelude::*;
+        match self {
+            GameMode::Slow | GameMode::Easy | GameMode::Hard => {
+                if let (GameMode::Slow, Some(tex)) = (self, tex_snail) {
+                    draw_texture_ex(
+                        tex,
+                        x,
+                        y - size * 0.8,
+                        color,
+                        DrawTextureParams {
+                            dest_size: Some(vec2(size, size)),
+                            ..Default::default()
+                        },
+                    );
+                } else {
+                    draw_text(self.label(), x, y, size, color);
+                }
+            }
+            GameMode::Normal => {
+                // Usually no icon for normal mode
+            }
+        }
+    }
+}
+
 pub fn load_list<T, F>(max_len: usize, mut loader: F) -> Vec<T>
 where
     T: DeserializeOwned,

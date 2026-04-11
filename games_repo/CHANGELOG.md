@@ -2,7 +2,14 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.10.232] - 2026-04-10
+## [26.4.11.235] - 2026-04-11
+### Added
+- **Leaderboard Abstraction:** Unified high score mode and difficulty tracking into the `shared` library.
+- **Lumines High Scores:** Difficulty level (Easy, Normal, Hard) is now stored and displayed in the high score list.
+### Changed
+- **Zookeeper High Scores:** Migrated Zookeeper's "Snail Mode" indicator to use the shared `GameMode` system while preserving the snail icon.
+
+## [26.4.11.232] - 2026-04-10
 ### Fixed
 - **Bubbles "Zipping" Bug:** Captured enemies no longer warp sideways when rising through platforms. Bubbles now only check for horizontal wall collisions during their initial forward travel phase.
 ### Changed

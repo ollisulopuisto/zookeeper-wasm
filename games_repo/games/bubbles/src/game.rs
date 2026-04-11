@@ -380,7 +380,10 @@ impl Game {
                 if self.level.is_wall(tx_left, ty) { b.pos.x = (tx_left * 16 + 16) as f32; b.vel.x = -b.vel.x; }
                 if self.level.is_wall(tx_right, ty) { b.pos.x = (tx_right * 16 - 16) as f32; b.vel.x = -b.vel.x; }
             } else {
-                b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
+                // Only drift if NOT carrying an enemy
+                if b.trapped_kind.is_none() {
+                    b.pos.x += (get_time() as f32 * 5.0 + b.pos.y * 0.1).sin() * 0.5;
+                }
             }
 
             if b.trapped_kind.is_some() {
