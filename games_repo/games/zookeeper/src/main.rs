@@ -17,7 +17,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.04.11.253";
+const VERSION: &str = "26.04.11.254";
 
 
 // Animation Constants

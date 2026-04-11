@@ -2,6 +2,13 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.11.254] - 2026-04-11
+### Changed
+- **Gravitris Touch Controls:** Removed the virtual gamepad. Implemented gesture-based controls: **Swipe Left/Right** to move, **Tap** to rotate, and **Swipe Down** to drop faster.
+### Fixed
+- **Gravitris Build:** Fixed a type mismatch in audio pattern indexing that caused compilation failures.
+- **Gravitris UX:** Adjusted gravity well placement to be always visible and ensured they never trap pieces mid-air.
+
 ## [26.4.11.253] - 2026-04-11
 ### Added
 - **Gravitris Audio:** Integrated a Lumines-inspired procedural music system and unique sound effects for rotation, landing, and line clears.
