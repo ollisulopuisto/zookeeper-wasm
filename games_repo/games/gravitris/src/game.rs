@@ -79,6 +79,7 @@ pub struct Board {
     pub wells: Vec<GravityWell>,
     pub level: u32,
     pub lines_cleared_total: u32,
+    pub score: u32,
     pub difficulty: Difficulty,
 }
 
@@ -90,6 +91,7 @@ impl Board {
             wells: Vec::new(),
             level: 1,
             lines_cleared_total: 0,
+            score: 0,
             difficulty,
         };
         board.update_wells();
@@ -116,6 +118,17 @@ impl Board {
 
     pub fn add_lines_cleared(&mut self, lines: u32) {
         self.lines_cleared_total += lines;
+        
+        // Classic scoring
+        let base_points = match lines {
+            1 => 100,
+            2 => 300,
+            3 => 500,
+            4 => 800,
+            _ => lines * 200,
+        };
+        self.score += base_points * self.level;
+
         let new_level = 1 + self.lines_cleared_total / 10;
         if new_level > self.level {
             self.level = new_level;

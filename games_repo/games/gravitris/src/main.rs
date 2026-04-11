@@ -5,7 +5,7 @@ use macroquad::prelude::*;
 use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 
-const VERSION: &str = "26.04.11.239";
+const VERSION: &str = "26.04.11.240";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
@@ -148,9 +148,10 @@ async fn main() {
 
             // Draw HUD
             let hud_font_size = 15.0 * scale;
-            draw_text(&format!("LEVEL: {}", board.level), vx + 10.0 * scale, vy + 20.0 * scale, hud_font_size, YELLOW);
-            draw_text(&format!("LINES: {}", board.lines_cleared_total), vx + 10.0 * scale, vy + 40.0 * scale, hud_font_size, WHITE);
-            draw_text(&format!("MODE: {:?}", board.difficulty), vx + 10.0 * scale, vy + 60.0 * scale, hud_font_size, GRAY);
+            draw_text(&format!("SCORE: {:06}", board.score), vx + 10.0 * scale, vy + 20.0 * scale, hud_font_size, GREEN);
+            draw_text(&format!("LEVEL: {}", board.level), vx + 10.0 * scale, vy + 40.0 * scale, hud_font_size, YELLOW);
+            draw_text(&format!("LINES: {}", board.lines_cleared_total), vx + 10.0 * scale, vy + 60.0 * scale, hud_font_size, WHITE);
+            draw_text(&format!("MODE: {:?}", board.difficulty), vx + 10.0 * scale, vy + 80.0 * scale, hud_font_size, GRAY);
 
             // Draw Touch Controls
             input.draw_controls(vx, vy, scale, virtual_width, virtual_height);
