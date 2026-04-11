@@ -151,13 +151,13 @@ impl Board {
     pub fn add_lines_cleared(&mut self, lines: u32) {
         self.lines_cleared_total += lines;
         
-        // Classic scoring
+        // Classic scoring with Tetris multiplier
         let base_points = match lines {
             1 => 100,
             2 => 300,
             3 => 500,
-            4 => 800,
-            _ => lines * 200,
+            4 => 1200, // Tetris bonus (previously 800)
+            _ => lines * 300,
         };
         self.score += base_points * self.level;
 
@@ -279,10 +279,13 @@ impl Board {
                 let gx = active.x + dx;
                 let gy = active.y + dy;
                 if gy >= 0 {
-                    // Stretch while falling fast or moving
-                    // For simplicity, just subtle constant stretch if not grounded
-                    let scale_y = 1.1;
-                    let scale_x = 0.9;
+                    let mut scale_x = 1.0;
+                    let mut scale_y = 1.0;
+                    
+                    // Subtle constant stretch while active
+                    let pulse = (get_time() * 10.0).sin() as f32;
+                    scale_y = 1.05 + pulse * 0.05;
+                    scale_x = 0.95 - pulse * 0.03;
 
                     let draw_w = cell_size * scale_x;
                     let draw_h = cell_size * scale_y;

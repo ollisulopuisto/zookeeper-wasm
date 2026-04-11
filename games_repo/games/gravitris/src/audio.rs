@@ -1,5 +1,5 @@
 use macroquad::audio::{load_sound_from_bytes, play_sound, stop_sound, PlaySoundParams, Sound};
-use shared::audio::{create_wav_header, generate_music_wav};
+use shared::audio::{create_wav_header, generate_music_wav_with_arrangement, Arrangement, Tone};
 
 pub struct AudioManager {
     pub rotate: Sound,
@@ -13,8 +13,16 @@ pub struct AudioManager {
 impl AudioManager {
     pub async fn new() -> Self {
         let seed: u32 = macroquad::rand::gen_range(0, 0x7FFFFFFF);
-        let bpm = 128.0;
-        let (wav, _) = generate_music_wav(Some(seed), bpm, None);
+        let bpm = 120.0;
+        
+        // Custom Gravitris arrangement: more Square and Saw waves, different variations
+        let mut arrangement = Arrangement::from_seed(seed);
+        for i in 0..8 {
+            arrangement.lead_tone[i] = if i % 2 == 0 { Tone::Square } else { Tone::Saw };
+            arrangement.drum_var[i] = (i % 6) as u8;
+        }
+        
+        let (wav, _) = generate_music_wav_with_arrangement(arrangement, bpm, None);
         
         Self {
             rotate: load_sound_from_bytes(&generate_rotate_wav()).await.unwrap(),
