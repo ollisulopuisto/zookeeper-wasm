@@ -9,6 +9,7 @@ A collection of self-contained, 60 FPS WebAssembly games built with Rust and Mac
 | Game | Description | Play |
 |------|-------------|------|
 | **Bubbles** | Bubble shooter | [Play](https://ollisulopuisto.github.io/games/bubbles/) |
+| **Gravitris** | Tetris with gravity wells | [Play](https://ollisulopuisto.github.io/games/gravitris/) |
 | **Jetpac** | Jetpac clone | [Play](https://ollisulopuisto.github.io/games/jetpac/) |
 | **Lumines** | Lumines-style puzzle game | [Play](https://ollisulopuisto.github.io/games/lumines/) |
 | **VoxelDash** | 2.5D procedural voxel platformer | [Play](https://ollisulopuisto.github.io/games/voxeldash/) |
@@ -36,6 +37,7 @@ A collection of self-contained, 60 FPS WebAssembly games built with Rust and Mac
 │   └── games/
 │       ├── shared/     # Shared Rust helpers for multiple games
 │       ├── bubbles/
+│       ├── gravitris/
 │       ├── jetpac/
 │       ├── lumines/
 │       ├── voxeldash/

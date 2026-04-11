@@ -6,6 +6,8 @@ A collection of self-contained, 60 FPS WASM games built with Rust and Macroquad.
 **[Main Portal on GitHub Pages](https://ollisulopuisto.github.io/games/)**
 
 Available Games:
+- **[Gravitris](https://ollisulopuisto.github.io/games/gravitris/)** - Tetris clone with gravity wells.
+- **[Lumines](https://ollisulopuisto.github.io/games/lumines/)** - Lumines-style puzzle game.
 - **[VoxelDash](https://ollisulopuisto.github.io/games/voxeldash/)** - 2.5D procedural voxel platformer (SVG-based).
 - **[Zookeeper Clone](https://ollisulopuisto.github.io/games/zookeeper/)**
 - **[Jetpac Clone](https://ollisulopuisto.github.io/games/jetpac/)**

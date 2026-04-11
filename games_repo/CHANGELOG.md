@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.236] - 2026-04-11
+## [26.4.11.237] - 2026-04-11
 ### Added
 - **New Game: Gravitris WASM:** A Tetris clone with "Gravity Wells" that pull the active piece towards them.
   - Implemented core Tetris mechanics (movement, rotation, line clearing).
@@ -10,9 +10,12 @@ All notable changes to the games in this monorepo will be documented in this fil
   - Integrated into the games portal and deployment pipeline.
 - **Leaderboard Abstraction:** Unified high score mode and difficulty tracking into the `shared` library.
 - **Lumines High Scores:** Difficulty level (Easy, Normal, Hard) is now stored and displayed in the high score list.
+- **Bubbles Animations:** Added "squash and stretch" effects to players and enemies for more expressive movement.
+- **Bubbles FX:** Implemented a new bubble pop animation triggered when an engulfed enemy is defeated.
 ### Changed
 - **Zookeeper High Scores:** Migrated Zookeeper's "Snail Mode" indicator to use the shared `GameMode` system while preserving the snail icon.
 ### Fixed
+- **Bubbles Balancing:** Nerfed initial bubble speed (2.2 -> 2.0) and range (0.4s -> 0.3s) to prevent early-game dominance and properly fixed powerup expiration logic that was inadvertently buffing stats.
 - **Bubbles UI Layout:** Fixed overlapping and off-center UI elements on desktop resolutions. Centered game over scores, titles, and menus using precise text measurement. Adjusted HUD spacing for improved readability.
 - **Bubbles High Scores:** Ensured the leaderboard always displays the top 10 scores by sorting them descending by value.
 

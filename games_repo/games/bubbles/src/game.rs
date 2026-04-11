@@ -60,6 +60,7 @@ pub struct Player {
     pub anim_timer: f32,
     pub blow_timer: f32,
     pub respawn_timer: f32,
+    pub impact_timer: f32,
     
     // Stats / Upgrades
     pub max_bubbles: usize,
@@ -86,9 +87,10 @@ impl Player {
             anim_timer: 0.0,
             blow_timer: 0.0,
             respawn_timer: 0.0,
+            impact_timer: 0.0,
             max_bubbles: 10,
-            bubble_speed: 2.2,
-            bubble_range: 0.4, // 0.4 seconds of forward travel
+            bubble_speed: 2.0,
+            bubble_range: 0.3, // 0.3 seconds of forward travel
             bubble_scale: 1.0,
             powerup_timer: 0.0,
             active_powerup: None,
@@ -108,6 +110,7 @@ pub struct Enemy {
     pub dead: bool,
     pub anim_timer: f32,
     pub jump_cooldown: f32,
+    pub impact_timer: f32,
 }
 
 impl Enemy {
@@ -125,6 +128,7 @@ impl Enemy {
             dead: false,
             anim_timer: 0.0,
             jump_cooldown: 0.0,
+            impact_timer: 0.0,
         }
     }
 
@@ -164,11 +168,19 @@ impl Level {
     }
 }
 
+pub struct PopParticle {
+    pub pos: Vec2,
+    pub timer: f32,
+    pub max_time: f32,
+    pub scale: f32,
+}
+
 pub struct Game {
     pub players: Vec<Player>,
     pub enemies: Vec<Enemy>,
     pub bubbles: Vec<Bubble>,
     pub items: Vec<Item>,
+    pub pop_particles: Vec<PopParticle>,
     pub level: Level,
     pub next_level: Option<Level>,
     pub current_level_idx: usize,
@@ -191,6 +203,7 @@ impl Game {
             enemies: Vec::new(),
             bubbles: Vec::new(),
             items: Vec::new(),
+            pop_particles: Vec::new(),
             level: Level { tiles: get_level_layout(0) },
             next_level: None,
             current_level_idx: 0,
@@ -247,6 +260,7 @@ impl Game {
         self.transition_timer = 0.001;
         self.bubbles.clear();
         self.items.clear();
+        self.pop_particles.clear();
         self.level_timer = 60.0;
         self.furious = false;
         self.level_width = VIRTUAL_WIDTH;
@@ -315,13 +329,14 @@ impl Game {
             }
             
             if p.blow_timer > 0.0 { p.blow_timer -= 0.016; }
+            if p.impact_timer > 0.0 { p.impact_timer -= 0.016; }
             if p.vel.x.abs() > 0.1 && p.grounded { p.anim_timer += 0.15; }
             else { p.anim_timer = 0.0; }
 
             if p.powerup_timer > 0.0 {
                 p.powerup_timer -= 0.016;
                 if p.powerup_timer <= 0.0 {
-                    p.max_bubbles = 10; p.bubble_speed = 3.5; p.bubble_range = 0.5; p.bubble_scale = 1.0;
+                    p.max_bubbles = 10; p.bubble_speed = 2.0; p.bubble_range = 0.3; p.bubble_scale = 1.0;
                     p.active_powerup = None;
                 }
             }
@@ -413,6 +428,7 @@ impl Game {
         for i in 0..self.enemies.len() {
             let e = &mut self.enemies[i];
             e.anim_timer += 0.1;
+            if e.impact_timer > 0.0 { e.impact_timer -= 0.016; }
             let speed_mult = if self.furious { 2.0 } else { 1.0 };
             match e.kind {
                 EnemyType::Walker => {
@@ -492,6 +508,7 @@ impl Game {
                     let b_rect = Rect::new(b.pos.x, b.pos.y, 16.0 * b.scale, 16.0 * b.scale);
                     if p_rect.overlaps(&b_rect) {
                         b.timer = 0.0; audio.play_bubble_pop();
+                        self.pop_particles.push(PopParticle { pos: b.pos, timer: 0.0, max_time: 0.3, scale: b.scale });
                         self.players[i].score += 500;
                         let ut = match next_rand(10) {
                             0 => Some(UpgradeType::MoreBubbles),
@@ -537,6 +554,9 @@ impl Game {
 
         self.enemies.retain(|e| !e.dead);
         self.items.retain(|it| it.timer > 0.0);
+        for p in self.pop_particles.iter_mut() { p.timer += 0.016; }
+        self.pop_particles.retain(|p| p.timer < p.max_time);
+        
         for it in self.items.iter_mut() { 
             it.timer -= 0.016; 
             if !it.grounded {
@@ -620,6 +640,15 @@ impl Game {
             }
         }
 
+        for p in &self.pop_particles {
+            let t = p.timer / p.max_time;
+            let alpha = 1.0 - t;
+            let s = (1.0 + t * 0.5) * p.scale;
+            draw_texture_ex(&gfx.bubble, vx + p.pos.x * scale, game_vy + p.pos.y * scale, Color::new(1.0, 1.0, 1.0, alpha), DrawTextureParams {
+                dest_size: Some(vec2(16.0 * s * scale, 16.0 * s * scale)), ..Default::default()
+            });
+        }
+
         for e in &self.enemies {
             if !e.dead {
                 let frame_idx = (e.anim_timer as usize) % 2;
@@ -628,8 +657,28 @@ impl Game {
                     EnemyType::Flyer => SKYBLUE,
                     EnemyType::Bouncer => ORANGE,
                 };
-                draw_texture_ex(&gfx.zen_chan[frame_idx], vx + e.pos.x * scale, game_vy + e.pos.y * scale, tint, DrawTextureParams {
-                    dest_size: Some(vec2(16.0 * scale, 16.0 * scale)), flip_x: e.vel.x < 0.0, ..Default::default()
+                
+                let mut scale_x = 1.0;
+                let mut scale_y = 1.0;
+                if e.impact_timer > 0.0 {
+                    let t = e.impact_timer / 0.15;
+                    let s = (t * std::f32::consts::PI).sin();
+                    scale_y = 1.0 - s * 0.2;
+                    scale_x = 1.0 + s * 0.1;
+                } else if e.vel.y.abs() > 0.1 {
+                    // Stretch while falling/jumping
+                    let stretch = (e.vel.y.abs() * 0.05).min(0.2);
+                    scale_y = 1.0 + stretch;
+                    scale_x = 1.0 - stretch * 0.5;
+                }
+
+                let draw_w = 16.0 * scale * scale_x;
+                let draw_h = 16.0 * scale * scale_y;
+                let dx = vx + e.pos.x * scale + (16.0 * scale - draw_w) / 2.0;
+                let dy = game_vy + e.pos.y * scale + (16.0 * scale - draw_h); // Anchor to bottom
+
+                draw_texture_ex(&gfx.zen_chan[frame_idx], dx, dy, tint, DrawTextureParams {
+                    dest_size: Some(vec2(draw_w, draw_h)), flip_x: e.vel.x < 0.0, ..Default::default()
                 });
             }
         }
@@ -652,8 +701,28 @@ impl Game {
                 else if p.anim_timer > 0.0 { &gfx.bob_walk[(p.anim_timer as usize) % 2] }
                 else { &gfx.bob_idle }
             };
-            draw_texture_ex(tex, vx + p.pos.x * scale, game_vy + p.pos.y * scale, WHITE, DrawTextureParams {
-                dest_size: Some(vec2(16.0 * scale, 16.0 * scale)), flip_x: p.dir == Direction::Left, ..Default::default()
+
+            let mut scale_x = 1.0;
+            let mut scale_y = 1.0;
+            if p.impact_timer > 0.0 {
+                let t = p.impact_timer / 0.15;
+                let s = (t * std::f32::consts::PI).sin();
+                scale_y = 1.0 - s * 0.25;
+                scale_x = 1.0 + s * 0.15;
+            } else if !p.grounded {
+                // Stretch while falling/jumping
+                let stretch = (p.vel.y.abs() * 0.05).min(0.25);
+                scale_y = 1.0 + stretch;
+                scale_x = 1.0 - stretch * 0.5;
+            }
+
+            let draw_w = 16.0 * scale * scale_x;
+            let draw_h = 16.0 * scale * scale_y;
+            let dx = vx + p.pos.x * scale + (16.0 * scale - draw_w) / 2.0;
+            let dy = game_vy + p.pos.y * scale + (16.0 * scale - draw_h); // Anchor to bottom
+
+            draw_texture_ex(tex, dx, dy, WHITE, DrawTextureParams {
+                dest_size: Some(vec2(draw_w, draw_h)), flip_x: p.dir == Direction::Left, ..Default::default()
             });
         }
 
@@ -734,6 +803,7 @@ fn handle_player_collision(p: &mut Player, level: &Level) {
         // Only land if falling and bottom of sprite was above the tile in the previous frame
         if p.vel.y >= 0.0 && p.pos.y + PLAYER_SIZE - p.vel.y <= ground_tile_y as i32 as f32 * TILE_SIZE {
             p.pos.y = ground_tile_y as i32 as f32 * TILE_SIZE - PLAYER_SIZE;
+            if p.vel.y > 1.0 { p.impact_timer = 0.15; }
             p.vel.y = 0.0;
             p.grounded = true;
         }
@@ -790,6 +860,7 @@ fn handle_enemy_collision(e: &mut Enemy, level: &Level) -> bool {
     if level.is_wall(ground_tile_x as i32, ground_tile_y as i32) {
         if e.vel.y >= 0.0 && e.pos.y + 16.0 - e.vel.y <= (ground_tile_y as i32 * 16) as f32 {
             e.pos.y = (ground_tile_y as i32 * 16) as f32 - 16.0; 
+            if e.vel.y > 1.0 { e.impact_timer = 0.15; }
             e.vel.y = 0.0; 
             grounded = true;
         }

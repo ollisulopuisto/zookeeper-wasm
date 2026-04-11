@@ -10,6 +10,7 @@ EMOJIS = {
     "panda": "1f43c",
     "frog": "1f438",
     "hippo": "1f99b",
+    "lion": "1f981",
     "zebra": "1f993",
     "pig": "1f437",
     "koala": "1f428",

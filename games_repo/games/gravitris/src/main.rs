@@ -3,7 +3,7 @@ mod game;
 use macroquad::prelude::*;
 use crate::game::{Board, COLS, ROWS, GravityWell};
 
-const VERSION: &str = "26.04.11.236";
+const VERSION: &str = "26.04.11.237";
 
 #[macroquad::main("Gravitris")]
 async fn main() {
