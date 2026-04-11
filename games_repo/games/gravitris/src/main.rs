@@ -7,7 +7,7 @@ use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.249";
+const VERSION: &str = "26.04.11.250";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
@@ -25,10 +25,10 @@ async fn main() {
     let mut state = AppState::Menu;
 
     // Load UI Icons
-    let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../assets/mute_on.png"), None);
-    let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../assets/mute_off.png"), None);
-    let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../assets/pause.png"), None);
-    let tex_play = Texture2D::from_file_with_format(include_bytes!("../../assets/play.png"), None);
+    let tex_mute_on = Texture2D::from_file_with_format(include_bytes!("../../../assets/mute_on.png"), None);
+    let tex_mute_off = Texture2D::from_file_with_format(include_bytes!("../../../assets/mute_off.png"), None);
+    let tex_pause = Texture2D::from_file_with_format(include_bytes!("../../../assets/pause.png"), None);
+    let tex_play = Texture2D::from_file_with_format(include_bytes!("../../../assets/play.png"), None);
     
     let mut last_update = get_time();
     let mut last_gravity = get_time();
