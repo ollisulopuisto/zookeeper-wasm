@@ -81,6 +81,9 @@ pub struct Board {
     pub lines_cleared_total: u32,
     pub score: u32,
     pub difficulty: Difficulty,
+    pub impact_timer: f32,
+    pub clearing_lines: Vec<usize>,
+    pub clear_anim_timer: f32,
 }
 
 impl Board {
@@ -93,9 +96,38 @@ impl Board {
             lines_cleared_total: 0,
             score: 0,
             difficulty,
+            impact_timer: 0.0,
+            clearing_lines: Vec::new(),
+            clear_anim_timer: 0.0,
         };
         board.update_wells();
         board
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        if self.impact_timer > 0.0 { self.impact_timer -= dt; }
+        if self.clear_anim_timer > 0.0 {
+            self.clear_anim_timer -= dt;
+            if self.clear_anim_timer <= 0.0 {
+                self.finalize_clear();
+            }
+        }
+    }
+
+    fn finalize_clear(&mut self) {
+        let lines_to_clear = self.clearing_lines.clone();
+        for &y in &lines_to_clear {
+            for row in (1..=y).rev() {
+                for x in 0..COLS {
+                    self.grid[row][x] = self.grid[row - 1][x];
+                }
+            }
+            for x in 0..COLS {
+                self.grid[0][x] = None;
+            }
+        }
+        self.add_lines_cleared(lines_to_clear.len() as u32);
+        self.clearing_lines.clear();
     }
 
     pub fn update_wells(&mut self) {
@@ -196,12 +228,47 @@ impl Board {
             draw_line(offset_x, offset_y + y as f32 * cell_size, offset_x + COLS as f32 * cell_size, offset_y + y as f32 * cell_size, 1.0, Color::new(0.2, 0.2, 0.2, 1.0));
         }
 
+        // Global board squash/stretch from impact
+        let mut board_scale_x = 1.0;
+        let mut board_scale_y = 1.0;
+        if self.impact_timer > 0.0 {
+            let t = self.impact_timer / 0.15;
+            let s = (t * std::f32::consts::PI).sin();
+            board_scale_y = 1.0 - s * 0.05;
+            board_scale_x = 1.0 + s * 0.03;
+        }
+
         // Draw placed blocks
         for y in 0..ROWS {
+            let is_clearing = self.clearing_lines.contains(&y);
+            let alpha = if is_clearing {
+                (self.clear_anim_timer / 0.3).min(1.0)
+            } else {
+                1.0
+            };
+            let clear_scale = if is_clearing {
+                1.0 + (1.0 - alpha) * 0.5
+            } else {
+                1.0
+            };
+
             for x in 0..COLS {
                 if let Some(piece_type) = self.grid[y][x] {
-                    draw_rectangle(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, piece_type.color());
-                    draw_rectangle_lines(offset_x + x as f32 * cell_size, offset_y + y as f32 * cell_size, cell_size, cell_size, 2.0, BLACK);
+                    let mut color = piece_type.color();
+                    color.a = alpha;
+
+                    let draw_cell_size = cell_size * clear_scale;
+                    let bx = offset_x + x as f32 * cell_size + (cell_size - draw_cell_size) / 2.0;
+                    let by = offset_y + y as f32 * cell_size + (cell_size - draw_cell_size); // Anchor bottom
+
+                    // Apply board-wide squash
+                    let final_w = draw_cell_size * board_scale_x;
+                    let final_h = draw_cell_size * board_scale_y;
+                    let final_x = bx + (draw_cell_size - final_w) / 2.0;
+                    let final_y = by + (draw_cell_size - final_h);
+
+                    draw_rectangle(final_x, final_y, final_w, final_h, color);
+                    draw_rectangle_lines(final_x, final_y, final_w, final_h, 2.0, Color::new(0.0, 0.0, 0.0, alpha));
                 }
             }
         }
@@ -212,8 +279,18 @@ impl Board {
                 let gx = active.x + dx;
                 let gy = active.y + dy;
                 if gy >= 0 {
-                    draw_rectangle(offset_x + gx as f32 * cell_size, offset_y + gy as f32 * cell_size, cell_size, cell_size, active.piece_type.color());
-                    draw_rectangle_lines(offset_x + gx as f32 * cell_size, offset_y + gy as f32 * cell_size, cell_size, cell_size, 2.0, WHITE);
+                    // Stretch while falling fast or moving
+                    // For simplicity, just subtle constant stretch if not grounded
+                    let scale_y = 1.1;
+                    let scale_x = 0.9;
+
+                    let draw_w = cell_size * scale_x;
+                    let draw_h = cell_size * scale_y;
+                    let bx = offset_x + gx as f32 * cell_size + (cell_size - draw_w) / 2.0;
+                    let by = offset_y + gy as f32 * cell_size + (cell_size - draw_h);
+
+                    draw_rectangle(bx, by, draw_w, draw_h, active.piece_type.color());
+                    draw_rectangle_lines(bx, by, draw_w, draw_h, 2.0, WHITE);
                 }
             }
         }
@@ -265,6 +342,7 @@ impl Board {
                     self.grid[gy as usize][gx as usize] = Some(active.piece_type);
                 }
             }
+            self.impact_timer = 0.15;
         }
     }
 
@@ -283,9 +361,8 @@ impl Board {
     }
 
     pub fn clear_lines(&mut self) -> usize {
-        let mut cleared = 0;
-        let mut y = ROWS - 1;
-        while y < ROWS {
+        let mut lines_found = Vec::new();
+        for y in 0..ROWS {
             let mut full = true;
             for x in 0..COLS {
                 if self.grid[y][x].is_none() {
@@ -293,23 +370,16 @@ impl Board {
                     break;
                 }
             }
-
             if full {
-                cleared += 1;
-                for row in (1..=y).rev() {
-                    for x in 0..COLS {
-                        self.grid[row][x] = self.grid[row - 1][x];
-                    }
-                }
-                for x in 0..COLS {
-                    self.grid[0][x] = None;
-                }
-            } else {
-                if y == 0 { break; }
-                y -= 1;
+                lines_found.push(y);
             }
         }
-        cleared
+
+        if !lines_found.is_empty() {
+            self.clearing_lines = lines_found.clone();
+            self.clear_anim_timer = 0.3;
+        }
+        lines_found.len()
     }
 }
 

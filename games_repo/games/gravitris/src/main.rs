@@ -1,16 +1,19 @@
 mod game;
 mod input;
+mod audio;
 
 use macroquad::prelude::*;
 use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
+use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.240";
+const VERSION: &str = "26.04.11.241";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
     Menu,
     Playing,
+    Paused,
     GameOver,
 }
 
@@ -18,6 +21,7 @@ enum AppState {
 async fn main() {
     let mut board = Board::new(Difficulty::Normal);
     let mut input = InputManager::new();
+    let mut audio = AudioManager::new().await;
     let mut state = AppState::Menu;
     
     let mut last_update = get_time();
@@ -26,6 +30,8 @@ async fn main() {
     let gravity_well_speed = 0.2;
 
     loop {
+        let dt = get_frame_time();
+        
         // Dynamic virtual height: reserve space for controls if touch is active
         let virtual_width = 256.0;
         let virtual_height = if input.touch_active { 400.0 } else { 224.0 };
@@ -40,26 +46,33 @@ async fn main() {
         let vx = (sw - virtual_width * scale) / 2.0;
         let vy = (sh - virtual_height * scale) / 2.0;
 
+        // Toggle Mute
+        if is_key_pressed(KeyCode::M) {
+            audio.toggle_mute();
+        }
+
         match state {
             AppState::Menu => {
                 if is_key_pressed(KeyCode::Key1) {
                     board = Board::new(Difficulty::Easy);
                     board.spawn_piece();
                     state = AppState::Playing;
+                    audio.play_music();
                 } else if is_key_pressed(KeyCode::Key2) {
                     board = Board::new(Difficulty::Normal);
                     board.spawn_piece();
                     state = AppState::Playing;
+                    audio.play_music();
                 } else if is_key_pressed(KeyCode::Key3) {
                     board = Board::new(Difficulty::Hard);
                     board.spawn_piece();
                     state = AppState::Playing;
+                    audio.play_music();
                 } else if is_mouse_button_pressed(MouseButton::Left) {
                     let mx = mouse_position().0;
                     let my = mouse_position().1;
                     
                     let btn_w = 100.0 * scale;
-                    let _btn_h = 30.0 * scale;
                     let btn_x = vx + (virtual_width / 2.0) * scale - btn_w / 2.0;
                     
                     if mx >= btn_x && mx <= btn_x + btn_w {
@@ -67,65 +80,100 @@ async fn main() {
                             board = Board::new(Difficulty::Easy);
                             board.spawn_piece();
                             state = AppState::Playing;
+                            audio.play_music();
                         } else if my >= vy + 120.0 * scale && my <= vy + 150.0 * scale {
                             board = Board::new(Difficulty::Normal);
                             board.spawn_piece();
                             state = AppState::Playing;
+                            audio.play_music();
                         } else if my >= vy + 160.0 * scale && my <= vy + 190.0 * scale {
                             board = Board::new(Difficulty::Hard);
                             board.spawn_piece();
                             state = AppState::Playing;
+                            audio.play_music();
                         }
                     }
                 }
             }
             AppState::Playing => {
                 let now = get_time();
+                board.update(dt);
+
+                if is_key_pressed(KeyCode::P) {
+                    state = AppState::Paused;
+                    audio.stop_music();
+                }
 
                 // Handle Input
-                if input.p1.left {
-                    board.move_piece(-1, 0);
-                }
-                if input.p1.right {
-                    board.move_piece(1, 0);
-                }
-                if input.p1.down {
-                    board.move_piece(0, 1);
-                }
-                if input.p1.rotate {
-                    board.rotate_piece();
-                }
-                if input.p1.drop {
-                    while board.move_piece(0, 1) {}
-                    board.lock_piece();
-                    let cleared = board.clear_lines();
-                    if cleared > 0 {
-                        board.add_lines_cleared(cleared as u32);
+                if board.clear_anim_timer <= 0.0 {
+                    if input.p1.left {
+                        board.move_piece(-1, 0);
                     }
-                    if !board.spawn_piece() {
-                        state = AppState::GameOver;
+                    if input.p1.right {
+                        board.move_piece(1, 0);
                     }
-                }
-
-                // Normal falling
-                if now - last_update > drop_speed {
-                    if !board.move_piece(0, 1) {
+                    if input.p1.down {
+                        if board.move_piece(0, 1) {
+                            last_update = now; // Delay natural drop
+                        }
+                    }
+                    if input.p1.rotate {
+                        if board.rotate_piece() {
+                            audio.play_rotate();
+                        }
+                    }
+                    if input.p1.drop {
+                        while board.move_piece(0, 1) {}
+                        audio.play_land();
                         board.lock_piece();
                         let cleared = board.clear_lines();
                         if cleared > 0 {
-                            board.add_lines_cleared(cleared as u32);
-                        }
-                        if !board.spawn_piece() {
-                            state = AppState::GameOver;
+                            audio.play_clear();
+                        } else {
+                            if !board.spawn_piece() {
+                                state = AppState::GameOver;
+                                audio.stop_music();
+                            }
                         }
                     }
-                    last_update = now;
-                }
 
-                // Gravity well pull
-                if now - last_gravity > gravity_well_speed {
-                    board.apply_gravity_wells();
-                    last_gravity = now;
+                    // Normal falling
+                    if now - last_update > drop_speed {
+                        if !board.move_piece(0, 1) {
+                            audio.play_land();
+                            board.lock_piece();
+                            let cleared = board.clear_lines();
+                            if cleared > 0 {
+                                audio.play_clear();
+                            } else {
+                                if !board.spawn_piece() {
+                                    state = AppState::GameOver;
+                                    audio.stop_music();
+                                }
+                            }
+                        }
+                        last_update = now;
+                    }
+
+                    // Gravity well pull
+                    if now - last_gravity > gravity_well_speed {
+                        board.apply_gravity_wells();
+                        last_gravity = now;
+                    }
+                } else {
+                    // During clear animation, check if it just finished to spawn new piece
+                    if board.clear_anim_timer > 0.0 && board.clear_anim_timer - dt <= 0.0 {
+                        if !board.spawn_piece() {
+                            state = AppState::GameOver;
+                            audio.stop_music();
+                        }
+                    }
+                }
+            }
+            AppState::Paused => {
+                if is_key_pressed(KeyCode::P) || is_mouse_button_pressed(MouseButton::Left) {
+                    state = AppState::Playing;
+                    audio.play_music();
                 }
             }
             AppState::GameOver => {
@@ -137,7 +185,7 @@ async fn main() {
 
         clear_background(BLACK);
 
-        if state == AppState::Playing || state == AppState::GameOver {
+        if state == AppState::Playing || state == AppState::Paused || state == AppState::GameOver {
             let cell_size = (224.0 * scale * 0.8) / ROWS as f32;
             let board_w = cell_size * COLS as f32;
             let board_h = cell_size * ROWS as f32;
@@ -153,8 +201,23 @@ async fn main() {
             draw_text(&format!("LINES: {}", board.lines_cleared_total), vx + 10.0 * scale, vy + 60.0 * scale, hud_font_size, WHITE);
             draw_text(&format!("MODE: {:?}", board.difficulty), vx + 10.0 * scale, vy + 80.0 * scale, hud_font_size, GRAY);
 
+            // Mute indicator
+            if audio.is_muted() {
+                draw_text("MUTED", vx + virtual_width * scale - 50.0 * scale, vy + 20.0 * scale, hud_font_size, RED);
+            }
+
             // Draw Touch Controls
-            input.draw_controls(vx, vy, scale, virtual_width, virtual_height);
+            if state == AppState::Playing {
+                input.draw_controls(vx, vy, scale, virtual_width, virtual_height);
+            }
+        }
+
+        if state == AppState::Paused {
+            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.0, 0.0, 0.0, 0.6));
+            let text = "PAUSED";
+            let font_size = 40.0 * scale;
+            let dims = measure_text(text, None, font_size as u16, 1.0);
+            draw_text(text, sw / 2.0 - dims.width / 2.0, sh / 2.0, font_size, WHITE);
         }
 
         if state == AppState::Menu {

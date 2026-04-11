@@ -2,8 +2,11 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.240] - 2026-04-11
+## [26.4.11.241] - 2026-04-11
 ### Added
+- **Gravitris Audio:** Integrated a Lumines-inspired procedural music system and unique sound effects for rotation, landing, and line clears.
+- **Gravitris Animations:** Added expressive "squash and stretch" effects for piece movement and board impacts. Implemented a scaling clear animation for disappearing lines.
+- **Gravitris UX:** Added a Pause menu (P key or Tap) and Mute toggle (M key).
 - **Gravitris HUD:** Added a real-time display for **Score** and **Lines Cleared** to the game interface.
 - **Gravitris Scoring:** Implemented classic Tetris-style scoring system (multi-line bonuses scaled by level).
 - **Gravitris Progression:** Implemented level-up system where gravity well count and strength increase every 10 lines cleared. Wells are now randomized in the lower half of the board.
