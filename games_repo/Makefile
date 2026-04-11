@@ -23,7 +23,7 @@ NAME_voxeldash := VoxelDash
 CTRL_zookeeper := Swap gems with mouse / touch.<br><b>P</b> to Pause.
 CTRL_bubbles   := Arrow keys / WASD to move &amp; jump.<br>SPACE to blow bubbles. <b>P</b> to Pause.
 CTRL_lumines   := Arrow keys / WASD to move &amp; rotate.<br>SPACE to drop. <b>P</b> to Pause.
-CTRL_gravitris := Arrow keys / WASD to move &amp; rotate.<br>SPACE to drop. <b>P</b> to Pause, <b>M</b> to Mute.
+CTRL_gravitris := Ambient Tetris. Arrows/WASD to move.<br>SPACE to drop. <b>P</b> to Pause, <b>M</b> to Mute.
 CTRL_music_editor := Procedural music pattern editor.<br><b>Randomize</b> to generate new patterns.
 
 .PHONY: all setup build test lint clean rename index.html $(GAMES)

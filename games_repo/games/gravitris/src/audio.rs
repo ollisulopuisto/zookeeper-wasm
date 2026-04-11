@@ -13,24 +13,25 @@ pub struct AudioManager {
 impl AudioManager {
     pub async fn new() -> Self {
         let seed: u32 = macroquad::rand::gen_range(0, 0x7FFFFFFF);
-        let bpm = 112.0; // Slower, more atmospheric
+        let bpm = 90.0; // Much slower, more atmospheric
         
         let mut arrangement = Arrangement::from_seed(seed);
-        // Aeolian / Minor scale, but transposed to a different key
-        arrangement.scale = [62, 64, 65, 67, 69, 70, 72, 74]; // D Minor
-        // Dark, rhythmic bassline
-        arrangement.bassline = [38, 38, 38, 41, 38, 38, 43, 41];
-        // Completely different lead phrases
+        // Dorian scale for a more mysterious feel
+        arrangement.scale = [62, 64, 65, 67, 69, 71, 72, 74]; 
+        // Sparse, non-driving bassline (long notes)
+        arrangement.bassline = [38, 38, 38, 38, 45, 45, 43, 43];
+        // Ambient, drifting phrases
         arrangement.phrases = [
-            [0, 2, 4, 6, 5, 3, 1, 0], // Rising and falling
-            [0, 0, 0, 3, 2, 2, 2, 5], // Staccato repetition
-            [7, 5, 3, 1, 0, 2, 4, 6], // Descending skip
-            [4, 4, 5, 5, 7, 7, 6, 6], // High pedal point
+            [0, 0, 4, 4, 7, 7, 11, 11], // Very slow rising
+            [7, 4, 0, 4, 7, 9, 7, 4],   // Wide leaps
+            [0, 2, 0, -1, 0, 2, 4, 5],  // Drifting around root
+            [12, 7, 5, 0, 12, 7, 5, 0], // Falling octaves
         ];
         
         for i in 0..8 {
-            arrangement.lead_tone[i] = if i % 2 == 0 { Tone::Square } else { Tone::Sine };
-            arrangement.drum_var[i] = (i % 4) as u8 + 2; // Avoid the most basic patterns
+            arrangement.lead_tone[i] = Tone::Sine; // Mostly soft tones
+            arrangement.drum_var[i] = 5; // Half-time groove
+            arrangement.cp_active[i] = i % 3 == 0;
         }
         
         let (wav, _) = generate_music_wav_with_arrangement(arrangement, bpm, None);

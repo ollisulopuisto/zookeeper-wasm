@@ -149,8 +149,8 @@ impl Board {
 
         for _ in 0..num_wells {
             let wx = quad_rand::gen_range(0, COLS as i32);
-            // Wells are placed significantly below the board to ensure they mostly pull down or side-down
-            let wy = quad_rand::gen_range(ROWS as i32 + 2, ROWS as i32 + 8); 
+            // Wells are placed in the lower half of the board
+            let wy = quad_rand::gen_range(ROWS as i32 / 2, ROWS as i32); 
             self.wells.push(GravityWell {
                 x: wx,
                 y: wy,
