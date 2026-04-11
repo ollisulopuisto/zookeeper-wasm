@@ -208,11 +208,15 @@ impl Board {
             }
 
             let dx = if total_dx > 0.5 { 1 } else if total_dx < -0.5 { -1 } else { 0 };
-            // Cheat: Gravity wells can pull down, but never UP.
             let dy = if total_dy > 0.5 { 1 } else { 0 };
 
             if dx != 0 || dy != 0 {
-                return self.move_piece(dx, dy);
+                // Cheat: if we are trying to move sideways but it's blocked, 
+                // still allow downward pull if that part is clear.
+                if !self.move_piece(dx, dy) && dy > 0 {
+                    return self.move_piece(0, dy);
+                }
+                return true; // move_piece already called
             }
         }
         false

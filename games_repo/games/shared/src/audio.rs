@@ -30,6 +30,8 @@ pub struct Arrangement {
     pub lead_tone: [Tone; 8],
     pub cp_active: [bool; 8],
     pub scale: [i32; 8],
+    pub bassline: [i32; 8],
+    pub phrases: [[usize; 8]; 4],
 }
 
 impl Arrangement {
@@ -40,6 +42,13 @@ impl Arrangement {
         let mut lead_tone: [Tone; 8] = [Sine, Saw, Square, Sine, Saw, Square, Saw, Sine];
         let mut cp_active: [bool; 8] = [false, true, false, true, true, false, false, true];
         let scale: [i32; 8] = [60, 63, 65, 67, 70, 72, 75, 77];
+        let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
+        let phrases: [[usize; 8]; 4] = [
+            [0, 1, 2, 3, 4, 5, 6, 7],
+            [0, 2, 4, 2, 0, 3, 5, 3],
+            [7, 6, 5, 4, 3, 2, 1, 0],
+            [0, 0, 2, 2, 4, 4, 6, 6],
+        ];
 
         let mut rng = seed;
         let mut next_rng = || {
@@ -65,6 +74,8 @@ impl Arrangement {
             lead_tone,
             cp_active,
             scale,
+            bassline,
+            phrases,
         }
     }
 }
@@ -88,6 +99,13 @@ pub fn generate_music_wav(seed: Option<u32>, bpm: f32, next_bpm: Option<f32>) ->
             ],
             cp_active: [false, true, false, true, true, false, false, true],
             scale: [60, 63, 65, 67, 70, 72, 75, 77],
+            bassline: [36, 36, 48, 36, 36, 36, 46, 36],
+            phrases: [
+                [0, 1, 2, 3, 4, 5, 6, 7],
+                [0, 2, 4, 2, 0, 3, 5, 3],
+                [7, 6, 5, 4, 3, 2, 1, 0],
+                [0, 0, 2, 2, 4, 4, 6, 6],
+            ],
         }
     };
     generate_music_wav_with_arrangement(arrangement, bpm, next_bpm)
@@ -114,13 +132,8 @@ pub fn generate_music_wav_with_arrangement(
     let mut samples = Vec::with_capacity(num_samples);
     let mut noise_seed = 0x12345678u32;
 
-    let bassline: [i32; 8] = [36, 36, 48, 36, 36, 36, 46, 36];
+    let bassline = arrangement.bassline;
     let s_notes = arrangement.scale;
-
-    // Phrase variations for the lead
-    let s_step_table_2 = [0usize, 2, 4, 2, 0, 3, 5, 3];
-    let s_step_table_3 = [7usize, 6, 5, 4, 3, 2, 1, 0];
-    let s_step_table_4 = [0usize, 0, 2, 2, 4, 4, 6, 6];
 
     // Track total time for smooth continuous generation
     let mut current_time = 0.0f32;
@@ -319,10 +332,10 @@ pub fn generate_music_wav_with_arrangement(
 
             let (synth, counter) = match l_var {
                 3 => {
-                    // Half-time lead
+                    // Phrase 3
                     let half_note_phrase_idx = bar_idx * 2 + half_bar_idx_in_bar;
-                    let ht_step = s_step_table_4[half_note_phrase_idx % 8];
-                    let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset - 12);
+                    let ht_step = arrangement.phrases[3][half_note_phrase_idx % 8];
+                    let ht_freq = midi_to_freq(s_notes[ht_step % s_notes.len()] + key_offset - 12);
                     let note_dur = bar_beat_duration * 2.0;
                     let t_in_note = t_in_bar % note_dur;
                     let env = if t_in_note < 0.03 {
@@ -335,9 +348,10 @@ pub fn generate_music_wav_with_arrangement(
                     (get_osc(t * ht_freq, l_tone) * 0.13 * env, 0.0f32)
                 }
                 2 => {
-                    // Power chord lead
+                    // Phrase 2
                     let chord_step = (sixteen_idx / 8) % 8;
-                    let root = s_notes[chord_step % s_notes.len()] + key_offset;
+                    let root_step = arrangement.phrases[2][chord_step % 8];
+                    let root = s_notes[root_step % s_notes.len()] + key_offset;
                     let fifth = root + 7;
                     let octave = root + 12;
                     let f1 = midi_to_freq(root);
@@ -354,9 +368,10 @@ pub fn generate_music_wav_with_arrangement(
                     (s, 0.0f32)
                 }
                 1 => {
-                    // Legato Sine-ish (now uses l_tone)
+                    // Phrase 1 (Legato)
                     let ht_step = (sixteen_idx / 8) % 8;
-                    let ht_freq = midi_to_freq(s_notes[ht_step] + key_offset);
+                    let note_step = arrangement.phrases[1][ht_step % 8];
+                    let ht_freq = midi_to_freq(s_notes[note_step % s_notes.len()] + key_offset);
                     let note_dur = bar_sixteen_duration * 8.0;
                     let t_in_note = t_in_bar % note_dur;
                     let env = if t_in_note < 0.02 {
@@ -369,15 +384,12 @@ pub fn generate_music_wav_with_arrangement(
                     (get_osc(t * ht_freq, l_tone) * 0.15 * env, 0.0f32)
                 }
                 _ => {
-                    // Arpeggiated pattern
+                    // Phrase 0 (Arpeggiated)
                     let phrase_idx = (sixteen_idx / 16) % 4;
-                    let s_step: usize = match phrase_idx {
-                        0 => sixteen_idx % 8,
-                        1 => (sixteen_idx * 3) % 8,
-                        2 => s_step_table_2[sixteen_idx % 8],
-                        _ => s_step_table_3[sixteen_idx % 8],
-                    };
-                    let s_freq = midi_to_freq(s_notes[s_step] + key_offset);
+                    let step_in_phrase = sixteen_idx % 8;
+                    let s_step = arrangement.phrases[0][step_in_phrase];
+                    
+                    let s_freq = midi_to_freq(s_notes[s_step % s_notes.len()] + key_offset);
                     let gate = if (sixteen_idx % 4 == 0) || (phrase_idx > 1 && sixteen_idx % 2 == 0)
                     {
                         (1.0 - t_sixteen / bar_sixteen_duration).powf(0.5)
@@ -386,8 +398,8 @@ pub fn generate_music_wav_with_arrangement(
                     };
                     let s = get_osc(t * s_freq, l_tone) * 0.15 * gate;
                     let c = if cp_on {
-                        let cp_step = 7 - s_step;
-                        let cp_freq = midi_to_freq(s_notes[cp_step] + key_offset);
+                        let cp_step = 7 - (s_step % 8);
+                        let cp_freq = midi_to_freq(s_notes[cp_step % s_notes.len()] + key_offset);
                         let tri_phase = t * cp_freq % 1.0;
                         let tri = if tri_phase < 0.5 {
                             tri_phase * 4.0 - 1.0

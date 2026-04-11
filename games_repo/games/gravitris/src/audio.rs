@@ -13,15 +13,24 @@ pub struct AudioManager {
 impl AudioManager {
     pub async fn new() -> Self {
         let seed: u32 = macroquad::rand::gen_range(0, 0x7FFFFFFF);
-        let bpm = 124.0;
+        let bpm = 112.0; // Slower, more atmospheric
         
-        // Custom Gravitris arrangement: different scale (Phrygian-ish), different lead tones
         let mut arrangement = Arrangement::from_seed(seed);
-        arrangement.scale = [60, 61, 64, 65, 67, 68, 70, 72]; // Phrygian Dominant-ish for a darker feel
+        // Aeolian / Minor scale, but transposed to a different key
+        arrangement.scale = [62, 64, 65, 67, 69, 70, 72, 74]; // D Minor
+        // Dark, rhythmic bassline
+        arrangement.bassline = [38, 38, 38, 41, 38, 38, 43, 41];
+        // Completely different lead phrases
+        arrangement.phrases = [
+            [0, 2, 4, 6, 5, 3, 1, 0], // Rising and falling
+            [0, 0, 0, 3, 2, 2, 2, 5], // Staccato repetition
+            [7, 5, 3, 1, 0, 2, 4, 6], // Descending skip
+            [4, 4, 5, 5, 7, 7, 6, 6], // High pedal point
+        ];
         
         for i in 0..8 {
-            arrangement.lead_tone[i] = if i % 3 == 0 { Tone::Square } else { Tone::Saw };
-            arrangement.drum_var[i] = (i % 6) as u8;
+            arrangement.lead_tone[i] = if i % 2 == 0 { Tone::Square } else { Tone::Sine };
+            arrangement.drum_var[i] = (i % 4) as u8 + 2; // Avoid the most basic patterns
         }
         
         let (wav, _) = generate_music_wav_with_arrangement(arrangement, bpm, None);
