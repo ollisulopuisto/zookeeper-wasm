@@ -207,7 +207,8 @@ impl Board {
             }
 
             let dx = if total_dx > 0.5 { 1 } else if total_dx < -0.5 { -1 } else { 0 };
-            let dy = if total_dy > 0.5 { 1 } else if total_dy < -0.5 { -1 } else { 0 };
+            // Cheat: Gravity wells can pull down, but never UP.
+            let dy = if total_dy > 0.5 { 1 } else { 0 };
 
             if dx != 0 || dy != 0 {
                 return self.move_piece(dx, dy);
@@ -440,6 +441,7 @@ mod tests {
     #[test]
     fn test_gravity_well_pull() {
         let mut board = Board::new(Difficulty::Normal);
+        board.wells.clear(); // Clear auto-generated wells
         board.active = Some(ActivePiece {
             piece_type: PieceType::O,
             x: 0,
@@ -453,5 +455,25 @@ mod tests {
         let active = board.active.as_ref().unwrap();
         // Should move towards the well (at x=9)
         assert!(active.x > 0);
+    }
+
+    #[test]
+    fn test_gravity_well_no_pull_up() {
+        let mut board = Board::new(Difficulty::Normal);
+        board.wells.clear(); // Clear auto-generated wells
+        board.active = Some(ActivePiece {
+            piece_type: PieceType::O,
+            x: 5,
+            y: 10,
+            rotation: 0,
+        });
+        // Well is ABOVE the piece
+        board.wells.push(GravityWell { x: 5, y: 0, strength: 100.0 });
+        
+        let pulled = board.apply_gravity_wells();
+        // Should NOT move up
+        assert!(!pulled);
+        let active = board.active.as_ref().unwrap();
+        assert_eq!(active.y, 10);
     }
 }
