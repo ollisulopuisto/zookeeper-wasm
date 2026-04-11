@@ -2,7 +2,7 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.11.233] - 2026-04-11
+## [26.4.11.235] - 2026-04-11
 ### Added
 - **Leaderboard Abstraction:** Unified high score mode and difficulty tracking into the `shared` library.
 - **Lumines High Scores:** Difficulty level (Easy, Normal, Hard) is now stored and displayed in the high score list.

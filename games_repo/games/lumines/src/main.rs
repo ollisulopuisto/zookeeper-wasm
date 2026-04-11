@@ -11,7 +11,7 @@ use shared::theme::{BlockColor, BlockShape};
 
 const COLS: usize = 16;
 const ROWS: usize = 10;
-const VERSION: &str = "26.04.11.233";
+const VERSION: &str = "26.04.11.235";
 
 
 const BEATS_PER_SWEEP: f32 = 8.0;

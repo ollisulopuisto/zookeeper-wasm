@@ -47,8 +47,8 @@ impl GameMode {
     ) {
         use macroquad::prelude::*;
         match self {
-            GameMode::Slow => {
-                if let Some(tex) = tex_snail {
+            GameMode::Slow | GameMode::Easy | GameMode::Hard => {
+                if let (GameMode::Slow, Some(tex)) = (self, tex_snail) {
                     draw_texture_ex(
                         tex,
                         x,
@@ -62,10 +62,6 @@ impl GameMode {
                 } else {
                     draw_text(self.label(), x, y, size, color);
                 }
-            }
-            GameMode::Easy | GameMode::Hard => {
-                let text = self.label();
-                draw_text(text, x, y, size, color);
             }
             GameMode::Normal => {
                 // Usually no icon for normal mode
