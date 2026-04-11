@@ -7,7 +7,7 @@ use crate::game::{Board, COLS, ROWS, Difficulty};
 use crate::input::InputManager;
 use crate::audio::AudioManager;
 
-const VERSION: &str = "26.04.11.250";
+const VERSION: &str = "26.04.11.251";
 
 #[derive(Clone, PartialEq, Debug)]
 enum AppState {
@@ -241,6 +241,11 @@ async fn main() {
             draw_texture_ex(pause_tex, pause_x, pause_y, WHITE, DrawTextureParams {
                 dest_size: Some(vec2(btn_size, btn_size)), ..Default::default()
             });
+
+            // Draw Next Piece
+            let next_x = vx + virtual_width * scale - 60.0 * scale;
+            let next_y = vy + 60.0 * scale;
+            board.draw_next(next_x, next_y, cell_size);
 
             // Draw Touch Controls
             if state == AppState::Playing {

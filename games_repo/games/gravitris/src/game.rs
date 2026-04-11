@@ -76,6 +76,7 @@ pub struct GravityWell {
 pub struct Board {
     pub grid: [[Option<PieceType>; COLS]; ROWS],
     pub active: Option<ActivePiece>,
+    pub next_piece: PieceType,
     pub wells: Vec<GravityWell>,
     pub level: u32,
     pub lines_cleared_total: u32,
@@ -91,6 +92,7 @@ impl Board {
         let mut board = Self {
             grid: [[None; COLS]; ROWS],
             active: None,
+            next_piece: Self::random_piece_type(),
             wells: Vec::new(),
             level: 1,
             lines_cleared_total: 0,
@@ -102,6 +104,14 @@ impl Board {
         };
         board.update_wells();
         board
+    }
+
+    fn random_piece_type() -> PieceType {
+        let piece_types = [
+            PieceType::I, PieceType::O, PieceType::T,
+            PieceType::S, PieceType::Z, PieceType::J, PieceType::L
+        ];
+        piece_types[quad_rand::gen_range(0, piece_types.len())]
     }
 
     pub fn update(&mut self, dt: f32) {
@@ -170,11 +180,8 @@ impl Board {
     }
 
     pub fn spawn_piece(&mut self) -> bool {
-        let piece_types = [
-            PieceType::I, PieceType::O, PieceType::T,
-            PieceType::S, PieceType::Z, PieceType::J, PieceType::L
-        ];
-        let piece_type = piece_types[quad_rand::gen_range(0, piece_types.len())];
+        let piece_type = self.next_piece;
+        self.next_piece = Self::random_piece_type();
         let x = COLS as i32 / 2 - 2;
         let y = -1;
         
@@ -285,13 +292,10 @@ impl Board {
                 let gx = active.x + dx;
                 let gy = active.y + dy;
                 if gy >= 0 {
-                    let mut scale_x = 1.0;
-                    let mut scale_y = 1.0;
-                    
                     // Subtle constant stretch while active
                     let pulse = (get_time() * 10.0).sin() as f32;
-                    scale_y = 1.05 + pulse * 0.05;
-                    scale_x = 0.95 - pulse * 0.03;
+                    let scale_y = 1.05 + pulse * 0.05;
+                    let scale_x = 0.95 - pulse * 0.03;
 
                     let draw_w = cell_size * scale_x;
                     let draw_h = cell_size * scale_y;
@@ -311,6 +315,17 @@ impl Board {
             let pulse = (get_time() * 5.0).sin() as f32 * 0.2 + 0.8;
             draw_circle(cx, cy, cell_size * 0.4 * pulse, Color::new(1.0, 0.0, 1.0, 0.5));
             draw_circle_lines(cx, cy, cell_size * 0.5 * pulse, 2.0, MAGENTA);
+        }
+    }
+
+    pub fn draw_next(&self, x: f32, y: f32, cell_size: f32) {
+        let label = "NEXT";
+        let font_size = cell_size * 0.8;
+        draw_text(label, x, y - 5.0, font_size, WHITE);
+        
+        for (dx, dy) in self.next_piece.shape(0) {
+            draw_rectangle(x + dx as f32 * cell_size, y + dy as f32 * cell_size, cell_size, cell_size, self.next_piece.color());
+            draw_rectangle_lines(x + dx as f32 * cell_size, y + dy as f32 * cell_size, cell_size, cell_size, 2.0, BLACK);
         }
     }
 
