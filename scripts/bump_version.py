@@ -73,6 +73,15 @@ def main():
     ):
         changed_files.append(zookeeper_main)
 
+    # Update Bubbles main.rs version
+    bubbles_main = os.path.join(games_dir, "bubbles", "src", "main.rs")
+    if update_file(
+        bubbles_main,
+        r'const VERSION: &str = ".*"',
+        f'const VERSION: &str = "{version_long}"',
+    ):
+        changed_files.append(bubbles_main)
+
     # Update Cargo.toml for other games
     for game in ["zookeeper", "bubbles", "music_editor"]:
         cargo_path = os.path.join(games_dir, game, "Cargo.toml")

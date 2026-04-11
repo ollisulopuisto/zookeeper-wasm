@@ -8,6 +8,9 @@ All notable changes to the games in this monorepo will be documented in this fil
 - **Lumines High Scores:** Difficulty level (Easy, Normal, Hard) is now stored and displayed in the high score list.
 ### Changed
 - **Zookeeper High Scores:** Migrated Zookeeper's "Snail Mode" indicator to use the shared `GameMode` system while preserving the snail icon.
+### Fixed
+- **Bubbles UI Layout:** Fixed overlapping and off-center UI elements on desktop resolutions. Centered game over scores, titles, and menus using precise text measurement. Adjusted HUD spacing for improved readability.
+- **Bubbles High Scores:** Ensured the leaderboard always displays the top 10 scores by sorting them descending by value.
 
 ## [26.4.11.232] - 2026-04-10
 ### Fixed
