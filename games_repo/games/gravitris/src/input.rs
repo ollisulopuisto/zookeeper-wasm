@@ -101,23 +101,28 @@ impl InputManager {
                             let threshold = 25.0;
 
                             if dist_x > threshold || dist_y > threshold {
-                                let dir = if dist_x > dist_y {
-                                    if diff.x > 0.0 { SwipeDir::Right } else { SwipeDir::Left }
+                                let dir_opt = if dist_x > dist_y {
+                                    if diff.x > 0.0 { Some(SwipeDir::Right) } else { Some(SwipeDir::Left) }
                                 } else {
-                                    SwipeDir::Down
+                                    // Only downward swipes are handled; upward swipes are ignored
+                                    if diff.y > 0.0 { Some(SwipeDir::Down) } else { None }
                                 };
 
-                                // Fire immediately on first detection
-                                match dir {
-                                    SwipeDir::Left => self.p1.left = true,
-                                    SwipeDir::Right => self.p1.right = true,
-                                    SwipeDir::Down => self.p1.down = true,
-                                }
-
-                                // Set up auto-repeat with initial DAS delay
-                                self.swipe_dir = Some(dir);
-                                self.swipe_timer = DAS_DELAY;
+                                // Mark as handled regardless so upward swipes don't become taps
                                 self.swipe_handled = true;
+
+                                if let Some(dir) = dir_opt {
+                                    // Fire immediately on first detection
+                                    match dir {
+                                        SwipeDir::Left => self.p1.left = true,
+                                        SwipeDir::Right => self.p1.right = true,
+                                        SwipeDir::Down => self.p1.down = true,
+                                    }
+
+                                    // Set up auto-repeat with initial DAS delay
+                                    self.swipe_dir = Some(dir);
+                                    self.swipe_timer = DAS_DELAY;
+                                }
                             }
                         }
                     }
