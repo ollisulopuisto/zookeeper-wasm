@@ -1,6 +1,6 @@
 [package]
 name = "bubbles"
-version = "26.4.11"
+version = "26.4.29"
 edition = "2021"
 
 [dependencies]
