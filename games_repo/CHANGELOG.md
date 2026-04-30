@@ -2,9 +2,15 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
-## [26.4.29.255] - 2026-04-29
+## [26.4.30.256] - 2026-04-29
 ### Fixed
 - **Zookeeper UX Polish:** Removed the abrupt level transition. The game now ensures the final match animation and subsequent tile falling are fully completed before showing the "Level Clear" screen, providing better visual feedback for the final move.
+
+## [26.4.12] - 2026-04-12
+### Changed
+- **Gravitris Touch Controls:** Holding a swipe gesture (left, right, or down) now continuously moves the block in that direction until the finger is lifted, with DAS (Delayed Auto-Shift): the first move fires immediately, then repeats after 180 ms initial delay at a 50 ms interval.
+
+## [26.4.11.254] - 2026-04-11
 ### Changed
 - **Gravitris Touch Controls:** Removed the virtual gamepad. Implemented gesture-based controls: **Swipe Left/Right** to move, **Tap** to rotate, and **Swipe Down** to drop faster.
 ### Fixed
