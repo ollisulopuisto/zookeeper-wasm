@@ -2,6 +2,11 @@
 
 All notable changes to the games in this monorepo will be documented in this file. This project uses [CalVer](https://calver.org/) for versioning.
 
+## [26.4.30.256] - 2026-04-30
+### Fixed
+- **Zookeeper UX Polish:** Removed the abrupt level transition. The game now ensures the final match animation and subsequent tile falling are fully completed before showing the "Level Clear" screen, providing better visual feedback for the final move.
+
+
 ## [26.4.12] - 2026-04-12
 ### Changed
 - **Gravitris Touch Controls:** Holding a swipe gesture (left, right, or down) now continuously moves the block in that direction until the finger is lifted, with DAS (Delayed Auto-Shift): the first move fires immediately, then repeats after 180 ms initial delay at a 50 ms interval.
@@ -45,7 +50,7 @@ All notable changes to the games in this monorepo will be documented in this fil
 ### Changed
 - **Bubbles Balancing:** Downgraded initial bubble speed (3.5 -> 2.2) and range (0.5s -> 0.4s) to make upgrades more meaningful and improve game progression.
 
-## [26.04.10.231] - 2026-04-10
+## [26.4.10.231] - 2026-04-10
 ### Fixed
 - **Bubbles Physics:** Fixed an issue where bubbles would get stuck and jitter at the ceiling by correctly zeroing vertical velocity on collision.
 - **Bubbles High Scores:** Fixed high scores not saving by ensuring the leaderboard is initialized with defaults and adding debug logging for persistence troubleshooting.
@@ -104,7 +109,7 @@ All notable changes to the games in this monorepo will be documented in this fil
   - Decoupled high-score input logic from platform detection for better modularity.
   - Moved `BlockColor` to the shared library to centralize game state definitions.
 
-## [26.04.06.218] - 2026-04-06
+## [26.4.6.218] - 2026-04-06
 
 ### Added
 - **Lumines WASM Difficulty Progression:** Implemented a new leveling system inspired by *Lumines Remastered* and *Lumines Arise*.

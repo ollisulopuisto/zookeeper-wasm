@@ -17,7 +17,7 @@ const COLS: usize = 8;
 /// The standard grid height for the game board.
 const ROWS: usize = 8;
 /// The game version (CalVer).
-const VERSION: &str = "26.04.11.254";
+const VERSION: &str = "26.4.30.256";
 
 
 // Animation Constants
@@ -834,23 +834,12 @@ async fn main() {
 
                     board.level_tiles_cleared += match_count as u32;
                     board.time_left = (board.time_left + (match_count as f32 * 0.5)).min(60.0);
-                    if board.level_tiles_cleared >= board.level_goal {
-                        // Level complete — freeze the board immediately so no blocks fall in the background
-                        board.v_offsets = [[0.0; COLS]; ROWS];
-                        board.v_velocities = [[0.0; COLS]; ROWS];
-                        board.state = GameState::LevelUp { timer: 0.0 };
-                        if !settings.muted {
-                            if let Some(ref snd) = snd_level_up {
-                                play_sound(snd, PlaySoundParams::default());
-                            }
-                        }
-                    } else {
-                        board.state = GameState::Falling { timer: 0.0 };
-                        if !settings.muted {
-                            let snd_idx = (board.combo_count as usize).min(snd_matches.len() - 1);
-                            if let Some(ref snd) = snd_matches[snd_idx] {
-                                play_sound(snd, PlaySoundParams::default());
-                            }
+
+                    board.state = GameState::Falling { timer: 0.0 };
+                    if !settings.muted {
+                        let snd_idx = (board.combo_count as usize).min(snd_matches.len() - 1);
+                        if let Some(ref snd) = snd_matches[snd_idx] {
+                            play_sound(snd, PlaySoundParams::default());
                         }
                     }
                 } else {
